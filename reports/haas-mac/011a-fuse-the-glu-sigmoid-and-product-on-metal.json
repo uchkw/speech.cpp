@@ -1,0 +1,1980 @@
+{
+  "measure_id": "011a",
+  "status": "rejected",
+  "reason": "Reject the GLU-only variant after the bounded CPU4 request screen. Median paired reductions are +0.516% for Q4_K, +1.628% for Q8_0 and -1.219% for F16; the changes do not establish a stable benefit beyond observed round variation. Checked outputs match, including all 81 latency texts and 27 timestamped public results. No implementation is adopted. Pointwise projection plus GLU remains a separate unfinished candidate under measure 011.",
+  "scope": "screen",
+  "conditions": {
+    "name": "Haas on Apple Silicon",
+    "repository": "https://github.com/uchkw/speech.cpp",
+    "tracking_issue": "https://github.com/uchkw/speech.cpp/issues/1",
+    "purpose": "Reduce warm latency for one Japanese voice input of a few seconds to 30 seconds while preserving recognition quality.",
+    "threads": 4,
+    "rounds": 3,
+    "decode_on_cpu": true,
+    "quality_policy": "exact",
+    "latency_count": 9,
+    "quality_count": 9,
+    "latency_definition": "Time from before sending the first PCM16 chunk through receipt of the terminal result. File reading, model loading and warmup are excluded. Each measured input is warmed once per fresh worker.",
+    "aggregation": "Median over rounds for each input, then linearly interpolated p50, p90 and p99 across the measured input medians. RTFx divides total audio duration by summed request time.",
+    "literal_cer": "Total Unicode code-point Levenshtein edits divided by total reference code points, including punctuation, symbols and whitespace.",
+    "repository_cer": "NFKC followed by removing Unicode punctuation, symbols, separators and whitespace; no case folding or alternate-spelling substitutions. Edits and reference lengths are summed before division.",
+    "quality_comparison": "The same quality files on both builds; text and public token/segment text and times are compared exactly. Text from every timestamp-disabled latency round is also compared. A changed CER is not evidence of exact output equality.",
+    "latency_timestamps": false,
+    "quality_timestamps": true,
+    "unobserved_fields": "The worker does not expose raw TDT token IDs, frame indices or duration decisions. These are not claimed to match by this harness.",
+    "limitations": [
+      "The current corpus is FLEURS Japanese test, with inputs from 6.36 to 28.2 seconds.",
+      "The p99 of a small duration-stratified sample is not a precise estimate of production tail latency.",
+      "The repository CER is not the published metric accepting alternative spellings of words.",
+      "Fresh-process load and first-request times do not reset filesystem or system Metal caches.",
+      "This screen rejects only the GLU sigmoid/product prototype. Pointwise projection plus GLU remains unfinished. The production default, fixed anchor and cumulative campaign baseline are unchanged.",
+      "Nine balanced recordings per type and three alternating rounds can reject a variant but cannot establish a production tail improvement. The observed round range is descriptive variation, not a confidence interval.",
+      "Quality scores cover nine recordings per type only. Full 650-input quality and sub-6-second follow-up are not run after this rejection.",
+      "The same-binary OFF/ON comparison is primary. Fresh original/candidate builds explicitly set arm64 and the Xcode macOS SDK, and all 74 speech plus 28 ggml flags.make files match after source/build path normalization. The fixed anchor uses implicit architecture/SDK settings; equivalent effective defaults are unverified. Exact SDK paths remain in frozen build evidence.",
+      "Direct original/OFF/ON checks each cover 76 cases and two emulated poison guards. The 38 eligible cases fuse only with candidate ON; 38 controls include 12 mapped-buffer cases. The extra mapped-buffer controls are not CPU-reference cases.",
+      "Final mapped-buffer controls correctly reject fusion, but the intermediate pre-guard kernel is not run to reproduce the missing-guard failure.",
+      "Normal and retained encoder/joint projection helpers cover three weight types and seven lengths. They verify 24 fusions per normal ON graph and zero per retained graph. Their counters preserve the normal two-command-buffer policy; helper timings are excluded.",
+      "The executed official checks are frontend F32 CPU and encoder F32 CPU/Metal plus F16 Metal. The 99 case executions are separate from 126 normal/retained differential graph executions. Official checks retain intermediates and do not prove ordinary fusion counts.",
+      "Official joint.enc tensors exist but this trial does not run a separate official joint.enc check. Normal joint projection is differential only. Complete KDA/prediction and TDT reference checks and Windows Vulkan execution are unrun.",
+      "The initial GRAPH_DEBUG capture records no node trace because the default sink filters Debug logs. Its failure is retained. A separate log-only launcher captures the corrected diagnostic; neither diagnostic binary nor its timing contributes to the worker screen.",
+      "The public worker comparison checks text, public token text/times and segments, not private TDT IDs, frame indices or duration decisions.",
+      "Peak memory is gross process footprint, not separately measured GPU VRAM. Load and first-request results use fresh workers but do not reset filesystem or system Metal caches."
+    ],
+    "thread_setting_note": "Four CPU threads are an explicit tuned campaign setting, not the runtime default. Unspecified threads (threads=0) use performance cores: 16 on this M2 Ultra. Code gains compare the tuned anchor and do not include the preliminary thread-tuning gain; measure 021 evaluates automatic versus four threads separately.",
+    "hardware": {
+      "chip": "Apple M2 Ultra",
+      "cpu_cores": 24,
+      "performance_cores": 16,
+      "efficiency_cores": 8,
+      "gpu_cores": 76,
+      "memory_gb": 192,
+      "source": "system_profiler SPHardwareDataType SPDisplaysDataType"
+    },
+    "current_machine": {
+      "chip": "Apple M2 Ultra",
+      "cpu_cores": "24",
+      "memory_bytes": "206158430208",
+      "macos": "26.7.2"
+    },
+    "python": "3.9.6",
+    "python_executable": "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+    "runner_sha256": {
+      "compare.py": "f638e5c4914231e8957ca05513366b06cb2dfb7914922a276b5affb07e4fcc21",
+      "worker.py": "46483a7bde5bf3d09f0898224b71e99288f17acec33912a4b09752b0acc09c9b",
+      "campaign.json": "2a03d0e925e3433b437ec908326db42e5576c585abd5da8929f4c2b24b20d840"
+    },
+    "created_utc": "2026-11-06T22:34:01.013983+00:00",
+    "comparison_reference": "Relative: the same verified candidate binary with GGML_METAL_GLU=1 against 0. Cumulative: a separate direct comparison with the explicitly specified fixed anchor; it is not an integrated campaign gain."
+  },
+  "types": {
+    "q4_k": {
+      "sides": {
+        "baseline": {
+          "latency": {
+            "p50_ms": 78.18454100000017,
+            "p90_ms": 124.99302560000002,
+            "p99_ms": 146.10096535999983,
+            "count": 9,
+            "rtfx": 175.4610421654817
+          },
+          "strata": {
+            "10-20s": {
+              "p50_ms": 78.18454100000017,
+              "p90_ms": 102.19157460000002,
+              "p99_ms": 107.59315716,
+              "count": 3,
+              "rtfx": 172.84042101589543
+            },
+            "20-30s": {
+              "p50_ms": 119.12970900000008,
+              "p90_ms": 142.58297539999987,
+              "p99_ms": 147.85996033999982,
+              "count": 3,
+              "rtfx": 187.24628687311292
+            },
+            "6-10s": {
+              "p50_ms": 56.308875000000036,
+              "p90_ms": 60.70804139999986,
+              "p99_ms": 61.697853839999816,
+              "count": 3,
+              "rtfx": 152.47954076275155
+            }
+          },
+          "rounds": [
+            {
+              "p50_ms": 78.18454100000017,
+              "p90_ms": 126.52594980000015,
+              "p99_ms": 146.78312028000013,
+              "count": 9,
+              "rtfx": 174.8504733867506
+            },
+            {
+              "p50_ms": 77.67258399999987,
+              "p90_ms": 124.88889199999984,
+              "p99_ms": 146.09055199999983,
+              "count": 9,
+              "rtfx": 175.75057073501432
+            },
+            {
+              "p50_ms": 78.95858300000013,
+              "p90_ms": 124.76881720000006,
+              "p99_ms": 145.06960671999997,
+              "count": 9,
+              "rtfx": 174.9086929726873
+            }
+          ],
+          "quality": {
+            "literal_edits": 40,
+            "literal_characters": 532,
+            "repository_edits": 22,
+            "repository_characters": 493,
+            "literal_cer": 0.07518796992481203,
+            "repository_cer": 0.04462474645030426
+          },
+          "stages": {
+            "1321491767934942997": {
+              "core_total_ms": 32.3519,
+              "frontend_ms": 1.9847,
+              "encoder_build_ms": 0.2779,
+              "encoder_compute_ms": 26.4115,
+              "encoder_read_ms": 0.0107,
+              "decoder_ms": 3.664
+            },
+            "2330237947966115273": {
+              "core_total_ms": 45.4608,
+              "frontend_ms": 3.589,
+              "encoder_build_ms": 1.3775,
+              "encoder_compute_ms": 36.2097,
+              "encoder_read_ms": 0.0162,
+              "decoder_ms": 4.2674
+            },
+            "8675814957598723431": {
+              "core_total_ms": 67.9633,
+              "frontend_ms": 6.0417,
+              "encoder_build_ms": 2.219,
+              "encoder_compute_ms": 49.8964,
+              "encoder_read_ms": 0.0301,
+              "decoder_ms": 9.8042
+            }
+          },
+          "stage_status": "measured",
+          "peak_memory_bytes": 449659912,
+          "load_ms": 139.15225,
+          "first_request_ms": 168.388291,
+          "repeated_text_changes": 0
+        },
+        "candidate": {
+          "latency": {
+            "p50_ms": 77.66395900000012,
+            "p90_ms": 124.18637500000007,
+            "p99_ms": 144.05522499999992,
+            "count": 9,
+            "rtfx": 176.51106660178488
+          },
+          "strata": {
+            "10-20s": {
+              "p50_ms": 77.66395900000012,
+              "p90_ms": 102.02972539999999,
+              "p99_ms": 107.51202283999997,
+              "count": 3,
+              "rtfx": 173.47581219420601
+            },
+            "20-30s": {
+              "p50_ms": 118.66725000000011,
+              "p90_ms": 140.74374999999995,
+              "p99_ms": 145.7109624999999,
+              "count": 3,
+              "rtfx": 188.82351164203547
+            },
+            "6-10s": {
+              "p50_ms": 55.94729200000015,
+              "p90_ms": 60.61455840000005,
+              "p99_ms": 61.66469334000003,
+              "count": 3,
+              "rtfx": 153.07426405244615
+            }
+          },
+          "rounds": [
+            {
+              "p50_ms": 78.00224999999995,
+              "p90_ms": 123.52725060000012,
+              "p99_ms": 143.75490036000005,
+              "count": 9,
+              "rtfx": 177.3339761150255
+            },
+            {
+              "p50_ms": 77.66395900000012,
+              "p90_ms": 128.75464140000003,
+              "p99_ms": 148.64800163999988,
+              "count": 9,
+              "rtfx": 174.1450079207774
+            },
+            {
+              "p50_ms": 77.171208,
+              "p90_ms": 124.18637500000007,
+              "p99_ms": 144.05522499999992,
+              "count": 9,
+              "rtfx": 175.92624610838874
+            }
+          ],
+          "quality": {
+            "literal_edits": 40,
+            "literal_characters": 532,
+            "repository_edits": 22,
+            "repository_characters": 493,
+            "literal_cer": 0.07518796992481203,
+            "repository_cer": 0.04462474645030426
+          },
+          "stages": {
+            "1321491767934942997": {
+              "core_total_ms": 31.3101,
+              "frontend_ms": 1.977,
+              "encoder_build_ms": 0.2727,
+              "encoder_compute_ms": 26.4246,
+              "encoder_read_ms": 0.0073,
+              "decoder_ms": 2.5371
+            },
+            "2330237947966115273": {
+              "core_total_ms": 45.9481,
+              "frontend_ms": 3.5925,
+              "encoder_build_ms": 1.4519,
+              "encoder_compute_ms": 36.0707,
+              "encoder_read_ms": 0.0175,
+              "decoder_ms": 4.2949
+            },
+            "8675814957598723431": {
+              "core_total_ms": 66.3641,
+              "frontend_ms": 6.0513,
+              "encoder_build_ms": 1.9895,
+              "encoder_compute_ms": 49.6898,
+              "encoder_read_ms": 0.0553,
+              "decoder_ms": 8.5042
+            }
+          },
+          "stage_status": "measured",
+          "peak_memory_bytes": 452248608,
+          "load_ms": 138.48466699999997,
+          "first_request_ms": 166.53158300000004,
+          "repeated_text_changes": 0
+        },
+        "anchor": {
+          "latency": {
+            "p50_ms": 78.92800000000011,
+            "p90_ms": 128.05706639999994,
+            "p99_ms": 149.8743566399999,
+            "count": 9,
+            "rtfx": 173.40687285926703
+          },
+          "strata": {
+            "10-20s": {
+              "p50_ms": 78.92800000000011,
+              "p90_ms": 101.90860000000009,
+              "p99_ms": 107.07923500000011,
+              "count": 3,
+              "rtfx": 172.7686870332909
+            },
+            "20-30s": {
+              "p50_ms": 121.99670799999996,
+              "p90_ms": 146.2381415999999,
+              "p99_ms": 151.69246415999987,
+              "count": 3,
+              "rtfx": 183.0842156070645
+            },
+            "6-10s": {
+              "p50_ms": 56.40287499999985,
+              "p90_ms": 60.83534139999997,
+              "p99_ms": 61.832646340000004,
+              "count": 3,
+              "rtfx": 151.85439648267456
+            }
+          },
+          "rounds": [
+            {
+              "p50_ms": 78.92800000000011,
+              "p90_ms": 124.95217440000005,
+              "p99_ms": 145.81060463999995,
+              "count": 9,
+              "rtfx": 176.53152027923173
+            },
+            {
+              "p50_ms": 77.787375,
+              "p90_ms": 128.05706639999994,
+              "p99_ms": 149.8743566399999,
+              "count": 9,
+              "rtfx": 173.18946531302967
+            },
+            {
+              "p50_ms": 81.44229199999997,
+              "p90_ms": 131.4323913999999,
+              "p99_ms": 152.95385163999998,
+              "count": 9,
+              "rtfx": 169.86844560386967
+            }
+          ],
+          "quality": {
+            "literal_edits": 40,
+            "literal_characters": 532,
+            "repository_edits": 22,
+            "repository_characters": 493,
+            "literal_cer": 0.07518796992481203,
+            "repository_cer": 0.04462474645030426
+          },
+          "stages": {
+            "1321491767934942997": {
+              "core_total_ms": 31.4567,
+              "frontend_ms": 1.9765,
+              "encoder_build_ms": 0.2676,
+              "encoder_compute_ms": 26.637,
+              "encoder_read_ms": 0.0089,
+              "decoder_ms": 2.5413
+            },
+            "2330237947966115273": {
+              "core_total_ms": 45.5861,
+              "frontend_ms": 3.598,
+              "encoder_build_ms": 1.3708,
+              "encoder_compute_ms": 36.2075,
+              "encoder_read_ms": 0.0442,
+              "decoder_ms": 4.3715
+            },
+            "8675814957598723431": {
+              "core_total_ms": 66.8696,
+              "frontend_ms": 6.047,
+              "encoder_build_ms": 2.0134,
+              "encoder_compute_ms": 50.11,
+              "encoder_read_ms": 0.0627,
+              "decoder_ms": 8.8158
+            }
+          },
+          "stage_status": "measured",
+          "peak_memory_bytes": 452297688,
+          "load_ms": 143.740583,
+          "first_request_ms": 166.82458300000002,
+          "repeated_text_changes": 0
+        }
+      },
+      "comparisons": {
+        "relative": {
+          "text_changed": 0,
+          "public_tokens_changed": 0,
+          "segments_changed": 0,
+          "literal_better": 0,
+          "literal_worse": 0,
+          "literal_equal": 9,
+          "repository_better": 0,
+          "repository_worse": 0,
+          "repository_equal": 9,
+          "count": 9,
+          "median_latency_ratio": 0.9948412648885666,
+          "latency_rounds": [
+            {
+              "round": 0,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 1,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 2,
+              "count": 9,
+              "text_changed": 0
+            }
+          ],
+          "latency_text_changed": 0,
+          "latency_text_comparisons": 27,
+          "latency_reduction_percent": 0.5158735111433388
+        },
+        "cumulative": {
+          "text_changed": 0,
+          "public_tokens_changed": 0,
+          "segments_changed": 0,
+          "literal_better": 0,
+          "literal_worse": 0,
+          "literal_equal": 9,
+          "repository_better": 0,
+          "repository_worse": 0,
+          "repository_equal": 9,
+          "count": 9,
+          "median_latency_ratio": 0.9850785724776046,
+          "latency_rounds": [
+            {
+              "round": 0,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 1,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 2,
+              "count": 9,
+              "text_changed": 0
+            }
+          ],
+          "latency_text_changed": 0,
+          "latency_text_comparisons": 27,
+          "latency_reduction_percent": 1.4921427522395447
+        }
+      }
+    },
+    "q8_0": {
+      "sides": {
+        "baseline": {
+          "latency": {
+            "p50_ms": 75.41079099999992,
+            "p90_ms": 119.67724139999994,
+            "p99_ms": 139.67941164000007,
+            "count": 9,
+            "rtfx": 181.5519035402001
+          },
+          "strata": {
+            "10-20s": {
+              "p50_ms": 75.41079099999992,
+              "p90_ms": 97.73412540000015,
+              "p99_ms": 102.7568756400002,
+              "count": 3,
+              "rtfx": 180.04596243759397
+            },
+            "20-30s": {
+              "p50_ms": 114.1210829999999,
+              "p90_ms": 136.34571660000003,
+              "p99_ms": 141.34625916000007,
+              "count": 3,
+              "rtfx": 194.1551218525634
+            },
+            "6-10s": {
+              "p50_ms": 56.74762500000008,
+              "p90_ms": 59.365824999999944,
+              "p99_ms": 59.9549199999999,
+              "count": 3,
+              "rtfx": 155.46514470835757
+            }
+          },
+          "rounds": [
+            {
+              "p50_ms": 74.1621669999999,
+              "p90_ms": 119.67724139999994,
+              "p99_ms": 139.67941164000007,
+              "count": 9,
+              "rtfx": 184.1037933001716
+            },
+            {
+              "p50_ms": 75.41079099999992,
+              "p90_ms": 119.44900779999998,
+              "p99_ms": 139.17778827999987,
+              "count": 9,
+              "rtfx": 181.58874360327331
+            },
+            {
+              "p50_ms": 78.80087499999976,
+              "p90_ms": 132.18048319999988,
+              "p99_ms": 154.29117272000002,
+              "count": 9,
+              "rtfx": 171.86383548628763
+            }
+          ],
+          "quality": {
+            "literal_edits": 39,
+            "literal_characters": 532,
+            "repository_edits": 21,
+            "repository_characters": 493,
+            "literal_cer": 0.07330827067669173,
+            "repository_cer": 0.04259634888438134
+          },
+          "stages": {
+            "1321491767934942997": {
+              "core_total_ms": 28.7826,
+              "frontend_ms": 1.9794,
+              "encoder_build_ms": 0.2789,
+              "encoder_compute_ms": 23.8731,
+              "encoder_read_ms": 0.008,
+              "decoder_ms": 2.5684
+            },
+            "2330237947966115273": {
+              "core_total_ms": 42.9266,
+              "frontend_ms": 3.5923,
+              "encoder_build_ms": 1.3917,
+              "encoder_compute_ms": 32.5556,
+              "encoder_read_ms": 0.0433,
+              "decoder_ms": 5.2858
+            },
+            "8675814957598723431": {
+              "core_total_ms": 62.0109,
+              "frontend_ms": 6.0182,
+              "encoder_build_ms": 2.0045,
+              "encoder_compute_ms": 45.1525,
+              "encoder_read_ms": 0.0331,
+              "decoder_ms": 8.5657
+            }
+          },
+          "stage_status": "measured",
+          "peak_memory_bytes": 752174352,
+          "load_ms": 183.66429100000005,
+          "first_request_ms": 161.69749999999993,
+          "repeated_text_changes": 0
+        },
+        "candidate": {
+          "latency": {
+            "p50_ms": 74.88675000000012,
+            "p90_ms": 122.12780000000004,
+            "p99_ms": 142.43287999999987,
+            "count": 9,
+            "rtfx": 182.55925284329118
+          },
+          "strata": {
+            "10-20s": {
+              "p50_ms": 74.88675000000012,
+              "p90_ms": 98.09354999999994,
+              "p99_ms": 103.31507999999988,
+              "count": 3,
+              "rtfx": 180.72286013220233
+            },
+            "20-30s": {
+              "p50_ms": 116.48750000000008,
+              "p90_ms": 139.04869999999988,
+              "p99_ms": 144.12496999999982,
+              "count": 3,
+              "rtfx": 193.03913930589874
+            },
+            "6-10s": {
+              "p50_ms": 53.34220800000011,
+              "p90_ms": 57.75230800000006,
+              "p99_ms": 58.744580500000055,
+              "count": 3,
+              "rtfx": 160.85124634510737
+            }
+          },
+          "rounds": [
+            {
+              "p50_ms": 74.35999999999999,
+              "p90_ms": 120.06536620000003,
+              "p99_ms": 138.63353692000004,
+              "count": 9,
+              "rtfx": 184.60926176211694
+            },
+            {
+              "p50_ms": 74.88675000000012,
+              "p90_ms": 122.71000820000006,
+              "p99_ms": 145.11103772000004,
+              "count": 9,
+              "rtfx": 179.35516981659396
+            },
+            {
+              "p50_ms": 79.7601659999998,
+              "p90_ms": 125.74363279999994,
+              "p99_ms": 142.79446327999986,
+              "count": 9,
+              "rtfx": 179.8661077475954
+            }
+          ],
+          "quality": {
+            "literal_edits": 39,
+            "literal_characters": 532,
+            "repository_edits": 21,
+            "repository_characters": 493,
+            "literal_cer": 0.07330827067669173,
+            "repository_cer": 0.04259634888438134
+          },
+          "stages": {
+            "1321491767934942997": {
+              "core_total_ms": 30.2497,
+              "frontend_ms": 1.9903,
+              "encoder_build_ms": 0.2757,
+              "encoder_compute_ms": 23.827,
+              "encoder_read_ms": 0.027,
+              "decoder_ms": 4.0428
+            },
+            "2330237947966115273": {
+              "core_total_ms": 43.5491,
+              "frontend_ms": 4.2369,
+              "encoder_build_ms": 1.5508,
+              "encoder_compute_ms": 32.4758,
+              "encoder_read_ms": 0.0146,
+              "decoder_ms": 5.6968
+            },
+            "8675814957598723431": {
+              "core_total_ms": 63.005,
+              "frontend_ms": 6.0283,
+              "encoder_build_ms": 1.9924,
+              "encoder_compute_ms": 45.0375,
+              "encoder_read_ms": 0.0734,
+              "decoder_ms": 9.7529
+            }
+          },
+          "stage_status": "measured",
+          "peak_memory_bytes": 747898128,
+          "load_ms": 184.10683300000002,
+          "first_request_ms": 159.0395,
+          "repeated_text_changes": 0
+        },
+        "anchor": {
+          "latency": {
+            "p50_ms": 74.60329199999993,
+            "p90_ms": 119.62185800000002,
+            "p99_ms": 139.44669799999983,
+            "count": 9,
+            "rtfx": 183.7317107913171
+          },
+          "strata": {
+            "10-20s": {
+              "p50_ms": 74.60329199999993,
+              "p90_ms": 98.17312559999998,
+              "p99_ms": 103.47633815999998,
+              "count": 3,
+              "rtfx": 180.50876063676478
+            },
+            "20-30s": {
+              "p50_ms": 114.11495800000004,
+              "p90_ms": 136.1425579999999,
+              "p99_ms": 141.09876799999984,
+              "count": 3,
+              "rtfx": 195.8651392866166
+            },
+            "6-10s": {
+              "p50_ms": 53.42358300000005,
+              "p90_ms": 57.87815020000005,
+              "p99_ms": 58.88042782000004,
+              "count": 3,
+              "rtfx": 160.69403420194385
+            }
+          },
+          "rounds": [
+            {
+              "p50_ms": 74.58787499999997,
+              "p90_ms": 119.28133340000011,
+              "p99_ms": 138.63613364,
+              "count": 9,
+              "rtfx": 185.03659523718642
+            },
+            {
+              "p50_ms": 74.61704200000008,
+              "p90_ms": 119.62185800000002,
+              "p99_ms": 139.44669799999983,
+              "count": 9,
+              "rtfx": 182.87696281247855
+            },
+            {
+              "p50_ms": 74.60329199999993,
+              "p90_ms": 124.67360879999987,
+              "p99_ms": 143.59124807999996,
+              "count": 9,
+              "rtfx": 181.41526544517322
+            }
+          ],
+          "quality": {
+            "literal_edits": 39,
+            "literal_characters": 532,
+            "repository_edits": 21,
+            "repository_characters": 493,
+            "literal_cer": 0.07330827067669173,
+            "repository_cer": 0.04259634888438134
+          },
+          "stages": {
+            "1321491767934942997": {
+              "core_total_ms": 28.8424,
+              "frontend_ms": 1.9724,
+              "encoder_build_ms": 0.2776,
+              "encoder_compute_ms": 24.0027,
+              "encoder_read_ms": 0.025,
+              "decoder_ms": 2.5076
+            },
+            "2330237947966115273": {
+              "core_total_ms": 41.8694,
+              "frontend_ms": 3.5984,
+              "encoder_build_ms": 1.3737,
+              "encoder_compute_ms": 32.6089,
+              "encoder_read_ms": 0.0422,
+              "decoder_ms": 4.2025
+            },
+            "8675814957598723431": {
+              "core_total_ms": 61.9218,
+              "frontend_ms": 6.0156,
+              "encoder_build_ms": 1.9964,
+              "encoder_compute_ms": 45.2582,
+              "encoder_read_ms": 0.0342,
+              "decoder_ms": 8.6155
+            }
+          },
+          "stage_status": "measured",
+          "peak_memory_bytes": 757105888,
+          "load_ms": 186.01679199999998,
+          "first_request_ms": 160.97895800000006,
+          "repeated_text_changes": 0
+        }
+      },
+      "comparisons": {
+        "relative": {
+          "text_changed": 0,
+          "public_tokens_changed": 0,
+          "segments_changed": 0,
+          "literal_better": 0,
+          "literal_worse": 0,
+          "literal_equal": 9,
+          "repository_better": 0,
+          "repository_worse": 0,
+          "repository_equal": 9,
+          "count": 9,
+          "median_latency_ratio": 0.9837171586285536,
+          "latency_rounds": [
+            {
+              "round": 0,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 1,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 2,
+              "count": 9,
+              "text_changed": 0
+            }
+          ],
+          "latency_text_changed": 0,
+          "latency_text_comparisons": 27,
+          "latency_reduction_percent": 1.6282841371446422
+        },
+        "cumulative": {
+          "text_changed": 0,
+          "public_tokens_changed": 0,
+          "segments_changed": 0,
+          "literal_better": 0,
+          "literal_worse": 0,
+          "literal_equal": 9,
+          "repository_better": 0,
+          "repository_worse": 0,
+          "repository_equal": 9,
+          "count": 9,
+          "median_latency_ratio": 0.9984876056968894,
+          "latency_rounds": [
+            {
+              "round": 0,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 1,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 2,
+              "count": 9,
+              "text_changed": 0
+            }
+          ],
+          "latency_text_changed": 0,
+          "latency_text_comparisons": 27,
+          "latency_reduction_percent": 0.15123943031105647
+        }
+      }
+    },
+    "f16": {
+      "sides": {
+        "baseline": {
+          "latency": {
+            "p50_ms": 72.82599999999961,
+            "p90_ms": 118.5773836000001,
+            "p99_ms": 139.95046335999987,
+            "count": 9,
+            "rtfx": 186.26142026805647
+          },
+          "strata": {
+            "10-20s": {
+              "p50_ms": 72.82599999999961,
+              "p90_ms": 96.40789999999991,
+              "p99_ms": 101.71382749999997,
+              "count": 3,
+              "rtfx": 184.2007831776259
+            },
+            "20-30s": {
+              "p50_ms": 112.64041700000016,
+              "p90_ms": 136.38828339999992,
+              "p99_ms": 141.73155333999983,
+              "count": 3,
+              "rtfx": 197.35201087133416
+            },
+            "6-10s": {
+              "p50_ms": 52.57970800000011,
+              "p90_ms": 56.80087519999999,
+              "p99_ms": 57.75063781999996,
+              "count": 3,
+              "rtfx": 163.59313455971684
+            }
+          },
+          "rounds": [
+            {
+              "p50_ms": 72.76745799999995,
+              "p90_ms": 118.57714999999995,
+              "p99_ms": 139.95043999999984,
+              "count": 9,
+              "rtfx": 186.6235852160669
+            },
+            {
+              "p50_ms": 73.51062499999995,
+              "p90_ms": 118.1348994,
+              "p99_ms": 137.61983964,
+              "count": 9,
+              "rtfx": 186.77075485648587
+            },
+            {
+              "p50_ms": 72.82599999999961,
+              "p90_ms": 119.31533360000019,
+              "p99_ms": 143.3450333600002,
+              "count": 9,
+              "rtfx": 185.19462832190945
+            }
+          ],
+          "quality": {
+            "literal_edits": 39,
+            "literal_characters": 532,
+            "repository_edits": 21,
+            "repository_characters": 493,
+            "literal_cer": 0.07330827067669173,
+            "repository_cer": 0.04259634888438134
+          },
+          "stages": {
+            "1321491767934942997": {
+              "core_total_ms": 28.2191,
+              "frontend_ms": 1.9797,
+              "encoder_build_ms": 0.2767,
+              "encoder_compute_ms": 22.9146,
+              "encoder_read_ms": 0.0258,
+              "decoder_ms": 3.0231
+            },
+            "2330237947966115273": {
+              "core_total_ms": 39.8109,
+              "frontend_ms": 3.5993,
+              "encoder_build_ms": 1.3709,
+              "encoder_compute_ms": 29.8283,
+              "encoder_read_ms": 0.0195,
+              "decoder_ms": 5.023
+            },
+            "8675814957598723431": {
+              "core_total_ms": 59.8474,
+              "frontend_ms": 6.0556,
+              "encoder_build_ms": 1.9813,
+              "encoder_compute_ms": 41.85,
+              "encoder_read_ms": 0.0307,
+              "decoder_ms": 9.8877
+            }
+          },
+          "stage_status": "measured",
+          "peak_memory_bytes": 1343424168,
+          "load_ms": 273.909208,
+          "first_request_ms": 162.46675,
+          "repeated_text_changes": 0
+        },
+        "candidate": {
+          "latency": {
+            "p50_ms": 72.87833399999988,
+            "p90_ms": 119.18025800000011,
+            "p99_ms": 140.49063800000005,
+            "count": 9,
+            "rtfx": 184.2922464671568
+          },
+          "strata": {
+            "10-20s": {
+              "p50_ms": 72.87833399999988,
+              "p90_ms": 97.53176679999997,
+              "p99_ms": 103.07878917999999,
+              "count": 3,
+              "rtfx": 182.3581339011346
+            },
+            "20-30s": {
+              "p50_ms": 113.2607080000001,
+              "p90_ms": 136.93890800000008,
+              "p99_ms": 142.26650300000009,
+              "count": 3,
+              "rtfx": 196.7871905374509
+            },
+            "6-10s": {
+              "p50_ms": 53.220500000000115,
+              "p90_ms": 59.468833599999726,
+              "p99_ms": 60.87470865999964,
+              "count": 3,
+              "rtfx": 158.8708423380205
+            }
+          },
+          "rounds": [
+            {
+              "p50_ms": 72.87833399999988,
+              "p90_ms": 119.68652500000002,
+              "p99_ms": 140.14991500000016,
+              "count": 9,
+              "rtfx": 186.24952147200625
+            },
+            {
+              "p50_ms": 72.20575000000018,
+              "p90_ms": 120.00492480000005,
+              "p99_ms": 144.28410527999986,
+              "count": 9,
+              "rtfx": 183.1196216547981
+            },
+            {
+              "p50_ms": 74.0725000000002,
+              "p90_ms": 118.69559159999989,
+              "p99_ms": 140.44217136000003,
+              "count": 9,
+              "rtfx": 183.87149441900857
+            }
+          ],
+          "quality": {
+            "literal_edits": 39,
+            "literal_characters": 532,
+            "repository_edits": 21,
+            "repository_characters": 493,
+            "literal_cer": 0.07330827067669173,
+            "repository_cer": 0.04259634888438134
+          },
+          "stages": {
+            "1321491767934942997": {
+              "core_total_ms": 28.0913,
+              "frontend_ms": 1.9762,
+              "encoder_build_ms": 0.274,
+              "encoder_compute_ms": 22.7632,
+              "encoder_read_ms": 0.0248,
+              "decoder_ms": 3.047
+            },
+            "2330237947966115273": {
+              "core_total_ms": 39.8321,
+              "frontend_ms": 3.5963,
+              "encoder_build_ms": 1.3938,
+              "encoder_compute_ms": 29.6447,
+              "encoder_read_ms": 0.017,
+              "decoder_ms": 5.1448
+            },
+            "8675814957598723431": {
+              "core_total_ms": 59.7143,
+              "frontend_ms": 6.0539,
+              "encoder_build_ms": 1.9892,
+              "encoder_compute_ms": 41.6848,
+              "encoder_read_ms": 0.0305,
+              "decoder_ms": 9.8867
+            }
+          },
+          "stage_status": "measured",
+          "peak_memory_bytes": 1345226456,
+          "load_ms": 274.402041,
+          "first_request_ms": 161.253416,
+          "repeated_text_changes": 0
+        },
+        "anchor": {
+          "latency": {
+            "p50_ms": 75.71208299999998,
+            "p90_ms": 120.59510780000011,
+            "p99_ms": 141.89744828000008,
+            "count": 9,
+            "rtfx": 181.0472998284934
+          },
+          "strata": {
+            "10-20s": {
+              "p50_ms": 75.71208299999998,
+              "p90_ms": 101.28785020000014,
+              "p99_ms": 107.04239782000016,
+              "count": 3,
+              "rtfx": 177.24517903722767
+            },
+            "20-30s": {
+              "p50_ms": 114.67779100000008,
+              "p90_ms": 138.3470582000001,
+              "p99_ms": 143.67264332000013,
+              "count": 3,
+              "rtfx": 193.30499635660473
+            },
+            "6-10s": {
+              "p50_ms": 54.716250000000024,
+              "p90_ms": 58.61461640000019,
+              "p99_ms": 59.49174884000022,
+              "count": 3,
+              "rtfx": 158.62449540428526
+            }
+          },
+          "rounds": [
+            {
+              "p50_ms": 79.84291599999982,
+              "p90_ms": 121.92999160000008,
+              "p99_ms": 143.97951136000006,
+              "count": 9,
+              "rtfx": 177.41524295637404
+            },
+            {
+              "p50_ms": 75.71208299999998,
+              "p90_ms": 120.59510780000011,
+              "p99_ms": 141.89744828000008,
+              "count": 9,
+              "rtfx": 181.0916979950601
+            },
+            {
+              "p50_ms": 72.69175000000017,
+              "p90_ms": 118.73001680000012,
+              "p99_ms": 140.15232728,
+              "count": 9,
+              "rtfx": 185.50691322026654
+            }
+          ],
+          "quality": {
+            "literal_edits": 39,
+            "literal_characters": 532,
+            "repository_edits": 21,
+            "repository_characters": 493,
+            "literal_cer": 0.07330827067669173,
+            "repository_cer": 0.04259634888438134
+          },
+          "stages": {
+            "1321491767934942997": {
+              "core_total_ms": 28.3213,
+              "frontend_ms": 1.977,
+              "encoder_build_ms": 0.2766,
+              "encoder_compute_ms": 22.9613,
+              "encoder_read_ms": 0.0256,
+              "decoder_ms": 3.0397
+            },
+            "2330237947966115273": {
+              "core_total_ms": 39.8123,
+              "frontend_ms": 3.6086,
+              "encoder_build_ms": 1.4094,
+              "encoder_compute_ms": 29.699,
+              "encoder_read_ms": 0.0191,
+              "decoder_ms": 5.0886
+            },
+            "8675814957598723431": {
+              "core_total_ms": 63.9353,
+              "frontend_ms": 5.714,
+              "encoder_build_ms": 2.1105,
+              "encoder_compute_ms": 42.0005,
+              "encoder_read_ms": 0.0355,
+              "decoder_ms": 14.0666
+            }
+          },
+          "stage_status": "measured",
+          "peak_memory_bytes": 1341703872,
+          "load_ms": 274.94237499999997,
+          "first_request_ms": 161.13308399999994,
+          "repeated_text_changes": 0
+        }
+      },
+      "comparisons": {
+        "relative": {
+          "text_changed": 0,
+          "public_tokens_changed": 0,
+          "segments_changed": 0,
+          "literal_better": 0,
+          "literal_worse": 0,
+          "literal_equal": 9,
+          "repository_better": 0,
+          "repository_worse": 0,
+          "repository_equal": 9,
+          "count": 9,
+          "median_latency_ratio": 1.0121870589315558,
+          "latency_rounds": [
+            {
+              "round": 0,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 1,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 2,
+              "count": 9,
+              "text_changed": 0
+            }
+          ],
+          "latency_text_changed": 0,
+          "latency_text_comparisons": 27,
+          "latency_reduction_percent": -1.2187058931555805
+        },
+        "cumulative": {
+          "text_changed": 0,
+          "public_tokens_changed": 0,
+          "segments_changed": 0,
+          "literal_better": 0,
+          "literal_worse": 0,
+          "literal_equal": 9,
+          "repository_better": 0,
+          "repository_worse": 0,
+          "repository_equal": 9,
+          "count": 9,
+          "median_latency_ratio": 0.9876429168399312,
+          "latency_rounds": [
+            {
+              "round": 0,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 1,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 2,
+              "count": 9,
+              "text_changed": 0
+            }
+          ],
+          "latency_text_changed": 0,
+          "latency_text_comparisons": 27,
+          "latency_reduction_percent": 1.2357083160068782
+        }
+      }
+    }
+  },
+  "builds": {
+    "baseline": {
+      "source_commit": "54dd7a5df9b3646b03581c9b4cd27cb3a3b55600",
+      "source_tree": "95d3bfb0f54d7a7550ae82b61194b6b0c7b26626",
+      "ggml_commit": "232e507d0c35312b77a57720a4c7095b3c77ff5e",
+      "source_status": "",
+      "ggml_status": "",
+      "side": "candidate",
+      "kind": "speech",
+      "source_verified": true,
+      "started_unix": 1794004113.369816,
+      "returncodes": [
+        0,
+        0
+      ],
+      "created_unix": 1794004159.4039328,
+      "build_flags": {
+        "configure": [
+          "-DCMAKE_BUILD_TYPE=Release",
+          "-DGGML_NATIVE=ON",
+          "-DGGML_METAL=ON",
+          "-DCMAKE_OSX_ARCHITECTURES=arm64",
+          "-DCMAKE_OSX_SYSROOT=<recorded Xcode macOS SDK>",
+          "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+        ],
+        "build": [
+          "--target",
+          "speech-cli",
+          "fastconformer-timing",
+          "fastconformer-encoder-check",
+          "fastconformer-frontend-check",
+          "-j4"
+        ]
+      },
+      "cmake_cache_sha256": "6a16d63675dd32bad305813634d9f1ba498a2c13cfada117bb97919d1fec7969",
+      "build_log_sha256": "65f5abba5374cff3e80ceffbd5d9e3bf57e41e48cafcd1e274cabdfed084c6f9",
+      "stage_threads_argument": true,
+      "speech": {
+        "sha256": "7465dd5514360883496bf30556da7bc5d5febc3414d7b62230b4da55b3b09966",
+        "artifact_path": "011a/builds/candidate-speech/speech"
+      },
+      "stage_tool": {
+        "sha256": "607fe0f53f7cae4cdce2baa0de650ff05c81d1697264cfe79aa26d349f716045",
+        "artifact_path": "011a/builds/candidate-speech/fastconformer-timing"
+      },
+      "encoder_check": {
+        "sha256": "09369c5ec2608225629a338ff9d878fc0f59ed355f8ff4883c07ca52f4fe84e8",
+        "artifact_path": "011a/builds/candidate-speech/fastconformer-encoder-check"
+      },
+      "frontend_check": {
+        "sha256": "44c456e8d1fd356f22f21724dd3077d2b3d462378da0e74b64c2c758f6bafb8b",
+        "artifact_path": "011a/builds/candidate-speech/fastconformer-frontend-check"
+      }
+    },
+    "candidate": {
+      "source_commit": "54dd7a5df9b3646b03581c9b4cd27cb3a3b55600",
+      "source_tree": "95d3bfb0f54d7a7550ae82b61194b6b0c7b26626",
+      "ggml_commit": "232e507d0c35312b77a57720a4c7095b3c77ff5e",
+      "source_status": "",
+      "ggml_status": "",
+      "side": "candidate",
+      "kind": "speech",
+      "source_verified": true,
+      "started_unix": 1794004113.369816,
+      "returncodes": [
+        0,
+        0
+      ],
+      "created_unix": 1794004159.4039328,
+      "build_flags": {
+        "configure": [
+          "-DCMAKE_BUILD_TYPE=Release",
+          "-DGGML_NATIVE=ON",
+          "-DGGML_METAL=ON",
+          "-DCMAKE_OSX_ARCHITECTURES=arm64",
+          "-DCMAKE_OSX_SYSROOT=<recorded Xcode macOS SDK>",
+          "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+        ],
+        "build": [
+          "--target",
+          "speech-cli",
+          "fastconformer-timing",
+          "fastconformer-encoder-check",
+          "fastconformer-frontend-check",
+          "-j4"
+        ]
+      },
+      "cmake_cache_sha256": "6a16d63675dd32bad305813634d9f1ba498a2c13cfada117bb97919d1fec7969",
+      "build_log_sha256": "65f5abba5374cff3e80ceffbd5d9e3bf57e41e48cafcd1e274cabdfed084c6f9",
+      "stage_threads_argument": true,
+      "speech": {
+        "sha256": "7465dd5514360883496bf30556da7bc5d5febc3414d7b62230b4da55b3b09966",
+        "artifact_path": "011a/builds/candidate-speech/speech"
+      },
+      "stage_tool": {
+        "sha256": "607fe0f53f7cae4cdce2baa0de650ff05c81d1697264cfe79aa26d349f716045",
+        "artifact_path": "011a/builds/candidate-speech/fastconformer-timing"
+      },
+      "encoder_check": {
+        "sha256": "09369c5ec2608225629a338ff9d878fc0f59ed355f8ff4883c07ca52f4fe84e8",
+        "artifact_path": "011a/builds/candidate-speech/fastconformer-encoder-check"
+      },
+      "frontend_check": {
+        "sha256": "44c456e8d1fd356f22f21724dd3077d2b3d462378da0e74b64c2c758f6bafb8b",
+        "artifact_path": "011a/builds/candidate-speech/fastconformer-frontend-check"
+      }
+    },
+    "anchor": {
+      "source_commit": "f976ebd8e2fca1f15ddc2e6fc9f99e7090b0f9ea",
+      "source_tree": "dee6405fbb3c50eb5f3113f76e6745f59c21b919",
+      "source_verified": true,
+      "ggml_commit": "e1a9ac12edbb57402618fd6936598603f5ee6266",
+      "created_utc": "2026-11-06T17:35:25.712263+00:00",
+      "cmake_cache_sha256": "c3af3223b29cbc28d05f6c379b935c738fc1ccd8b53e553bb0d9d5a88829a171",
+      "build_log_sha256": "c13da50cb07e637c4858e256fb0eff3c80a4f1be693e01093cfda3ac589943e8",
+      "stage_threads_argument": true,
+      "speech": {
+        "sha256": "d493b968e7a94e45f93054bc899c9d20802bb781a19f8dc76cfd4fa6dd91413f",
+        "artifact_path": "builds/campaign-anchor/speech"
+      },
+      "stage_tool": {
+        "sha256": "3dc5c6f19a78153b5f8d0bbd3f08f6106825e5ebd9d9465283b6ebd01553f768",
+        "artifact_path": "builds/campaign-anchor/fastconformer-timing"
+      },
+      "build_flags": {
+        "configure": [
+          "-DCMAKE_BUILD_TYPE=Release",
+          "-DGGML_NATIVE=ON",
+          "-DGGML_METAL=ON"
+        ],
+        "build": [
+          "--target",
+          "speech-cli",
+          "fastconformer-timing",
+          "-j4"
+        ]
+      }
+    }
+  },
+  "execution_environments": {
+    "baseline": {
+      "GGML_METAL_GLU": "0"
+    },
+    "candidate": {
+      "GGML_METAL_GLU": "1"
+    },
+    "anchor": {}
+  },
+  "models": {
+    "q4_k": {
+      "type": "q4_k",
+      "sha256": "d24d53f29b75214a933ff482b0de1217e0a800f4118cca39ad6cf03609a89d6f",
+      "size": 351901216,
+      "revision": "6b965d5007ba780585de51549d57a8c1c0d67c7e"
+    },
+    "q8_0": {
+      "type": "q8_0",
+      "sha256": "cd5f60b2f1c411404b83fca4a65e3ce30a26d9e951b6a346529e65f22758afeb",
+      "size": 656381472,
+      "revision": "6b965d5007ba780585de51549d57a8c1c0d67c7e"
+    },
+    "f16": {
+      "type": "f16",
+      "sha256": "f752e02f68c1dfff795900e40aa82e5302976fb5360080fcbd330d8b3c992cd8",
+      "size": 1233128832,
+      "revision": "6b965d5007ba780585de51549d57a8c1c0d67c7e"
+    }
+  },
+  "fixed_anchor": {
+    "measured_side": "anchor",
+    "source_commit": "f976ebd8e2fca1f15ddc2e6fc9f99e7090b0f9ea",
+    "speech_sha256": "d493b968e7a94e45f93054bc899c9d20802bb781a19f8dc76cfd4fa6dd91413f",
+    "environment": {},
+    "build_manifest_sha256": "47ff498e173967caf11c67571f38a6a0efe67e3d649bbfafb2738089951cd553"
+  },
+  "assets_sha256": "e82d03c053c861f4943907d67f28e191431f84706429b324e80368adf6808581",
+  "input_hash": "7196750a6d97b470abbcc6fc45bd3d82572473a5e778200a145fe82dbda03267",
+  "evidence": {
+    "directory": "011a",
+    "run_manifest_sha256": "892284e2cf534c670d93bcda01c898bb26609c63d6afc1ae7f31d0228e69b554",
+    "paths_relative_to": "External campaign artifact directory.",
+    "evaluation_sha256": "c462ad5e9909861d5695eda084c9866fe5d0811f5ec94bbdbcdc101ce208ce6b",
+    "checks_sha256": "f818cf764a897d2bd913a9532c4a3ed46bb4f8361a01bcf78387db51d95d4856",
+    "evidence_manifest_sha256": "df3852bfd1ad47bab278d6544bf172f7479aa74db497bf2a4c1dd3052eb6911d",
+    "owner_manifest_files": 877,
+    "owner_manifest_bytes": 1721974312,
+    "independent_manifest_path": "report-imports/011a/independent-evidence-sha256.json",
+    "independent_manifest_sha256": "fabb0e9d1eab0af856c42e6541ad7da90bcf890d74d2c6ac2b2aaf07e4ce9e03",
+    "independently_verified_files": 878,
+    "independently_verified_external_files": 6,
+    "request_audit_path": "report-imports/011a/request-audit.json",
+    "request_audit_sha256": "81c84a59171e61e5b7ce88faddbf3df44c75ee2a5ae4cb2ec63b0f725a21e1f8",
+    "check_audit_path": "report-imports/011a/check-audit.json",
+    "check_audit_sha256": "e23dc1068bbfa845555ddc22da83378c3853ea455c6f3ebfc43b2024493da6f6",
+    "request_audit_source_sha256": "700718d8560402d339f455f127fdb4502e18789d6fee8e4e0926735536e4f24c",
+    "check_audit_source_sha256": "cf3e859f8176baf123a3c2258077c52bd6201c3ef1ce0977592747953ff9da5c",
+    "import_source_sha256": "5509ffdce1e54de48640d7f2e6f86ab6f035d73da9fd96911d215357db54de97"
+  },
+  "checks": [
+    {
+      "name": "Matched original and candidate builds",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/matched-build-flags.json",
+      "reason": "Clean Release/native/Metal builds, explicit arm64 and SDK, -j4; all 74 speech and 28 ggml flags.make files match after path normalization. The fixed anchor has implicit arch/SDK settings.",
+      "scope": "mac"
+    },
+    {
+      "name": "direct-original-0",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/ggml-checks/direct-original-0/result.json",
+      "reason": "76 strict Metal comparisons (38 eligible and 38 controls), including 12 mapped-buffer controls; two emulated poison guards pass. All expected counts are nonzero and checked.",
+      "scope": "mac"
+    },
+    {
+      "name": "CPU-reference CONFORMER_GLU original 0",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/ggml-checks/backend-original-0-MTL0-CONFORMER_GLU/result.json",
+      "reason": "All 64 Metal-vs-CPU graph cases pass the existing bounds; mapped-buffer controls are not CPU-reference cases.",
+      "scope": "mac"
+    },
+    {
+      "name": "SIGMOID_MUL original 0",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/ggml-checks/backend-original-0-MTL0-SIGMOID_MUL/result.json",
+      "reason": "26 supported cases pass; 13 unsupported cases are excluded, not counted as passes.",
+      "scope": "mac"
+    },
+    {
+      "name": "SILU_MUL original 0",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/ggml-checks/backend-original-0-MTL0-SILU_MUL/result.json",
+      "reason": "26 supported cases pass; 13 unsupported cases are excluded, not counted as passes.",
+      "scope": "mac"
+    },
+    {
+      "name": "SIGMOID original 0",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/ggml-checks/backend-original-0-MTL0-SIGMOID/result.json",
+      "reason": "8 supported cases pass; 4 unsupported cases are excluded, not counted as passes.",
+      "scope": "mac"
+    },
+    {
+      "name": "MUL original 0",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/ggml-checks/backend-original-0-MTL0-MUL/result.json",
+      "reason": "74 supported cases pass; 69 unsupported cases are excluded, not counted as passes.",
+      "scope": "mac"
+    },
+    {
+      "name": "SWIGLU original 0",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/ggml-checks/backend-original-0-MTL0-SWIGLU/result.json",
+      "reason": "24 supported cases pass; 12 unsupported cases are excluded, not counted as passes.",
+      "scope": "mac"
+    },
+    {
+      "name": "Normal and retained encoder original 0 q4_k",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/normal-checks/original-0-q4_k/result.json",
+      "reason": "Seven lengths; normal graph has 0 fusions, retained graph has zero; projected outputs are byte-exact. Counters preserve normal two-command-buffer encoding and are excluded from timing.",
+      "scope": "mac"
+    },
+    {
+      "name": "Normal and retained encoder original 0 q8_0",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/normal-checks/original-0-q8_0/result.json",
+      "reason": "Seven lengths; normal graph has 0 fusions, retained graph has zero; projected outputs are byte-exact. Counters preserve normal two-command-buffer encoding and are excluded from timing.",
+      "scope": "mac"
+    },
+    {
+      "name": "Normal and retained encoder original 0 f16",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/normal-checks/original-0-f16/result.json",
+      "reason": "Seven lengths; normal graph has 0 fusions, retained graph has zero; projected outputs are byte-exact. Counters preserve normal two-command-buffer encoding and are excluded from timing.",
+      "scope": "mac"
+    },
+    {
+      "name": "direct-candidate-0",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/ggml-checks/direct-candidate-0/result.json",
+      "reason": "76 strict Metal comparisons (38 eligible and 38 controls), including 12 mapped-buffer controls; two emulated poison guards pass. All expected counts are nonzero and checked.",
+      "scope": "mac"
+    },
+    {
+      "name": "CPU-reference CONFORMER_GLU candidate 0",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/ggml-checks/backend-candidate-0-MTL0-CONFORMER_GLU/result.json",
+      "reason": "All 64 Metal-vs-CPU graph cases pass the existing bounds; mapped-buffer controls are not CPU-reference cases.",
+      "scope": "mac"
+    },
+    {
+      "name": "SIGMOID_MUL candidate 0",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/ggml-checks/backend-candidate-0-MTL0-SIGMOID_MUL/result.json",
+      "reason": "26 supported cases pass; 13 unsupported cases are excluded, not counted as passes.",
+      "scope": "mac"
+    },
+    {
+      "name": "SILU_MUL candidate 0",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/ggml-checks/backend-candidate-0-MTL0-SILU_MUL/result.json",
+      "reason": "26 supported cases pass; 13 unsupported cases are excluded, not counted as passes.",
+      "scope": "mac"
+    },
+    {
+      "name": "SIGMOID candidate 0",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/ggml-checks/backend-candidate-0-MTL0-SIGMOID/result.json",
+      "reason": "8 supported cases pass; 4 unsupported cases are excluded, not counted as passes.",
+      "scope": "mac"
+    },
+    {
+      "name": "MUL candidate 0",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/ggml-checks/backend-candidate-0-MTL0-MUL/result.json",
+      "reason": "74 supported cases pass; 69 unsupported cases are excluded, not counted as passes.",
+      "scope": "mac"
+    },
+    {
+      "name": "SWIGLU candidate 0",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/ggml-checks/backend-candidate-0-MTL0-SWIGLU/result.json",
+      "reason": "24 supported cases pass; 12 unsupported cases are excluded, not counted as passes.",
+      "scope": "mac"
+    },
+    {
+      "name": "Normal and retained encoder candidate 0 q4_k",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/normal-checks/candidate-0-q4_k/result.json",
+      "reason": "Seven lengths; normal graph has 0 fusions, retained graph has zero; projected outputs are byte-exact. Counters preserve normal two-command-buffer encoding and are excluded from timing.",
+      "scope": "mac"
+    },
+    {
+      "name": "Normal and retained encoder candidate 0 q8_0",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/normal-checks/candidate-0-q8_0/result.json",
+      "reason": "Seven lengths; normal graph has 0 fusions, retained graph has zero; projected outputs are byte-exact. Counters preserve normal two-command-buffer encoding and are excluded from timing.",
+      "scope": "mac"
+    },
+    {
+      "name": "Normal and retained encoder candidate 0 f16",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/normal-checks/candidate-0-f16/result.json",
+      "reason": "Seven lengths; normal graph has 0 fusions, retained graph has zero; projected outputs are byte-exact. Counters preserve normal two-command-buffer encoding and are excluded from timing.",
+      "scope": "mac"
+    },
+    {
+      "name": "direct-candidate-1",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/ggml-checks/direct-candidate-1/result.json",
+      "reason": "76 strict Metal comparisons (38 eligible and 38 controls), including 12 mapped-buffer controls; two emulated poison guards pass. All expected counts are nonzero and checked.",
+      "scope": "mac"
+    },
+    {
+      "name": "CPU-reference CONFORMER_GLU candidate 1",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/ggml-checks/backend-candidate-1-MTL0-CONFORMER_GLU/result.json",
+      "reason": "All 64 Metal-vs-CPU graph cases pass the existing bounds; mapped-buffer controls are not CPU-reference cases.",
+      "scope": "mac"
+    },
+    {
+      "name": "SIGMOID_MUL candidate 1",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/ggml-checks/backend-candidate-1-MTL0-SIGMOID_MUL/result.json",
+      "reason": "26 supported cases pass; 13 unsupported cases are excluded, not counted as passes.",
+      "scope": "mac"
+    },
+    {
+      "name": "SILU_MUL candidate 1",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/ggml-checks/backend-candidate-1-MTL0-SILU_MUL/result.json",
+      "reason": "26 supported cases pass; 13 unsupported cases are excluded, not counted as passes.",
+      "scope": "mac"
+    },
+    {
+      "name": "SIGMOID candidate 1",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/ggml-checks/backend-candidate-1-MTL0-SIGMOID/result.json",
+      "reason": "8 supported cases pass; 4 unsupported cases are excluded, not counted as passes.",
+      "scope": "mac"
+    },
+    {
+      "name": "MUL candidate 1",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/ggml-checks/backend-candidate-1-MTL0-MUL/result.json",
+      "reason": "74 supported cases pass; 69 unsupported cases are excluded, not counted as passes.",
+      "scope": "mac"
+    },
+    {
+      "name": "SWIGLU candidate 1",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/ggml-checks/backend-candidate-1-MTL0-SWIGLU/result.json",
+      "reason": "24 supported cases pass; 12 unsupported cases are excluded, not counted as passes.",
+      "scope": "mac"
+    },
+    {
+      "name": "Normal and retained encoder candidate 1 q4_k",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/normal-checks/candidate-1-q4_k/result.json",
+      "reason": "Seven lengths; normal graph has 24 fusions, retained graph has zero; projected outputs are byte-exact. Counters preserve normal two-command-buffer encoding and are excluded from timing.",
+      "scope": "mac"
+    },
+    {
+      "name": "Normal and retained encoder candidate 1 q8_0",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/normal-checks/candidate-1-q8_0/result.json",
+      "reason": "Seven lengths; normal graph has 24 fusions, retained graph has zero; projected outputs are byte-exact. Counters preserve normal two-command-buffer encoding and are excluded from timing.",
+      "scope": "mac"
+    },
+    {
+      "name": "Normal and retained encoder candidate 1 f16",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/normal-checks/candidate-1-f16/result.json",
+      "reason": "Seven lengths; normal graph has 24 fusions, retained graph has zero; projected outputs are byte-exact. Counters preserve normal two-command-buffer encoding and are excluded from timing.",
+      "scope": "mac"
+    },
+    {
+      "name": "ggml-checks original/off/on exact",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/ggml-checks/direct-byte-comparisons.json",
+      "reason": "2 external cmp comparisons pass; byte identity is not inferred from hash equality.",
+      "scope": "mac"
+    },
+    {
+      "name": "normal-checks original/off/on exact",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/normal-checks/byte-comparisons.json",
+      "reason": "6 external cmp comparisons pass; byte identity is not inferred from hash equality.",
+      "scope": "mac"
+    },
+    {
+      "name": "Regression unsupported layouts",
+      "status": "skipped",
+      "required": false,
+      "evidence": "011a/verified-inputs.json",
+      "reason": "The same 111 unsupported cases per side remain unsupported; the supported regression count is 158 per side.",
+      "scope": "mac"
+    },
+    {
+      "name": "Pinned input identity",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/verified-inputs.json",
+      "reason": "SHA-256 verified Q4_K/Q8_0/F16 and official F32 models, 11 official dump directories and all 66 arrays before execution.",
+      "scope": "mac"
+    },
+    {
+      "name": "encoder-candidate-0-f16-gpu",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/official-checks/encoder-candidate-0-f16-gpu/result.json",
+      "reason": "Eleven official NeMo encoder cases at the existing 25 dB bound; minimum 56.4 dB. Encoder checks retain layer outputs and are distinct from the normal-graph fusion check.",
+      "scope": "reference"
+    },
+    {
+      "name": "encoder-candidate-0-f32-gpu",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/official-checks/encoder-candidate-0-f32-gpu/result.json",
+      "reason": "Eleven official NeMo encoder cases at the existing 25 dB bound; minimum 56.4 dB. Encoder checks retain layer outputs and are distinct from the normal-graph fusion check.",
+      "scope": "reference"
+    },
+    {
+      "name": "encoder-candidate-1-f16-gpu",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/official-checks/encoder-candidate-1-f16-gpu/result.json",
+      "reason": "Eleven official NeMo encoder cases at the existing 25 dB bound; minimum 56.4 dB. Encoder checks retain layer outputs and are distinct from the normal-graph fusion check.",
+      "scope": "reference"
+    },
+    {
+      "name": "encoder-candidate-1-f32-cpu",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/official-checks/encoder-candidate-1-f32-cpu/result.json",
+      "reason": "Eleven official NeMo encoder cases at the existing 90 dB bound; minimum 104.4 dB. Encoder checks retain layer outputs and are distinct from the normal-graph fusion check.",
+      "scope": "reference"
+    },
+    {
+      "name": "encoder-candidate-1-f32-gpu",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/official-checks/encoder-candidate-1-f32-gpu/result.json",
+      "reason": "Eleven official NeMo encoder cases at the existing 25 dB bound; minimum 56.4 dB. Encoder checks retain layer outputs and are distinct from the normal-graph fusion check.",
+      "scope": "reference"
+    },
+    {
+      "name": "encoder-original-0-f16-gpu",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/official-checks/encoder-original-0-f16-gpu/result.json",
+      "reason": "Eleven official NeMo encoder cases at the existing 25 dB bound; minimum 56.4 dB. Encoder checks retain layer outputs and are distinct from the normal-graph fusion check.",
+      "scope": "reference"
+    },
+    {
+      "name": "encoder-original-0-f32-cpu",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/official-checks/encoder-original-0-f32-cpu/result.json",
+      "reason": "Eleven official NeMo encoder cases at the existing 90 dB bound; minimum 104.4 dB. Encoder checks retain layer outputs and are distinct from the normal-graph fusion check.",
+      "scope": "reference"
+    },
+    {
+      "name": "encoder-original-0-f32-gpu",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/official-checks/encoder-original-0-f32-gpu/result.json",
+      "reason": "Eleven official NeMo encoder cases at the existing 25 dB bound; minimum 56.4 dB. Encoder checks retain layer outputs and are distinct from the normal-graph fusion check.",
+      "scope": "reference"
+    },
+    {
+      "name": "frontend-candidate-1-f32-cpu",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/official-checks/frontend-candidate-1-f32-cpu/result.json",
+      "reason": "Eleven official NeMo frontend cases at the existing 90 dB bound; minimum 103.3 dB. Encoder checks retain layer outputs and are distinct from the normal-graph fusion check.",
+      "scope": "reference"
+    },
+    {
+      "name": "Initial GRAPH_DEBUG capture",
+      "status": "failed",
+      "required": false,
+      "evidence": "011a/graph-debug/result.json",
+      "reason": "Inference exited successfully, but the default speech log sink discarded Debug messages, so no node trace was captured. Original failure is preserved.",
+      "scope": "mac"
+    },
+    {
+      "name": "GRAPH_DEBUG capture with diagnostic log sink",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/graph-debug-v2/result.json",
+      "reason": "Unchanged stage source plus a diagnostic-only log-sink launcher shows 0/48 GLU fusions across two normal encoder executions. No counters or FUSION_DEBUG; no diagnostic timing or flags enter the screen.",
+      "scope": "mac"
+    },
+    {
+      "name": "Worker screen output q4_k",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/screen-analysis.json",
+      "reason": "Nine timestamp-enabled public text/token/time/segment results and all 27 latency texts match across OFF, ON and anchor; repeated text is stable. Raw private TDT IDs and durations are not exposed.",
+      "scope": "mac"
+    },
+    {
+      "name": "Worker screen output q8_0",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/screen-analysis.json",
+      "reason": "Nine timestamp-enabled public text/token/time/segment results and all 27 latency texts match across OFF, ON and anchor; repeated text is stable. Raw private TDT IDs and durations are not exposed.",
+      "scope": "mac"
+    },
+    {
+      "name": "Worker screen output f16",
+      "status": "passed",
+      "required": true,
+      "evidence": "011a/screen-analysis.json",
+      "reason": "Nine timestamp-enabled public text/token/time/segment results and all 27 latency texts match across OFF, ON and anchor; repeated text is stable. Raw private TDT IDs and durations are not exposed.",
+      "scope": "mac"
+    },
+    {
+      "name": "Windows Vulkan",
+      "status": "unavailable",
+      "required": true,
+      "evidence": "011a/source-checkpoints.json",
+      "reason": "No Windows Vulkan machine is available; no Vulkan execution or correctness claim.",
+      "scope": "vulkan"
+    },
+    {
+      "name": "Official KDA and full TDT reference",
+      "status": "unavailable",
+      "required": true,
+      "evidence": "011a/verified-inputs.json",
+      "reason": "Official frontend/encoder/joint.enc dumps exist, but complete KDA/prediction and TDT reference validation is unavailable; frontend and encoder were checked.",
+      "scope": "reference"
+    },
+    {
+      "name": "Full 650-input and sub-6-second follow-up",
+      "status": "skipped",
+      "required": false,
+      "evidence": "011a/screen-analysis.json",
+      "reason": "Screen rejects this GLU-only variant: no stable latency benefit beyond round variation. Coordinator approved no full or short run.",
+      "scope": "mac"
+    }
+  ],
+  "schema_version": 1,
+  "parent_measure_id": "011",
+  "title": "Fuse the GLU sigmoid and product on Metal",
+  "updated_utc": "2026-11-06T22:52:14.242753+00:00",
+  "full_quality_executed": false,
+  "short_prefix_executed": false,
+  "adopted": false,
+  "variant_scope": "GLU sigmoid and product fusion only; the pointwise matrix projection is unchanged.",
+  "implementation_checkpoint": {
+    "measured_source_commit": "54dd7a5df9b3646b03581c9b4cd27cb3a3b55600",
+    "evaluation_commit": "7d309ac2ba4e82a79064340ceda02fdfe9b04ab9",
+    "ggml_commit": "232e507d0c35312b77a57720a4c7095b3c77ff5e",
+    "original_source_commit": "d8971602369b9fe4478d52e797bde48d718729cb",
+    "original_ggml_commit": "caa352ff64190598e6661a383c4768110dc47fd9",
+    "runner_commit": "a239cdb483ff90e05969bdecfb5efe39137119da",
+    "runtime_unchanged_by_evaluation_notes": true,
+    "integrated": false,
+    "switch": "GGML_METAL_GLU=0/1",
+    "source_manifest": "011a/source-checkpoints.json",
+    "matched_build_flags": "011a/matched-build-flags.json",
+    "evaluation_notes": "experiments/haas-mac/011a-results.md at evaluation commit"
+  },
+  "diagnostics": [
+    {
+      "title": "Paired screen reductions and observed round variation",
+      "method": "Pair the same nine recordings within each round. The combined result first takes each input median over three rounds, then the median ON/OFF ratio. Positive means lower latency.",
+      "headers": [
+        "Type",
+        "Combined",
+        "Round 1",
+        "Round 2",
+        "Round 3",
+        "Inputs faster / slower",
+        "OFF / ON median round range"
+      ],
+      "rows": [
+        [
+          "Q4_K",
+          "0.516%",
+          "2.034%",
+          "0.011%",
+          "0.721%",
+          "9 / 0",
+          "1.570% / 3.320%"
+        ],
+        [
+          "Q8_0",
+          "1.628%",
+          "0.065%",
+          "0.633%",
+          "4.159%",
+          "6 / 3",
+          "7.208% / 3.700%"
+        ],
+        [
+          "F16",
+          "-1.219%",
+          "0.174%",
+          "-1.219%",
+          "-1.236%",
+          "1 / 8",
+          "1.047% / 3.191%"
+        ]
+      ],
+      "notes": [
+        "Round range is (maximum minus minimum) / median for each input, then the median over inputs. It is descriptive variation, not a confidence interval.",
+        "The 20-30 second paired reductions are Q4_K +0.455%, Q8_0 -1.964% and F16 -0.375%. No full or short-prefix follow-up is run."
+      ]
+    },
+    {
+      "title": "Direct kernel and ordinary graph coverage",
+      "method": "Independent original kernel, candidate OFF and candidate ON executions; exact byte comparisons and dispatch counts are correctness observations, excluded from request timing.",
+      "headers": [
+        "Configuration",
+        "Direct comparisons / guards",
+        "Direct fusions",
+        "CPU-reference cases",
+        "Supported / excluded regressions",
+        "Normal / retained fusions per graph"
+      ],
+      "rows": [
+        [
+          "original 0",
+          "76 / 2",
+          "0",
+          "64",
+          "158 / 111",
+          "0 / 0"
+        ],
+        [
+          "candidate 0",
+          "76 / 2",
+          "0",
+          "64",
+          "158 / 111",
+          "0 / 0"
+        ],
+        [
+          "candidate 1",
+          "76 / 2",
+          "38",
+          "64",
+          "158 / 111",
+          "24 / 0"
+        ]
+      ],
+      "notes": [
+        "38 eligible direct cases and 38 controls, including 12 distinct-wrapper controls. Poison guards emulate faulty stores; they are not extra GPU cases. Unsupported regressions are excluded, not passes.",
+        "The normal/retained matrix covers three weight types and seven encoded lengths: 1, 31, 32, 33, 171, 172 and 375. All normal versus retained projections and six independent original/OFF/ON output-file comparisons are exact. Total graph executions: 126."
+      ]
+    },
+    {
+      "title": "Official stage checks",
+      "method": "Pinned NeMo dump inputs, each checked at the existing bound. Retained encoder outputs do not establish ordinary graph fusion counts.",
+      "headers": [
+        "Stage",
+        "Configuration",
+        "Type / device",
+        "Cases",
+        "Minimum SNR",
+        "Existing bound"
+      ],
+      "rows": [
+        [
+          "encoder",
+          "candidate 0",
+          "F16 / gpu",
+          "11",
+          "56.4 dB",
+          "25 dB"
+        ],
+        [
+          "encoder",
+          "candidate 0",
+          "F32 / gpu",
+          "11",
+          "56.4 dB",
+          "25 dB"
+        ],
+        [
+          "encoder",
+          "candidate 1",
+          "F16 / gpu",
+          "11",
+          "56.4 dB",
+          "25 dB"
+        ],
+        [
+          "encoder",
+          "candidate 1",
+          "F32 / cpu",
+          "11",
+          "104.4 dB",
+          "90 dB"
+        ],
+        [
+          "encoder",
+          "candidate 1",
+          "F32 / gpu",
+          "11",
+          "56.4 dB",
+          "25 dB"
+        ],
+        [
+          "encoder",
+          "original 0",
+          "F16 / gpu",
+          "11",
+          "56.4 dB",
+          "25 dB"
+        ],
+        [
+          "encoder",
+          "original 0",
+          "F32 / cpu",
+          "11",
+          "104.4 dB",
+          "90 dB"
+        ],
+        [
+          "encoder",
+          "original 0",
+          "F32 / gpu",
+          "11",
+          "56.4 dB",
+          "25 dB"
+        ],
+        [
+          "frontend",
+          "candidate 1",
+          "F32 / cpu",
+          "11",
+          "103.3 dB",
+          "90 dB"
+        ]
+      ],
+      "notes": [
+        "88 encoder plus 11 frontend case executions pass. No separate official joint.enc, KDA/prediction or complete TDT result is claimed. Windows Vulkan execution remains unavailable."
+      ]
+    },
+    {
+      "title": "Separate graph-log diagnostic and retained failed capture",
+      "method": "The first capture uses the default sink and records zero node lines. The corrected log-only launcher uses the unchanged stage source, one warmup and one loop per side.",
+      "headers": [
+        "Capture",
+        "OFF / ON node lines",
+        "OFF / ON fused UNARY + MUL",
+        "Encoder executions per side",
+        "Used for timing"
+      ],
+      "rows": [
+        [
+          "Initial failed capture",
+          "0 / not run",
+          "No usable trace",
+          "2 / not run",
+          "No"
+        ],
+        [
+          "Corrected diagnostic",
+          "1964 / 1916",
+          "0 / 48",
+          "2",
+          "No"
+        ]
+      ],
+      "notes": [
+        "The 48 observed fusions span two normal encoder executions, not 48 per graph. No fusion counter, FUSION_DEBUG or retained intermediates are used in this separate capture."
+      ]
+    }
+  ]
+}
