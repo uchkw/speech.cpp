@@ -123,6 +123,15 @@ int main(int argc, char ** argv) {
                 a.advance(i ? (7 * i) % blank : blank, i, checks);
                 b.advance(i ? (11 * i + 1) % blank : blank, i + 29, checks);
             }
+            if (synthetic) {
+                a.advance(1, 55, checks);
+                b.advance(1, 55, checks);
+                checks.expect(a.ordinary.prediction() != b.ordinary.prediction(), "prediction depends on history with the same label");
+                std::vector<float> a_logits, b_logits;
+                a.ordinary.logits(a_logits);
+                b.ordinary.logits(b_logits);
+                checks.expect(a_logits != b_logits, "joint logits depend on history with the same label and frame");
+            }
         }
         if (cpu) abort_case(prediction, joint, backend.get(), checks);
         else {
