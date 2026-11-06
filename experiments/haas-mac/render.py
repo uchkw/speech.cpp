@@ -102,9 +102,9 @@ def report_html(entry, filename, campaign, trials=()):
                      f"{v['literal_better']} / {v['literal_worse']}", f"{v['repository_better']} / {v['repository_worse']}"]
                     for label, v in changes.items()]
             reference = 'Candidate against the previous build' + (' and the explicitly specified fixed anchor' if 'cumulative' in changes else '; cumulative gain is not measured')
-            body += table(['Reference', 'Latency reduction', 'Quality texts changed', 'Latency texts changed / requests', 'Tokens/times changed', 'Segments changed',
+            body += table(['Reference', 'Median paired reduction', 'Quality texts changed', 'Latency texts changed / requests', 'Tokens/times changed', 'Segments changed',
                            'Literal better / worse', 'Repository better / worse'], rows, conditions.get('comparison_reference', reference))
-            body += '<p class="muted">Positive latency reduction is faster. A cumulative gain appears only for an explicitly specified anchor. Gains are direct paired comparisons, not added percentages. A matching CER does not mean matching transcripts.</p>'
+            body += '<p class="muted">For each input, first take each build’s median latency over rounds, then divide candidate by baseline. Subtract the median of these paired ratios from one and express it as a percentage: positive is faster. This differs from comparing the aggregate p50 values above. A cumulative gain appears only for an explicitly specified anchor. Gains are direct paired comparisons, not added percentages. A matching CER does not mean matching transcripts.</p>'
             round_rows = [[text(label), str(r['round']), str(r['count']), str(r['text_changed'])]
                           for label, values in changes.items() for r in values.get('latency_rounds', [])]
             if round_rows:
@@ -182,7 +182,7 @@ def main():
         reason = entry['reason'] if entry['measure_id'] not in trials else f"{len(trials[entry['measure_id']])} recorded variant(s). The measure is {entry['status'].replace('_', ' ')}."
         rows.append([text(entry['measure_id']), f'<a href="{text(target)}">{text(entry["title"])}</a>',
                      badge(entry['status']), '<br>'.join(gains) or '—', text(reason)])
-    body += table(['#', 'Measure', 'Verdict', 'Relative / cumulative latency reduction', 'Reason'], rows, f'{len(measures)} measures')
+    body += table(['#', 'Measure', 'Verdict', 'Relative / cumulative median paired reduction', 'Reason'], rows, f'{len(measures)} measures')
     body += '<h2>How to read these results</h2><p>' + text(campaign['aggregation']) + '</p><p>Every verdict belongs to its recorded build, model, inputs and settings. No pending entry claims a result. Changes to precision are judged with both error measures; higher precision does not guarantee lower recognition error.</p>'
     (REPORTS / 'index.html').write_text(document('Haas on Apple Silicon · Measurement ledger', body))
     print(REPORTS / 'index.html')
