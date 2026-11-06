@@ -125,8 +125,10 @@ build/fastconformer-constants-check /path/to/Haas-616M-ja-v1.0-Q4_K.gguf gpu 4
 
 The executable location follows the configured build layout; these are command
 templates, not completed runs. Do not relax exact comparison on a difference.
-Official NeMo/FLA F32 stage dumps and Windows Vulkan validation remain unavailable
-in the campaign and must not be reported as passed. M5 is unmeasured.
+The campaign has 11 official F32 frontend/encoder/joint-encoder-projection dumps
+in `reference-mac`. Official KDA/prediction and complete TDT references needed for
+this change, and Windows Vulkan validation, remain unavailable and must not be
+reported as passed. M5 is unmeasured.
 
 ## Later performance gate
 
