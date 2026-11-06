@@ -152,7 +152,7 @@ def main():
                 'SPEECH_HAAS_ENCODER_GRAPH_CACHE', 'SPEECH_HAAS_ENCODER_GRAPH_CACHE_TRACE',
                 'GGML_METAL_DW_SILU', 'SPEECH_HAAS_DEPTHWISE_PREPACK', 'GGML_METAL_RESIDUAL_NORM',
                 'GGML_METAL_HEAD_STORE', 'SPEECH_HAAS_TDT_BUFFER_REUSE', 'SPEECH_HAAS_FRONTEND_PARALLEL',
-                'SPEECH_HAAS_FRONTEND_VDSP']:
+                'SPEECH_HAAS_FRONTEND_VDSP', 'SPEECH_HAAS_AUTO_THREADS']:
         for value in ['0', '1']:
             assert compare.environment([f'{key}={value}'])[key] == value
         refused(lambda: compare.environment([f'{key}=2']), 'An invalid binary switch was accepted.', expected='0 or 1')
@@ -170,6 +170,8 @@ def main():
     assert [r['file'] for r in selected] == [f'{group}-{i}' for group in ['6-10s', '10-20s', '20-30s'] for i in [0, 4, 9]]
     assert compare.percentile([1., 4., 9.], .9) == 8.
     with tempfile.TemporaryDirectory(prefix='haas-campaign-check-') as temporary:
+        from worker_check import check as check_worker_threads
+        check_worker_threads(Path(temporary) / 'worker-threads')
         review_regressions(Path(temporary))
         from short_check import check as check_short_inputs
         check_short_inputs(Path(temporary) / 'short-prefixes')

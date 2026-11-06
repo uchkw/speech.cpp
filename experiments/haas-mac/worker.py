@@ -19,7 +19,7 @@ BINARY_EXPERIMENT_ENVIRONMENT = {'SPEECH_HAAS_CPU_REPACK', 'SPEECH_HAAS_FFN_F16'
                                  'SPEECH_HAAS_ENCODER_GRAPH_CACHE', 'SPEECH_HAAS_ENCODER_GRAPH_CACHE_TRACE',
                                  'GGML_METAL_DW_SILU', 'SPEECH_HAAS_DEPTHWISE_PREPACK', 'GGML_METAL_RESIDUAL_NORM',
                                  'GGML_METAL_HEAD_STORE', 'SPEECH_HAAS_TDT_BUFFER_REUSE', 'SPEECH_HAAS_FRONTEND_PARALLEL',
-                                 'SPEECH_HAAS_FRONTEND_VDSP'}
+                                 'SPEECH_HAAS_FRONTEND_VDSP', 'SPEECH_HAAS_AUTO_THREADS'}
 EXPERIMENT_ENVIRONMENT = BINARY_EXPERIMENT_ENVIRONMENT | {'GGML_METAL_MM_TILE_N'}
 
 
@@ -38,6 +38,16 @@ def execution_environment(recorded):
 
 def run(spec):
     child_environment = execution_environment(spec['environment'])
+    threads = spec['threads']
+    if type(threads) is not int or threads < 0:
+        raise ValueError('threads must be a nonnegative integer; use 0 to omit the CLI option.')
+    expected = spec.get('expected_threads', threads)
+    if type(expected) is not int or expected <= 0:
+        raise ValueError('expected_threads must be a positive integer when automatic threads are requested.')
+    if threads and expected != threads:
+        raise ValueError('expected_threads must equal the explicit thread count.')
+    thread_selection = {'requested_mode': 'explicit' if threads else 'auto',
+                        'requested_threads': threads, 'expected_threads': expected}
     for item in [spec['build']['speech'], spec['model']]:
         digest = hashlib.sha256()
         with Path(item['path']).open('rb') as f:
@@ -47,8 +57,10 @@ def run(spec):
             raise ValueError('The model or binary changed after the manifest was written.')
     directory = Path(spec['directory'])
     directory.mkdir(parents=True, exist_ok=False)
-    command = [spec['build']['speech']['path'], 'worker', spec['model']['path'], '--device', 'gpu',
-               '--threads', str(spec['threads']), '--no-warmup', '--decode-on-cpu']
+    command = [spec['build']['speech']['path'], 'worker', spec['model']['path'], '--device', 'gpu']
+    if threads:
+        command += ['--threads', str(threads)]
+    command += ['--no-warmup', '--decode-on-cpu']
     memory_log = directory / 'memory.log'
     messages = queue.Queue()
     with (directory / 'stderr.log').open('w') as log:
@@ -109,6 +121,10 @@ def run(spec):
             load_seconds = time.perf_counter() - start
             if ready.get('type') != 'ready' or ready.get('protocol') != 4:
                 raise RuntimeError(f'Worker did not become ready: {ready}')
+            resolved = ready.get('model', {}).get('threads')
+            if type(resolved) is not int or resolved != expected:
+                raise ValueError(f'Worker ready.model.threads is {resolved!r}; expected {expected}.')
+            thread_selection['resolved_threads'] = resolved
             warm = sorted(spec['warmup'], key=lambda r: (-r['seconds'], r['file']))
             warmed = [recognize(record, f'warm-{i}') for i, record in enumerate(warm)]
             measured = []
@@ -134,7 +150,7 @@ def run(spec):
     report = {'started_utc': started, 'phase': spec['phase'], 'round': spec['round'], 'side': spec['side'],
               'type': spec['model']['type'], 'command': command, 'environment': spec['environment'], 'build': spec['build'], 'ready': ready,
               'load_seconds': load_seconds, 'first_request': warmed[0], 'warmup_count': len(warmed),
-              'memory': memory, 'records': measured}
+              'memory': memory, 'records': measured, 'thread_selection': thread_selection}
     report['worker_source_sha256'] = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
     (directory / 'result.json').write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n')
     print(f"{spec['model']['type']} {spec['side']} {spec['phase']} round {spec['round']}: {len(measured)} requests", flush=True)

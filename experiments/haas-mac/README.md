@@ -28,6 +28,10 @@ and a separate 650-input quality run with timestamps. Every latency input is war
 Four threads are an explicit tuned campaign setting, not the runtime default. Unspecified threads (`threads=0`)
 use the machine's performance cores, which are 16 on this M2 Ultra. These code comparisons use the tuned anchor;
 measure 021 compares automatic threads with four separately, without counting the preliminary thread tuning again.
+The worker adapter takes `threads=0` only with a positive `expected_threads` in its run specification; this omits
+the CLI `--threads` option. It checks `ready.model.threads` before any audio and records the requested mode,
+requested count, expected count and resolved count in `thread_selection`. Explicit counts must resolve unchanged.
+This selection does not change the request timer or the campaign's default of four threads.
 Load to ready and the first request are recorded separately. `--smoke` uses three inputs and is only a harness check;
 it cannot support acceptance. A fixed anchor is rerun when it differs from the immediate baseline. Gains are direct
 paired measurements, not compounded percentages. The stage tool uses three PCM-derived `audio.npy` inputs with
