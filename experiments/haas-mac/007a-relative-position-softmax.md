@@ -10,8 +10,11 @@ It establishes neither numerical equivalence nor a speed-up. It is not an adopte
 - Cases first: `c0118325707483b9a7a3b7935e981e7eac01e59b`.
 - Deterministic original-kernel comparison: `15c05bd816a904b0cf001921e4ca147643ed1a41`.
 - Kernel prototype: `c17f151a0915630c95b70ce3ced39cf2b842741d`.
+- Alias cases and aligned controls: `4b448b7d` and `2925ae93`, before the alias runtime change.
+- Exact-ac alias support: `f4832b21`.
 - Parent branch: `codex/exp-haas-007a`; ggml branch: `codex/exp-haas-007a-metal`.
-- Original-kernel branch: `codex/exp-haas-007a-original-cases`, at the second test-only commit.
+- Original-kernel branch: `codex/exp-haas-007a-original-cases`, at `0cea543c`, with identical check sources and no
+  runtime changes. The original stricter prototype remains preserved by its earlier commit and parent `cbf59a9`.
 
 No earlier runtime trial is included. The adopted fork's decision table is unchanged because this is an
 unmeasured experiment. The coordinator owns publication, with ggml published before its parent gitlink.
@@ -32,7 +35,16 @@ non-F32 operands, broadcast or nonsquare shapes, batches, a view as the first ad
 stride or offset, a mask, sinks and an in-place softmax. The generic matcher also rejects a protected ADD output
 or a second consumer. Graph grouping and dispatch use the same environment and device gate. The raw allocation
 dependency pass always skips this pattern, so it adds no input lifetimes; the full matcher rejects a softmax
-output that overlaps either external addend after allocation. No Vulkan or matrix-product kernel is changed.
+output that partially overlaps `ac` or overlaps `bd` after allocation. Exact `ac` reuse is permitted only when
+address, type, shape and all strides are identical. No Vulkan or matrix-product kernel is changed.
+
+The graph allocator can reuse `ac` for ADD and then for softmax, since both operations permit in-place allocation.
+The fused kernel supports that exact reuse: the maximum pass reads the complete row before `simd_max`, and any
+additional SIMD groups synchronize through the existing threadgroup barriers. The exponential/sum pass assigns
+each scalar or float4 element to one lane; that lane reads its input before replacing the same element, and no
+other lane needs it. Normalization reads only the destination. Distinct rows occupy disjoint intervals because
+`ac` and the output share the same contiguous layout. This argument does not permit shifted addresses or `bd`
+aliasing, where a write could affect another row's pending input.
 
 The fused load adds two F32 values under local `#pragma METAL fp math_mode(safe)` and `contract(off)` before
 the existing scale expression. The rest of the softmax retains its compiler mode, exponent, scalar or float4
@@ -48,17 +60,22 @@ claim: the existing fast-math path does not define their general behavior.
 
 ## Prepared checks
 
-`test-backend-ops -o ADD_SOFT_MAX_RELPOS` contains 28 cases. Fourteen use `T=1,31,32,33,171,172,375`, eight heads
+`test-backend-ops -o ADD_SOFT_MAX_RELPOS` contains 44 cases. Fourteen use `T=1,31,32,33,171,172,375`, eight heads
 and two asymmetric input sets, including logits near positive and negative 10000. Fourteen controls cover
 contiguous or broadcast `bd`, another row stride, padded or viewed `ac`, exchanged operands, rectangular scores,
 F16 addition followed by an F32 cast, masks, sinks, in-place softmax, output marking, a second consumer and a
 following consumer. The following consumer remains eligible; the other controls must record no new fusion.
+Fourteen additional cases place the output exactly over `ac`, at all seven sizes with both input ranges. Two
+negative controls place it sixteen bytes into `ac` or over the start of `bd`; both retain valid float4 output
+alignment and require zero new fusions. These allocation aliases are installed by the direct Metal check.
 
 The normal whole-graph check compares with the CPU using the existing softmax NMSE bound of `1e-6`. The M2 Ultra
-direct check runs two deterministic generations, env 0 then 1, for 112 executions. It poisons every owned computed
-tensor with NaN before each execution, checks finite final and protected outputs, requires byte equality between
-the two paths, and checks the exact `ADD+SOFT_MAX` count. It uses independent tensor allocations; it does not yet
-exercise allocator reuse. The model comparison must separately confirm that the normal allocator actually permits
+direct check runs two deterministic generations, env 0 then 1, for 176 executions. In separate allocations it
+poisons every owned computed tensor with NaN before each execution. For aliased allocations it restores the same
+input bytes after poisoning, so the input portion of the output cannot remain poisoned; it additionally requires
+the final output to differ from the restored pre-execution bytes. The two roles are distinct. Every case checks
+finite final and protected outputs, byte equality between paths and the exact `ADD+SOFT_MAX` count. The model
+comparison must separately confirm that the normal allocator actually permits
 the fusion, with 24 new fusions expected for an eligible 24-layer Haas encoder.
 
 The same test-only sources are retained with the original ggml kernel. After build authorization, run the original
