@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>007b: Tiled content attention</title>
+<style>body{font:17px/1.6 system-ui;max-width:850px;margin:3rem auto;padding:0 1.5rem;color:#182435}h1{line-height:1.2}code{background:#eef2f5;padding:.1em .3em}li{margin:.5rem 0}.status{padding:1rem;background:#fff4d6;border-left:5px solid #b87a00}</style>
+<h1>007b: Tile content attention with a relative-score mask</h1>
+<p class="status">Source prepared only. No build, inference, accuracy result or speed measurement has been performed.</p>
+<p>This independent Haas-ja-v1.0 experiment uses existing ggml FA_EXT for tiled QK, online softmax and PV on Metal.
+The dense positional product remains. It is not fully fused relative-position attention and attention memory remains quadratic.</p>
+<ul><li><code>SPEECH_HAAS_REL_FA=1</code> enables 24 unbiased layers, eight heads of 128 and 1–384 encoder frames (30 seconds is 375).
+An unsupported condition raises an error.</li><li>The F16 dynamic mask preserves head/query-specific relative indices,
+with two explicit F32 K/V layout copies whose cost is included. It changes mask precision and scale rounding. FA also changes K/V/probability staging and reduction order.</li>
+<li>Original, candidate OFF and candidate ON must pass symmetric raw-output and recognition comparisons.
+Official CPU F32 90 dB and Metal 25 dB thresholds remain unchanged.</li>
+<li>650-input quality comparisons and stable complete-request gains are required before adoption.</li></ul>
+<p>Baseline: <code>114c514</code>. Unchanged ggml: <code>e1a9ac12</code>.</p>
+<p><a href="../../experiments/haas-mac/007b-notes.md">Scope, rounding changes and validation gates</a> ·
+<a href="007b-tile-content-attention-with-relative-score-mask.json">Machine-readable status</a></p></html>

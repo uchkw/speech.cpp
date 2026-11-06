@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "measure_id": "007b",
+  "title": "Tile content attention with a relative-score mask",
+  "status": "source-prepared",
+  "reason": "Unbuilt and unmeasured independent graph prototype. QK, online softmax and PV use FA_EXT; the dense positional prepass remains. Numerical changes require the unchanged official checks and full recognition comparisons.",
+  "baseline_commit": "114c514430c8aa1455c077819f8e72e674a48b75",
+  "ggml_commit": "e1a9ac12edbb57402618fd6936598603f5ee6266",
+  "checks": ["Source inspection only; build, numerical checks and timings await a compute lease."]
+}

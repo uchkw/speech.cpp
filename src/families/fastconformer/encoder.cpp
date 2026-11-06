@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
+#include <cstring>
 #include <limits>
 #include <map>
 
@@ -73,6 +75,24 @@ Encoder::Encoder(const ModelFile & m, ggml_backend_t backend)
     if (local_) {
         context_ = (int) m.u32("fastconformer.encoder.attention_context");
         global_tokens_ = (int) m.u32("fastconformer.encoder.global_tokens");
+    }
+    const char * tiled = std::getenv("SPEECH_HAAS_REL_FA");
+    if (tiled && std::strcmp(tiled, "0") != 0 && std::strcmp(tiled, "1") != 0) {
+        throw Error(Fault::InvalidArgument, "SPEECH_HAAS_REL_FA must be 0 or 1", "SPEECH_HAAS_REL_FA");
+    }
+    tiled_attention_ = tiled && std::strcmp(tiled, "1") == 0;
+    if (tiled_attention_) {
+        if (local_ || d_model_ != 1024 || heads_ != 8 || layers_ != 24 || use_bias_ ||
+            m.str("general.basename") != "Haas" || !m.has("general.finetune") || m.str("general.finetune") != "ja" ||
+            !m.has("general.version") || m.str("general.version") != "v1.0" ||
+            m.str("fastconformer.decoder.prediction") != "kda") {
+            throw Error(Fault::InvalidArgument, "SPEECH_HAAS_REL_FA=1 requires Haas-ja-v1.0; set it to 0 for this model",
+                        "SPEECH_HAAS_REL_FA");
+        }
+        const auto reg = ggml_backend_dev_backend_reg(ggml_backend_get_device(backend));
+        if (std::strcmp(ggml_backend_reg_name(reg), "MTL") != 0) {
+            throw Error(Fault::Device, "SPEECH_HAAS_REL_FA=1 requires Metal; set it to 0 for this device");
+        }
     }
     // Global attention can reuse the same central positions across input lengths. Bound the retained projections
     // to 32 MiB; longer inputs compute their positions in the utterance graph. Local attention has a fixed span.
@@ -203,9 +223,22 @@ ggml_tensor * Encoder::attention(Graph & g, ggml_tensor * x, const AttentionInpu
     ggml_tensor * qu = heads(ggml_add(ctx, q, m_.tensor(name + "_pos_bias_u")), t);
     ggml_tensor * qv = heads(ggml_add(ctx, q, m_.tensor(name + "_pos_bias_v")), t);
 
-    ggml_tensor * ac = mul_mat(ctx, heads(k, t), qu);
     ggml_tensor * bd = mul_mat(ctx, p, qv);
     bd = ggml_view_3d(ctx, bd, t, t, heads_, (size_t) (2 * t - 2) * sizeof(float), bd->nb[2], (size_t) (t - 1) * sizeof(float));
+    if (tiled_attention_) {
+        // The mask is query- and head-dependent. FA_EXT scales QK before adding it, while the original scales AC + BD.
+        // The dense positional product remains; only content attention, its softmax and the value product are tiled.
+        ggml_tensor * mask = ggml_cast(ctx, ggml_scale(ctx, ggml_cont(ctx, bd), 1.0f / std::sqrt((float) dk)), GGML_TYPE_F16);
+        ggml_tensor * out = ggml_flash_attn_ext(ctx, qu, ggml_cont(ctx, heads(k, t)), ggml_cont(ctx, heads(v, t)), mask,
+                                               1.0f / std::sqrt((float) dk), 0.0f, 0.0f);
+        ggml_prec_set_acc(out, GGML_PREC_F32);
+        if (!ggml_backend_supports_op(backend_, out)) {
+            throw Error(Fault::Device, "Metal cannot run the requested relative-score flash attention; set SPEECH_HAAS_REL_FA to 0");
+        }
+        out = ggml_reshape_2d(ctx, out, d_model_, t);
+        return ggml_add(ctx, x, linear(ctx, out, name + "_out", use_bias_));
+    }
+    ggml_tensor * ac = mul_mat(ctx, heads(k, t), qu);
     ggml_tensor * scores = ggml_add(ctx, ac, bd);
     ggml_tensor * weights = ggml_soft_max_ext(ctx, scores, nullptr, 1.0f / std::sqrt((float) dk), 0.0f);
 
@@ -313,6 +346,9 @@ ggml_tensor * Encoder::convolution(Graph & g, ggml_tensor * x, const std::string
 }
 
 ggml_tensor * Encoder::build(Graph & g, const std::vector<float> & features, int64_t frames, EncoderStages * stages) const {
+    if (tiled_attention_ && (frames < 1 || subsampled_frames(frames) > 384)) {
+        throw Error(Fault::OutOfRange, "SPEECH_HAAS_REL_FA=1 requires 1 to 384 subsampled frames; set it to 0 for this input", "audio");
+    }
     ggml_context * ctx = g.ctx();
     ggml_tensor * x = subsample(g, features, frames);
     if (stages) stages->subsampled = x;

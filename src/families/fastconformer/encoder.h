@@ -72,6 +72,8 @@ private:
     bool use_bias_;
     /** Whether the attention is local; the frames each frame sees on either side and the global tokens if it is. */
     bool local_;
+    /** Whether the Haas experiment tiles content attention with a half-precision relative-score mask. */
+    bool tiled_attention_ = false;
     int context_ = 0, global_tokens_ = 0;
     int64_t cached_span_ = 0;
 };
