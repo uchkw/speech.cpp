@@ -1,0 +1,647 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>005-production · Pack encoder QKV in the production Metal path</title><style>
+:root{color-scheme:light;font:16px/1.55 system-ui,sans-serif;color:#172738;background:#f3f6f9}
+*{box-sizing:border-box}body{margin:0}main{max-width:1180px;margin:auto;padding:34px 22px 64px}
+a{color:#075ca8;text-underline-offset:3px}a:focus-visible,summary:focus-visible{outline:3px solid #c36b00;outline-offset:4px}
+h1{font-size:clamp(1.8rem,4vw,2.7rem);line-height:1.18;margin:12px 0 18px}h2{font-size:1.35rem;margin:30px 0 12px}
+h3{font-size:1.05rem;margin:22px 0 10px}p{max-width:90ch}small,.muted{color:#506174}.eyebrow{font-size:.8rem;letter-spacing:.12em;text-transform:uppercase;color:#506174}
+.panel{background:white;border:1px solid #d5dfe8;border-radius:10px;padding:20px;margin:18px 0}.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}th,td{text-align:left;vertical-align:top;padding:11px 10px;border-bottom:1px solid #dce4eb}th{font-size:.85rem;background:#f2f6fa}td.num,th.num{text-align:right;white-space:nowrap}
+caption{text-align:left;font-weight:600;padding:8px 0}code{font: .87em ui-monospace,monospace;overflow-wrap:anywhere}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.83rem}
+.status{display:inline-block;border:1px solid;border-radius:5px;padding:2px 8px;font-size:.8rem;font-weight:650;text-transform:uppercase}
+.pending,.not_applicable{color:#405269;background:#edf1f5}.in_progress{color:#174c7b;background:#e8f2ff}.accepted,.validated_mac{color:#16572f;background:#e7f5eb}.rejected{color:#8a2631;background:#fff0f0}.conditional,.pending_official_reference{color:#754700;background:#fff4d8}.blocked{color:#663c83;background:#f4eafa}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}.metric strong{display:block;font-size:1.55rem;line-height:1.2}.metric span{font-size:.85rem;color:#506174}
+details{margin:14px 0}summary{cursor:pointer;font-weight:600}.warning{border-left:4px solid #bc7600;padding-left:15px}svg{max-width:100%;height:auto;display:block}footer{margin-top:36px;font-size:.85rem;color:#506174}
+@media(max-width:600px){main{padding:22px 12px}.panel{padding:14px}th,td{padding:9px 7px}h1{overflow-wrap:anywhere}}
+</style></head><body><main><nav><a href="index.html">← All measures</a></nav><p class="eyebrow">Haas on Apple Silicon</p><h1>005-production · Pack encoder QKV in the production Metal path</h1><span class="status conditional">conditional</span><p>Production implementation measured, adoption pending: Q4_K and Q8_0 show median paired reductions of 1.378% and 2.398% against a fresh baseline, with all 650 quality outputs and 90 latency texts per type unchanged. Q4_K regresses in the 20–30-second stratum and aggregate p90; Q8_0 has a slower second round. Permanent weight copies increase memory. An independent latency repeat is required before adoption; no implementation is merged.</p><p class="warning">This is the switch-free production trial, separate from the historical switchable prototype on measure 005. Its full, artificial-prefix and stage observations remain separate. No latency-repeat result is included at this checkpoint.</p><p><a href="005-production-pack-encoder-qkv-on-metal.json">Machine-readable report JSON</a> · <a href="https://github.com/uchkw/speech.cpp/issues/1">Tracking issue</a></p><p><strong>Measured scope:</strong> 30 inputs × 3 latency rounds per side; 650 quality inputs per side. CPU decoding with 4 threads.</p><p class="muted">Four CPU threads are an explicit tuned campaign setting, not the runtime default. Unspecified threads (threads=0) use performance cores: 16 on this M2 Ultra. Code gains compare the tuned anchor and do not include the preliminary thread-tuning gain; measure 021 evaluates automatic versus four threads separately.</p><section class="panel"><h2>Q4_K</h2><svg viewBox="0 0 520 159" role="img" aria-label="Median warm request latency in milliseconds, lower is faster"><title>Median warm request latency, lower is faster</title><text x="0" y="39" fill="#172738" font-size="13">baseline</text><rect x="110" y="22" width="300.0" height="24" rx="3" fill="#637d94"/><text x="420.0" y="39" fill="#172738" font-size="13">79.16 ms</text><text x="0" y="77" fill="#172738" font-size="13">candidate</text><rect x="110" y="60" width="292.6" height="24" rx="3" fill="#1765a5"/><text x="412.6" y="77" fill="#172738" font-size="13">77.20 ms</text><text x="0" y="115" fill="#172738" font-size="13">anchor</text><rect x="110" y="98" width="298.5" height="24" rx="3" fill="#637d94"/><text x="418.5" y="115" fill="#172738" font-size="13">78.77 ms</text></svg><div class="scroll" tabindex="0" role="region" aria-label="Warm latency and recognition error"><table><caption>Warm latency and recognition error</caption><thead><tr><th scope="col">Build</th><th scope="col">p50 ms</th><th scope="col">p90 ms</th><th scope="col">p99 ms</th><th scope="col">Literal CER</th><th scope="col">Repository CER</th><th scope="col">Peak GiB</th></tr></thead><tbody><tr><td>baseline</td><td>79.16</td><td>121.78</td><td>145.44</td><td>7.4668%</td><td>4.6557%</td><td>0.449</td></tr><tr><td>candidate</td><td>77.20</td><td>126.04</td><td>142.47</td><td>7.4668%</td><td>4.6557%</td><td>0.485</td></tr><tr><td>anchor</td><td>78.77</td><td>122.78</td><td>146.07</td><td>7.4668%</td><td>4.6557%</td><td>0.445</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="Relative: production build 71c4fe9 against fresh baseline 1dbc333 with matching compile/link flags. Cumulative: directly measured fixed anchor f976ebd, an independent reference with known literal toolchain-flag differences."><table><caption>Relative: production build 71c4fe9 against fresh baseline 1dbc333 with matching compile/link flags. Cumulative: directly measured fixed anchor f976ebd, an independent reference with known literal toolchain-flag differences.</caption><thead><tr><th scope="col">Reference</th><th scope="col">Median paired reduction</th><th scope="col">Quality texts changed</th><th scope="col">Latency texts changed / requests</th><th scope="col">Tokens/times changed</th><th scope="col">Segments changed</th><th scope="col">Literal better / worse</th><th scope="col">Repository better / worse</th></tr></thead><tbody><tr><td>relative</td><td>1.38%</td><td>0</td><td>0 / 90</td><td>0</td><td>0</td><td>0 / 0</td><td>0 / 0</td></tr><tr><td>cumulative</td><td>1.14%</td><td>0</td><td>0 / 90</td><td>0</td><td>0</td><td>0 / 0</td><td>0 / 0</td></tr></tbody></table></div><p class="muted">For each input, first take each build’s median latency over rounds, then divide candidate by baseline. Subtract the median of these paired ratios from one and express it as a percentage: positive is faster. This differs from comparing the aggregate p50 values above. A cumulative gain appears only for an explicitly specified anchor. Gains are direct paired comparisons, not added percentages. A matching CER does not mean matching transcripts.</p><details><summary>Text equality for every latency round (timestamps disabled)</summary><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Reference</th><th scope="col">Round</th><th scope="col">Requests compared</th><th scope="col">Texts changed</th></tr></thead><tbody><tr><td>relative</td><td>0</td><td>30</td><td>0</td></tr><tr><td>relative</td><td>1</td><td>30</td><td>0</td></tr><tr><td>relative</td><td>2</td><td>30</td><td>0</td></tr><tr><td>cumulative</td><td>0</td><td>30</td><td>0</td></tr><tr><td>cumulative</td><td>1</td><td>30</td><td>0</td></tr><tr><td>cumulative</td><td>2</td><td>30</td><td>0</td></tr></tbody></table></div></details><div class="scroll" tabindex="0" role="region" aria-label="Latency by input length"><table><caption>Latency by input length</caption><thead><tr><th scope="col">Build</th><th scope="col">Audio length</th><th scope="col">p50 ms</th><th scope="col">p90 ms</th><th scope="col">p99 ms</th><th scope="col">Inputs</th></tr></thead><tbody><tr><td>baseline</td><td>10-20s</td><td>79.16</td><td>98.68</td><td>106.37</td><td>10</td></tr><tr><td>baseline</td><td>20-30s</td><td>118.58</td><td>141.20</td><td>146.83</td><td>10</td></tr><tr><td>baseline</td><td>6-10s</td><td>57.15</td><td>61.60</td><td>61.68</td><td>10</td></tr><tr><td>candidate</td><td>10-20s</td><td>77.20</td><td>96.37</td><td>106.97</td><td>10</td></tr><tr><td>candidate</td><td>20-30s</td><td>121.81</td><td>138.55</td><td>143.76</td><td>10</td></tr><tr><td>candidate</td><td>6-10s</td><td>56.88</td><td>59.48</td><td>60.90</td><td>10</td></tr><tr><td>anchor</td><td>10-20s</td><td>78.77</td><td>97.67</td><td>105.54</td><td>10</td></tr><tr><td>anchor</td><td>20-30s</td><td>119.11</td><td>143.80</td><td>146.82</td><td>10</td></tr><tr><td>anchor</td><td>6-10s</td><td>57.77</td><td>61.05</td><td>61.85</td><td>10</td></tr></tbody></table></div><details><summary>Load, first request and stage timings</summary><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Build</th><th scope="col">Load to ready ms</th><th scope="col">First request ms</th><th scope="col">RTFx</th><th scope="col">Stage evidence</th></tr></thead><tbody><tr><td>baseline</td><td>139.32</td><td>163.25</td><td>175.29</td><td>measured</td></tr><tr><td>candidate</td><td>143.19</td><td>160.80</td><td>176.60</td><td>measured</td></tr><tr><td>anchor</td><td>145.43</td><td>167.92</td><td>175.38</td><td>measured</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="baseline: 1321491767934942997"><table><caption>baseline: 1321491767934942997</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>32.37</td></tr><tr><td>frontend</td><td>2.00</td></tr><tr><td>encoder build</td><td>0.28</td></tr><tr><td>encoder compute</td><td>26.33</td></tr><tr><td>encoder read</td><td>0.01</td></tr><tr><td>decoder</td><td>3.66</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="baseline: 2330237947966115273"><table><caption>baseline: 2330237947966115273</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>46.83</td></tr><tr><td>frontend</td><td>3.64</td></tr><tr><td>encoder build</td><td>1.38</td></tr><tr><td>encoder compute</td><td>35.97</td></tr><tr><td>encoder read</td><td>0.02</td></tr><tr><td>decoder</td><td>5.64</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="baseline: 8675814957598723431"><table><caption>baseline: 8675814957598723431</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>68.95</td></tr><tr><td>frontend</td><td>6.08</td></tr><tr><td>encoder build</td><td>2.20</td></tr><tr><td>encoder compute</td><td>49.75</td></tr><tr><td>encoder read</td><td>0.03</td></tr><tr><td>decoder</td><td>11.39</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="candidate: 1321491767934942997"><table><caption>candidate: 1321491767934942997</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>31.64</td></tr><tr><td>frontend</td><td>2.19</td></tr><tr><td>encoder build</td><td>0.30</td></tr><tr><td>encoder compute</td><td>24.98</td></tr><tr><td>encoder read</td><td>0.01</td></tr><tr><td>decoder</td><td>4.15</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="candidate: 2330237947966115273"><table><caption>candidate: 2330237947966115273</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>45.35</td></tr><tr><td>frontend</td><td>3.54</td></tr><tr><td>encoder build</td><td>1.43</td></tr><tr><td>encoder compute</td><td>34.27</td></tr><tr><td>encoder read</td><td>0.02</td></tr><tr><td>decoder</td><td>6.01</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="candidate: 8675814957598723431"><table><caption>candidate: 8675814957598723431</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>69.05</td></tr><tr><td>frontend</td><td>6.28</td></tr><tr><td>encoder build</td><td>2.36</td></tr><tr><td>encoder compute</td><td>48.22</td></tr><tr><td>encoder read</td><td>0.03</td></tr><tr><td>decoder</td><td>12.16</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="anchor: 1321491767934942997"><table><caption>anchor: 1321491767934942997</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>32.34</td></tr><tr><td>frontend</td><td>2.04</td></tr><tr><td>encoder build</td><td>0.28</td></tr><tr><td>encoder compute</td><td>26.38</td></tr><tr><td>encoder read</td><td>0.01</td></tr><tr><td>decoder</td><td>3.63</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="anchor: 2330237947966115273"><table><caption>anchor: 2330237947966115273</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>47.88</td></tr><tr><td>frontend</td><td>3.91</td></tr><tr><td>encoder build</td><td>1.45</td></tr><tr><td>encoder compute</td><td>35.88</td></tr><tr><td>encoder read</td><td>0.01</td></tr><tr><td>decoder</td><td>6.57</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="anchor: 8675814957598723431"><table><caption>anchor: 8675814957598723431</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>71.36</td></tr><tr><td>frontend</td><td>6.36</td></tr><tr><td>encoder build</td><td>2.46</td></tr><tr><td>encoder compute</td><td>49.48</td></tr><tr><td>encoder read</td><td>0.03</td></tr><tr><td>decoder</td><td>13.00</td></tr></tbody></table></div></details></section><section class="panel"><h2>Q8_0</h2><svg viewBox="0 0 520 159" role="img" aria-label="Median warm request latency in milliseconds, lower is faster"><title>Median warm request latency, lower is faster</title><text x="0" y="39" fill="#172738" font-size="13">baseline</text><rect x="110" y="22" width="297.3" height="24" rx="3" fill="#637d94"/><text x="417.3" y="39" fill="#172738" font-size="13">80.85 ms</text><text x="0" y="77" fill="#172738" font-size="13">candidate</text><rect x="110" y="60" width="287.6" height="24" rx="3" fill="#1765a5"/><text x="407.6" y="77" fill="#172738" font-size="13">78.20 ms</text><text x="0" y="115" fill="#172738" font-size="13">anchor</text><rect x="110" y="98" width="300.0" height="24" rx="3" fill="#637d94"/><text x="420.0" y="115" fill="#172738" font-size="13">81.58 ms</text></svg><div class="scroll" tabindex="0" role="region" aria-label="Warm latency and recognition error"><table><caption>Warm latency and recognition error</caption><thead><tr><th scope="col">Build</th><th scope="col">p50 ms</th><th scope="col">p90 ms</th><th scope="col">p99 ms</th><th scope="col">Literal CER</th><th scope="col">Repository CER</th><th scope="col">Peak GiB</th></tr></thead><tbody><tr><td>baseline</td><td>80.85</td><td>128.67</td><td>149.47</td><td>7.5097%</td><td>4.5761%</td><td>0.735</td></tr><tr><td>candidate</td><td>78.20</td><td>126.93</td><td>148.75</td><td>7.5097%</td><td>4.5761%</td><td>0.808</td></tr><tr><td>anchor</td><td>81.58</td><td>127.09</td><td>149.03</td><td>7.5097%</td><td>4.5761%</td><td>0.732</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="Relative: production build 71c4fe9 against fresh baseline 1dbc333 with matching compile/link flags. Cumulative: directly measured fixed anchor f976ebd, an independent reference with known literal toolchain-flag differences."><table><caption>Relative: production build 71c4fe9 against fresh baseline 1dbc333 with matching compile/link flags. Cumulative: directly measured fixed anchor f976ebd, an independent reference with known literal toolchain-flag differences.</caption><thead><tr><th scope="col">Reference</th><th scope="col">Median paired reduction</th><th scope="col">Quality texts changed</th><th scope="col">Latency texts changed / requests</th><th scope="col">Tokens/times changed</th><th scope="col">Segments changed</th><th scope="col">Literal better / worse</th><th scope="col">Repository better / worse</th></tr></thead><tbody><tr><td>relative</td><td>2.40%</td><td>0</td><td>0 / 90</td><td>0</td><td>0</td><td>0 / 0</td><td>0 / 0</td></tr><tr><td>cumulative</td><td>2.17%</td><td>0</td><td>0 / 90</td><td>0</td><td>0</td><td>0 / 0</td><td>0 / 0</td></tr></tbody></table></div><p class="muted">For each input, first take each build’s median latency over rounds, then divide candidate by baseline. Subtract the median of these paired ratios from one and express it as a percentage: positive is faster. This differs from comparing the aggregate p50 values above. A cumulative gain appears only for an explicitly specified anchor. Gains are direct paired comparisons, not added percentages. A matching CER does not mean matching transcripts.</p><details><summary>Text equality for every latency round (timestamps disabled)</summary><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Reference</th><th scope="col">Round</th><th scope="col">Requests compared</th><th scope="col">Texts changed</th></tr></thead><tbody><tr><td>relative</td><td>0</td><td>30</td><td>0</td></tr><tr><td>relative</td><td>1</td><td>30</td><td>0</td></tr><tr><td>relative</td><td>2</td><td>30</td><td>0</td></tr><tr><td>cumulative</td><td>0</td><td>30</td><td>0</td></tr><tr><td>cumulative</td><td>1</td><td>30</td><td>0</td></tr><tr><td>cumulative</td><td>2</td><td>30</td><td>0</td></tr></tbody></table></div></details><div class="scroll" tabindex="0" role="region" aria-label="Latency by input length"><table><caption>Latency by input length</caption><thead><tr><th scope="col">Build</th><th scope="col">Audio length</th><th scope="col">p50 ms</th><th scope="col">p90 ms</th><th scope="col">p99 ms</th><th scope="col">Inputs</th></tr></thead><tbody><tr><td>baseline</td><td>10-20s</td><td>80.85</td><td>101.04</td><td>109.39</td><td>10</td></tr><tr><td>baseline</td><td>20-30s</td><td>124.68</td><td>143.92</td><td>151.28</td><td>10</td></tr><tr><td>baseline</td><td>6-10s</td><td>55.44</td><td>59.94</td><td>61.26</td><td>10</td></tr><tr><td>candidate</td><td>10-20s</td><td>78.20</td><td>96.07</td><td>106.11</td><td>10</td></tr><tr><td>candidate</td><td>20-30s</td><td>122.07</td><td>146.06</td><td>149.63</td><td>10</td></tr><tr><td>candidate</td><td>6-10s</td><td>55.36</td><td>58.38</td><td>58.65</td><td>10</td></tr><tr><td>anchor</td><td>10-20s</td><td>81.58</td><td>100.85</td><td>107.23</td><td>10</td></tr><tr><td>anchor</td><td>20-30s</td><td>123.23</td><td>145.14</td><td>150.30</td><td>10</td></tr><tr><td>anchor</td><td>6-10s</td><td>56.46</td><td>60.29</td><td>61.59</td><td>10</td></tr></tbody></table></div><details><summary>Load, first request and stage timings</summary><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Build</th><th scope="col">Load to ready ms</th><th scope="col">First request ms</th><th scope="col">RTFx</th><th scope="col">Stage evidence</th></tr></thead><tbody><tr><td>baseline</td><td>193.25</td><td>166.72</td><td>172.66</td><td>measured</td></tr><tr><td>candidate</td><td>196.98</td><td>169.47</td><td>176.13</td><td>measured</td></tr><tr><td>anchor</td><td>193.68</td><td>167.13</td><td>172.82</td><td>measured</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="baseline: 1321491767934942997"><table><caption>baseline: 1321491767934942997</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>28.54</td></tr><tr><td>frontend</td><td>1.98</td></tr><tr><td>encoder build</td><td>0.28</td></tr><tr><td>encoder compute</td><td>23.90</td></tr><tr><td>encoder read</td><td>0.01</td></tr><tr><td>decoder</td><td>2.36</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="baseline: 2330237947966115273"><table><caption>baseline: 2330237947966115273</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>41.81</td></tr><tr><td>frontend</td><td>3.60</td></tr><tr><td>encoder build</td><td>1.38</td></tr><tr><td>encoder compute</td><td>32.60</td></tr><tr><td>encoder read</td><td>0.04</td></tr><tr><td>decoder</td><td>4.38</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="baseline: 8675814957598723431"><table><caption>baseline: 8675814957598723431</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>62.27</td></tr><tr><td>frontend</td><td>6.06</td></tr><tr><td>encoder build</td><td>2.12</td></tr><tr><td>encoder compute</td><td>45.17</td></tr><tr><td>encoder read</td><td>0.06</td></tr><tr><td>decoder</td><td>8.88</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="candidate: 1321491767934942997"><table><caption>candidate: 1321491767934942997</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>27.47</td></tr><tr><td>frontend</td><td>1.98</td></tr><tr><td>encoder build</td><td>0.27</td></tr><tr><td>encoder compute</td><td>22.65</td></tr><tr><td>encoder read</td><td>0.01</td></tr><tr><td>decoder</td><td>2.55</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="candidate: 2330237947966115273"><table><caption>candidate: 2330237947966115273</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>40.27</td></tr><tr><td>frontend</td><td>3.59</td></tr><tr><td>encoder build</td><td>1.36</td></tr><tr><td>encoder compute</td><td>31.10</td></tr><tr><td>encoder read</td><td>0.04</td></tr><tr><td>decoder</td><td>4.20</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="candidate: 8675814957598723431"><table><caption>candidate: 8675814957598723431</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>60.68</td></tr><tr><td>frontend</td><td>6.04</td></tr><tr><td>encoder build</td><td>2.05</td></tr><tr><td>encoder compute</td><td>43.79</td></tr><tr><td>encoder read</td><td>0.06</td></tr><tr><td>decoder</td><td>8.58</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="anchor: 1321491767934942997"><table><caption>anchor: 1321491767934942997</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>28.78</td></tr><tr><td>frontend</td><td>1.98</td></tr><tr><td>encoder build</td><td>0.27</td></tr><tr><td>encoder compute</td><td>24.01</td></tr><tr><td>encoder read</td><td>0.04</td></tr><tr><td>decoder</td><td>2.48</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="anchor: 2330237947966115273"><table><caption>anchor: 2330237947966115273</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>41.91</td></tr><tr><td>frontend</td><td>3.59</td></tr><tr><td>encoder build</td><td>1.36</td></tr><tr><td>encoder compute</td><td>32.60</td></tr><tr><td>encoder read</td><td>0.06</td></tr><tr><td>decoder</td><td>4.30</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="anchor: 8675814957598723431"><table><caption>anchor: 8675814957598723431</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>62.19</td></tr><tr><td>frontend</td><td>6.04</td></tr><tr><td>encoder build</td><td>2.10</td></tr><tr><td>encoder compute</td><td>45.23</td></tr><tr><td>encoder read</td><td>0.07</td></tr><tr><td>decoder</td><td>8.62</td></tr></tbody></table></div></details></section><h2>Primary paired gains by round</h2><p>Pair the same thirty recordings within each round. Positive reduction means faster; these ratios differ from the primary median ratio across per-input three-round medians.</p><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Type</th><th scope="col">Reference</th><th scope="col">Round 1</th><th scope="col">Round 2</th><th scope="col">Round 3</th><th scope="col">Faster input medians / 30</th></tr></thead><tbody><tr><td>Q4_K</td><td>baseline</td><td>1.697%</td><td>0.135%</td><td>2.487%</td><td>22 / 30</td></tr><tr><td>Q4_K</td><td>anchor</td><td>0.229%</td><td>0.841%</td><td>3.557%</td><td>22 / 30</td></tr><tr><td>Q8_0</td><td>baseline</td><td>3.685%</td><td>-2.471%</td><td>2.270%</td><td>25 / 30</td></tr><tr><td>Q8_0</td><td>anchor</td><td>3.924%</td><td>-3.319%</td><td>1.982%</td><td>24 / 30</td></tr></tbody></table></div><ul><li>Q8_0 is slower in the second round against both references. A positive three-round median is not evidence of a gain in every round.</li><li>The fixed anchor is an independent reference with known literal build-flag differences; only the fresh pair has controlled matching flags.</li></ul><h2>Primary paired gains by input duration</h2><p>Ten recordings per duration stratum, using each recording&#x27;s median over three rounds. This table is separate from differences between aggregate latency percentiles.</p><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Type</th><th scope="col">Reference</th><th scope="col">Duration</th><th scope="col">Median paired reduction</th><th scope="col">Faster / equal / slower</th></tr></thead><tbody><tr><td>Q4_K</td><td>baseline</td><td>10-20s</td><td>2.289%</td><td>9 / 0 / 1</td></tr><tr><td>Q4_K</td><td>baseline</td><td>20-30s</td><td>-0.592%</td><td>5 / 0 / 5</td></tr><tr><td>Q4_K</td><td>baseline</td><td>6-10s</td><td>0.712%</td><td>8 / 0 / 2</td></tr><tr><td>Q4_K</td><td>anchor</td><td>10-20s</td><td>1.239%</td><td>9 / 0 / 1</td></tr><tr><td>Q4_K</td><td>anchor</td><td>20-30s</td><td>-0.405%</td><td>5 / 0 / 5</td></tr><tr><td>Q4_K</td><td>anchor</td><td>6-10s</td><td>1.516%</td><td>8 / 0 / 2</td></tr><tr><td>Q8_0</td><td>baseline</td><td>10-20s</td><td>3.557%</td><td>9 / 0 / 1</td></tr><tr><td>Q8_0</td><td>baseline</td><td>20-30s</td><td>1.339%</td><td>8 / 0 / 2</td></tr><tr><td>Q8_0</td><td>baseline</td><td>6-10s</td><td>2.322%</td><td>8 / 0 / 2</td></tr><tr><td>Q8_0</td><td>anchor</td><td>10-20s</td><td>1.939%</td><td>9 / 0 / 1</td></tr><tr><td>Q8_0</td><td>anchor</td><td>20-30s</td><td>1.097%</td><td>6 / 0 / 4</td></tr><tr><td>Q8_0</td><td>anchor</td><td>6-10s</td><td>2.636%</td><td>9 / 0 / 1</td></tr></tbody></table></div><ul><li>Q4_K 20–30-second requests have a -0.592% paired reduction against the fresh baseline. Its aggregate p90 also rises from 121.78 to 126.04 ms. These are distinct observations, both retained.</li></ul><h2>Memory and startup tradeoff</h2><p>Peak is the maximum gross process footprint across latency and quality workers. Load and first request are medians across three fresh latency workers, with filesystem and Metal caches retained.</p><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Type</th><th scope="col">Retained copies MiB</th><th scope="col">Peak MiB: base / candidate</th><th scope="col">Peak delta MiB</th><th scope="col">Load ms: base / candidate</th><th scope="col">First ms: base / candidate</th></tr></thead><tbody><tr><td>Q4_K</td><td>40.5</td><td>459.626 / 497.110</td><td>37.484</td><td>139.317 / 143.190</td><td>163.249 / 160.803</td></tr><tr><td>Q8_0</td><td>76.5</td><td>752.204 / 827.158</td><td>74.953</td><td>193.249 / 196.980</td><td>166.721 / 169.474</td></tr></tbody></table></div><ul><li>The permanent copy byte counts come from the graph check. Gross process deltas include allocator and sampling differences and need not equal those counts.</li></ul><h2>Separate two- and four-second artificial prefixes</h2><p>Six prefixes from three recordings, all-input warmup in every worker and three AB/BA/AB rounds. The primary binaries, model, CPU4 setting, Python and worker source remain fixed.</p><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Type</th><th scope="col">Median paired reduction</th><th scope="col">Faster inputs</th><th scope="col">Texts changed / compared</th><th scope="col">Literal / repository CER</th></tr></thead><tbody><tr><td>Q4_K</td><td>3.708%</td><td>6 / 6</td><td>0 / 18</td><td>null / null</td></tr><tr><td>Q8_0</td><td>2.749%</td><td>6 / 6</td><td>0 / 18</td><td>null / null</td></tr></tbody></table></div><ul><li>These are truncated prefixes of three longer FLEURS recordings, not naturally completed short utterances.</li><li>The full-recording reference text does not label a prefix. Literal CER and repository CER are null and are never scored.</li><li>Exact text agreement compares two implementations; it does not establish recognition accuracy on short utterances.</li><li>Six prefixes from three recordings are a small related sample. Their p99 is not a production tail estimate.</li><li>This supplement is separate from the primary 30-input latency and 650-input quality evaluation and cannot support adoption by itself.</li></ul><h2>Prefix latency by duration and round</h2><p>Prefix strata use three per-input medians each. The separate round columns use paired times within that round, without pooling any primary request.</p><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Type</th><th scope="col">2-second paired reduction</th><th scope="col">4-second paired reduction</th><th scope="col">Round 1</th><th scope="col">Round 2</th><th scope="col">Round 3</th></tr></thead><tbody><tr><td>Q4_K</td><td>3.225%</td><td>4.219%</td><td>4.169%</td><td>3.774%</td><td>4.124%</td></tr><tr><td>Q8_0</td><td>0.932%</td><td>3.489%</td><td>3.872%</td><td>-0.739%</td><td>3.000%</td></tr></tbody></table></div><ul><li>Q8_0 prefix round 2 is slower despite a positive combined median. The six related prefixes do not establish natural-short-utterance accuracy or a stable production p99.</li></ul><h2>Prefix latency distribution</h2><p>Milliseconds across six input medians, or three medians within each duration stratum. CER is not computed for prefixes.</p><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Type</th><th scope="col">Duration</th><th scope="col">Build</th><th scope="col">p50 ms</th><th scope="col">p90 ms</th><th scope="col">p99 ms</th></tr></thead><tbody><tr><td>Q4_K</td><td>all six</td><td>baseline</td><td>35.215</td><td>40.302</td><td>40.317</td></tr><tr><td>Q4_K</td><td>2s</td><td>baseline</td><td>29.866</td><td>30.547</td><td>30.700</td></tr><tr><td>Q4_K</td><td>4s</td><td>baseline</td><td>40.284</td><td>40.312</td><td>40.318</td></tr><tr><td>Q4_K</td><td>all six</td><td>candidate</td><td>33.582</td><td>39.301</td><td>39.945</td></tr><tr><td>Q4_K</td><td>2s</td><td>candidate</td><td>28.970</td><td>29.338</td><td>29.421</td></tr><tr><td>Q4_K</td><td>4s</td><td>candidate</td><td>38.585</td><td>39.730</td><td>39.988</td></tr><tr><td>Q8_0</td><td>all six</td><td>baseline</td><td>31.307</td><td>36.310</td><td>36.406</td></tr><tr><td>Q8_0</td><td>2s</td><td>baseline</td><td>26.800</td><td>26.991</td><td>27.034</td></tr><tr><td>Q8_0</td><td>4s</td><td>baseline</td><td>36.203</td><td>36.374</td><td>36.412</td></tr><tr><td>Q8_0</td><td>all six</td><td>candidate</td><td>30.613</td><td>35.311</td><td>35.459</td></tr><tr><td>Q8_0</td><td>2s</td><td>candidate</td><td>26.550</td><td>26.939</td><td>27.026</td></tr><tr><td>Q8_0</td><td>4s</td><td>candidate</td><td>35.146</td><td>35.410</td><td>35.469</td></tr></tbody></table></div><ul></ul><h2>Source, toolchain and check boundaries</h2><p>The performance binary is fixed at the production build/check checkpoint. Supplemental correctness tools link to those preserved libraries and are not substituted into the latency run.</p><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Evidence</th><th scope="col">Coverage</th><th scope="col">Limit</th></tr></thead><tbody><tr><td>Fresh pair flags and links</td><td>74 compile + 74 link files identical after source/build path normalization</td><td>No assertion that anchor implicit/default flags are equivalent</td></tr><tr><td>Official encoder</td><td>F32 CPU16 / Metal, 11 cases each, minimum 104.4 / 56.4 dB</td><td>Separate-QKV controls; not quantized packed-path equivalence</td></tr><tr><td>Packed QKV</td><td>Q4_K and Q8_0 Metal, 1125 exact tensors per type at nine lengths</td><td>Differential against previous graph, not official quantized weights</td></tr><tr><td>Official joint.enc</td><td>0edd8e16 checker linked to 71c4fe9 libraries; F32/F16, 11 each, minimum 77.0 dB</td><td>Isolated projection input; no packed QKV or full KDA/TDT</td></tr><tr><td>Prototype continuity</td><td>Three actual recordings per type, ordinary projection and public output exact</td><td>Correctness only; prototype timing is not reused</td></tr><tr><td>Independent latency repeat</td><td>Not included at this checkpoint</td><td>Separate thirty-input follow-up; no pooling or repeated quality</td></tr></tbody></table></div><ul></ul><h2>Build identity</h2><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Build</th><th scope="col">Source commit</th><th scope="col">ggml commit</th><th scope="col">Binary SHA-256</th><th scope="col">Explicit environment</th><th scope="col">Build flags</th></tr></thead><tbody><tr><td>baseline</td><td><a href="https://github.com/uchkw/speech.cpp/commit/1dbc333010f5a544651cdef4637fc9b3ce39bf2e"><code>1dbc333010f5</code></a></td><td><code>e1a9ac12edbb57402618fd6936598603f5ee6266</code></td><td><code>9fe35d5b44ac6ff24e7c8d335105909f9389ee2e43fb8cc2f4182ca60f977f33</code></td><td><code>{}</code></td><td><code>{&quot;configure&quot;: [&quot;-DCMAKE_BUILD_TYPE=Release&quot;, &quot;-DGGML_NATIVE=ON&quot;, &quot;-DGGML_METAL=ON&quot;], &quot;build&quot;: [&quot;--target&quot;, &quot;speech-cli&quot;, &quot;fastconformer-timing&quot;, &quot;-j4&quot;]}</code></td></tr><tr><td>candidate</td><td><a href="https://github.com/uchkw/speech.cpp/commit/71c4fe9422a8337d5b75f3a6825c0bcb7e78a665"><code>71c4fe9422a8</code></a></td><td><code>e1a9ac12edbb57402618fd6936598603f5ee6266</code></td><td><code>bdcf83225ed4757e0ed25fb1edf54a2b28cc7efe86faf372fa9e036b954eccd9</code></td><td><code>{}</code></td><td><code>{&quot;configure&quot;: [&quot;-DCMAKE_BUILD_TYPE=Release&quot;, &quot;-DGGML_NATIVE=ON&quot;, &quot;-DGGML_METAL=ON&quot;], &quot;build&quot;: [&quot;--target&quot;, &quot;speech-cli&quot;, &quot;fastconformer-timing&quot;, &quot;-j4&quot;]}</code></td></tr><tr><td>anchor</td><td><a href="https://github.com/uchkw/speech.cpp/commit/f976ebd8e2fca1f15ddc2e6fc9f99e7090b0f9ea"><code>f976ebd8e2fc</code></a></td><td><code>e1a9ac12edbb57402618fd6936598603f5ee6266</code></td><td><code>d493b968e7a94e45f93054bc899c9d20802bb781a19f8dc76cfd4fa6dd91413f</code></td><td><code>{}</code></td><td><code>{&quot;configure&quot;: [&quot;-DCMAKE_BUILD_TYPE=Release&quot;, &quot;-DGGML_NATIVE=ON&quot;, &quot;-DGGML_METAL=ON&quot;], &quot;build&quot;: [&quot;--target&quot;, &quot;speech-cli&quot;, &quot;fastconformer-timing&quot;, &quot;-j4&quot;]}</code></td></tr></tbody></table></div><h2>Checks</h2><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Check</th><th scope="col">Required</th><th scope="col">Status</th><th scope="col">Evidence</th></tr></thead><tbody><tr><td>Verified fresh baseline, production binary and frozen runner</td><td>yes</td><td>passed</td><td>report-imports/005-production/check-audit.json<br>Clean source identities, retained speech/stage binaries and libraries match their hashes. All 74 common compile/link files match for the fresh pair; the independent anchor caveat remains explicit.</td></tr><tr><td>Official F32 encoder reference</td><td>yes</td><td>passed</td><td>005-production/checks.json<br>Eleven cases each: CPU16 minimum encoder-output SNR 104.4 dB at a 90 dB threshold; Metal minimum 56.4 dB at 25 dB. F32 uses the separate-QKV control path.</td></tr><tr><td>Exact packed QKV boundary comparison</td><td>yes</td><td>passed</td><td>005-production/checks.json<br>Q4_K and Q8_0 Metal each compare 1125 F32 activation tensors at nine encoded lengths: 1, 2, 31, 32, 33, 170, 171, 172 and 375. Original packed weight bytes, graph/view contracts and ordinary encoder outputs match exactly. This is a graph differential, not an official F32 model comparison.</td></tr><tr><td>Excluded precision/device graph controls</td><td>yes</td><td>passed</td><td>005-production/checks.json<br>Q4_K/Q8_0 CPU and F16 CPU/Metal retain zero packed products and zero retained weight bytes with original operands and backend support. Packed numerical comparison is not applicable to these paths.</td></tr><tr><td>Official isolated joint.enc projection on Metal</td><td>yes</td><td>passed</td><td>005-production/joint-encoder-diagnostic/summary.json<br>F32 and F16 each pass eleven cases, minimum SNR 77.0 dB against a 40 dB threshold. Checker source 0edd8e16 is separately linked to the preserved 71c4fe9 libraries; this control does not run packed QKV or KDA/TDT decoding.</td></tr><tr><td>Prototype-to-production ordinary recognition continuity</td><td>yes</td><td>passed</td><td>005-production/continuity/summary.json<br>Three actual recordings per type: ordinary Recognizer::encode including joint.enc is bit exact, and public text/token/segment outputs match the enabled prototype. These six pairs establish correctness continuity, not a performance comparison.</td></tr><tr><td>Full public output and every latency-text comparison</td><td>yes</td><td>passed</td><td>005-production/full/summary.json<br>For each Q4_K/Q8_0 type, 650 quality outputs and 90 timestamp-disabled latency texts match both the fresh baseline and fixed anchor. Literal and repository micro CER are unchanged. No round changes its text.</td></tr><tr><td>Separate six-prefix text comparison</td><td>yes</td><td>passed</td><td>005-production/short/summary.json<br>All 18 latency texts per type match the fresh baseline with the same worker, Python, binaries and CPU4 options. Prefix labels are unavailable; CER remains null.</td></tr><tr><td>One independent CLI review of production changes</td><td>yes</td><td>passed</td><td>review/qkv-production.log<br>The recorded review of PR 5 reports no actionable findings. It is a static review and is not a performance or platform check.</td></tr><tr><td>Independent repeat of the original thirty latency inputs</td><td>yes</td><td>skipped</td><td>005-production/adoption-status.json<br>Not measured in this immutable checkpoint. Driver 09cc038 prepares a separate three-round latency-only follow-up; its later result must remain separate.</td></tr><tr><td>Windows Vulkan and other Metal devices</td><td>yes</td><td>unavailable</td><td><br>No runtime correctness or performance measurement is available for these devices in this trial.</td></tr></tbody></table></div><h2>Conditions and limitations</h2><p>Time from before sending the first PCM16 chunk through receipt of the terminal result. File reading, model loading and warmup are excluded. Each measured input is warmed once per fresh worker.</p><p>Median over rounds for each input, then linearly interpolated p50, p90 and p99 across the measured input medians. RTFx divides total audio duration by summed request time.</p><p><strong>Literal CER:</strong> Total Unicode code-point Levenshtein edits divided by total reference code points, including punctuation, symbols and whitespace.</p><p><strong>Repository CER:</strong> NFKC followed by removing Unicode punctuation, symbols, separators and whitespace; no case folding or alternate-spelling substitutions. Edits and reference lengths are summed before division.</p><ul><li>The current corpus is FLEURS Japanese test, with inputs from 6.36 to 28.2 seconds.</li><li>The p99 of a small duration-stratified sample is not a precise estimate of production tail latency.</li><li>The repository CER is not the published metric accepting alternative spellings of words.</li><li>Fresh-process load and first-request times do not reset filesystem or system Metal caches.</li><li>The candidate contains the production runtime from 37b7107 plus check-only source at 71c4fe9. There is no prototype switch; all measured environments are empty and the frozen runner rejects unrecorded GGML_*/SPEECH_* overrides.</li><li>Fresh baseline and candidate have 74 matching compile-flag files and 74 matching link files after replacing only source/build directory prefixes. The fixed anchor has explicit -arch arm64/-isysroot flags absent from the fresh pair; equivalent effective defaults are not established despite matching LC_BUILD_VERSION.</li><li>Q4_K improves 22 of 30 per-input medians, but its 20-30 s stratum has a -0.5924% paired reduction, and aggregate p90 rises from 121.78 to 126.04 ms.</li><li>Q8_0 improves 25 of 30 per-input medians, but round 1 has a -2.4706% paired reduction; its short round 1 is also negative. Do not claim a gain in every round.</li><li>The permanent copies add exactly 40.5 MiB for standard Q4_K and 76.5 MiB for standard Q8_0. Measured whole-process peak changes include allocator and sampling differences and need not equal these byte counts.</li><li>Load time is a median over three fresh workers with warm filesystem caches; first-request time is recorded separately and is excluded from warmed latency.</li><li>The six short inputs are 2/4-second prefixes of three recordings without prefix labels. CER stays null; their exact text agreement is not an independent recognition-accuracy measurement.</li><li>Only M2 Ultra Metal performance is measured. Windows Vulkan and other Metal devices remain unverified.</li><li>No additional stage diagnosis is used. Existing stage measurements remain separate from public worker latency and their gains are not added.</li><li>No model, type, decoding or thread default changes. No new GGUF format or model data. No prototype switch remains in production.</li><li>The ordinary automatic thread setting is 16 on this host. These requests explicitly use four CPU decoder threads; no default thread change or preliminary tuning gain is counted.</li><li>The official encoder check uses F32 weights on the unchanged separate-QKV path; CPU reference checks use 16 threads. Quantized Q4_K/Q8_0 packing is separately checked against the previous graph with four threads.</li><li>The separately linked official joint.enc diagnostic checks isolated F32/F16 projections from official encoded.npy. It does not execute packed QKV or establish full KDA/TDT reference equivalence.</li><li>The public worker exposes text and public token/segment arrays with timestamps. Raw internal TDT IDs, frame indices and duration choices are not observed by the full quality comparison.</li><li>The original prototype has separate source, checks, timing and evidence. Its historical asymmetric-check failure and correction remain on the prototype report and are not relabeled by this trial.</li><li>The planned independent latency repeat is not included here. It must retain its own 30-input, three-round block and must not be pooled with the original full or six-prefix data.</li></ul><details><summary>Reproduction metadata and local evidence paths</summary><p>Large logs, models and audio are not included in the versioned report.</p><pre>{
+  &quot;scope&quot;: &quot;full&quot;,
+  &quot;conditions&quot;: {
+    &quot;name&quot;: &quot;Haas on Apple Silicon&quot;,
+    &quot;repository&quot;: &quot;https://github.com/uchkw/speech.cpp&quot;,
+    &quot;tracking_issue&quot;: &quot;https://github.com/uchkw/speech.cpp/issues/1&quot;,
+    &quot;purpose&quot;: &quot;Reduce warm latency for one Japanese voice input of a few seconds to 30 seconds while preserving recognition quality.&quot;,
+    &quot;threads&quot;: 4,
+    &quot;rounds&quot;: 3,
+    &quot;decode_on_cpu&quot;: true,
+    &quot;quality_policy&quot;: &quot;exact&quot;,
+    &quot;latency_count&quot;: 30,
+    &quot;quality_count&quot;: 650,
+    &quot;latency_definition&quot;: &quot;Time from before sending the first PCM16 chunk through receipt of the terminal result. File reading, model loading and warmup are excluded. Each measured input is warmed once per fresh worker.&quot;,
+    &quot;aggregation&quot;: &quot;Median over rounds for each input, then linearly interpolated p50, p90 and p99 across the measured input medians. RTFx divides total audio duration by summed request time.&quot;,
+    &quot;literal_cer&quot;: &quot;Total Unicode code-point Levenshtein edits divided by total reference code points, including punctuation, symbols and whitespace.&quot;,
+    &quot;repository_cer&quot;: &quot;NFKC followed by removing Unicode punctuation, symbols, separators and whitespace; no case folding or alternate-spelling substitutions. Edits and reference lengths are summed before division.&quot;,
+    &quot;quality_comparison&quot;: &quot;The same quality files on both builds; text and public token/segment text and times are compared exactly. Text from every timestamp-disabled latency round is also compared. A changed CER is not evidence of exact output equality.&quot;,
+    &quot;latency_timestamps&quot;: false,
+    &quot;quality_timestamps&quot;: true,
+    &quot;unobserved_fields&quot;: &quot;The worker does not expose raw TDT token IDs, frame indices or duration decisions. These are not claimed to match by this harness.&quot;,
+    &quot;limitations&quot;: [
+      &quot;The current corpus is FLEURS Japanese test, with inputs from 6.36 to 28.2 seconds.&quot;,
+      &quot;The p99 of a small duration-stratified sample is not a precise estimate of production tail latency.&quot;,
+      &quot;The repository CER is not the published metric accepting alternative spellings of words.&quot;,
+      &quot;Fresh-process load and first-request times do not reset filesystem or system Metal caches.&quot;,
+      &quot;The candidate contains the production runtime from 37b7107 plus check-only source at 71c4fe9. There is no prototype switch; all measured environments are empty and the frozen runner rejects unrecorded GGML_*/SPEECH_* overrides.&quot;,
+      &quot;Fresh baseline and candidate have 74 matching compile-flag files and 74 matching link files after replacing only source/build directory prefixes. The fixed anchor has explicit -arch arm64/-isysroot flags absent from the fresh pair; equivalent effective defaults are not established despite matching LC_BUILD_VERSION.&quot;,
+      &quot;Q4_K improves 22 of 30 per-input medians, but its 20-30 s stratum has a -0.5924% paired reduction, and aggregate p90 rises from 121.78 to 126.04 ms.&quot;,
+      &quot;Q8_0 improves 25 of 30 per-input medians, but round 1 has a -2.4706% paired reduction; its short round 1 is also negative. Do not claim a gain in every round.&quot;,
+      &quot;The permanent copies add exactly 40.5 MiB for standard Q4_K and 76.5 MiB for standard Q8_0. Measured whole-process peak changes include allocator and sampling differences and need not equal these byte counts.&quot;,
+      &quot;Load time is a median over three fresh workers with warm filesystem caches; first-request time is recorded separately and is excluded from warmed latency.&quot;,
+      &quot;The six short inputs are 2/4-second prefixes of three recordings without prefix labels. CER stays null; their exact text agreement is not an independent recognition-accuracy measurement.&quot;,
+      &quot;Only M2 Ultra Metal performance is measured. Windows Vulkan and other Metal devices remain unverified.&quot;,
+      &quot;No additional stage diagnosis is used. Existing stage measurements remain separate from public worker latency and their gains are not added.&quot;,
+      &quot;No model, type, decoding or thread default changes. No new GGUF format or model data. No prototype switch remains in production.&quot;,
+      &quot;The ordinary automatic thread setting is 16 on this host. These requests explicitly use four CPU decoder threads; no default thread change or preliminary tuning gain is counted.&quot;,
+      &quot;The official encoder check uses F32 weights on the unchanged separate-QKV path; CPU reference checks use 16 threads. Quantized Q4_K/Q8_0 packing is separately checked against the previous graph with four threads.&quot;,
+      &quot;The separately linked official joint.enc diagnostic checks isolated F32/F16 projections from official encoded.npy. It does not execute packed QKV or establish full KDA/TDT reference equivalence.&quot;,
+      &quot;The public worker exposes text and public token/segment arrays with timestamps. Raw internal TDT IDs, frame indices and duration choices are not observed by the full quality comparison.&quot;,
+      &quot;The original prototype has separate source, checks, timing and evidence. Its historical asymmetric-check failure and correction remain on the prototype report and are not relabeled by this trial.&quot;,
+      &quot;The planned independent latency repeat is not included here. It must retain its own 30-input, three-round block and must not be pooled with the original full or six-prefix data.&quot;
+    ],
+    &quot;thread_setting_note&quot;: &quot;Four CPU threads are an explicit tuned campaign setting, not the runtime default. Unspecified threads (threads=0) use performance cores: 16 on this M2 Ultra. Code gains compare the tuned anchor and do not include the preliminary thread-tuning gain; measure 021 evaluates automatic versus four threads separately.&quot;,
+    &quot;hardware&quot;: {
+      &quot;chip&quot;: &quot;Apple M2 Ultra&quot;,
+      &quot;cpu_cores&quot;: 24,
+      &quot;performance_cores&quot;: 16,
+      &quot;efficiency_cores&quot;: 8,
+      &quot;gpu_cores&quot;: 76,
+      &quot;memory_gb&quot;: 192,
+      &quot;source&quot;: &quot;system_profiler SPHardwareDataType SPDisplaysDataType&quot;
+    },
+    &quot;current_machine&quot;: {
+      &quot;chip&quot;: &quot;Apple M2 Ultra&quot;,
+      &quot;cpu_cores&quot;: &quot;24&quot;,
+      &quot;memory_bytes&quot;: &quot;206158430208&quot;,
+      &quot;macos&quot;: &quot;26.7.2&quot;
+    },
+    &quot;python&quot;: &quot;3.9.6&quot;,
+    &quot;python_executable&quot;: &quot;/Applications/Xcode.app/Contents/Developer/usr/bin/python3&quot;,
+    &quot;runner_sha256&quot;: {
+      &quot;compare.py&quot;: &quot;f638e5c4914231e8957ca05513366b06cb2dfb7914922a276b5affb07e4fcc21&quot;,
+      &quot;worker.py&quot;: &quot;d388b3d480bc45a88b8cabe955526fa10811f0a2914b41a3cf8429ca7edb9be1&quot;,
+      &quot;campaign.json&quot;: &quot;2a03d0e925e3433b437ec908326db42e5576c585abd5da8929f4c2b24b20d840&quot;
+    },
+    &quot;created_utc&quot;: &quot;2026-11-06T21:07:27.431851+00:00&quot;,
+    &quot;comparison_reference&quot;: &quot;Relative: production build 71c4fe9 against fresh baseline 1dbc333 with matching compile/link flags. Cumulative: directly measured fixed anchor f976ebd, an independent reference with known literal toolchain-flag differences.&quot;
+  },
+  &quot;models&quot;: {
+    &quot;q4_k&quot;: {
+      &quot;type&quot;: &quot;q4_k&quot;,
+      &quot;sha256&quot;: &quot;d24d53f29b75214a933ff482b0de1217e0a800f4118cca39ad6cf03609a89d6f&quot;,
+      &quot;size&quot;: 351901216,
+      &quot;revision&quot;: &quot;6b965d5007ba780585de51549d57a8c1c0d67c7e&quot;
+    },
+    &quot;q8_0&quot;: {
+      &quot;type&quot;: &quot;q8_0&quot;,
+      &quot;sha256&quot;: &quot;cd5f60b2f1c411404b83fca4a65e3ce30a26d9e951b6a346529e65f22758afeb&quot;,
+      &quot;size&quot;: 656381472,
+      &quot;revision&quot;: &quot;6b965d5007ba780585de51549d57a8c1c0d67c7e&quot;
+    }
+  },
+  &quot;builds&quot;: {
+    &quot;baseline&quot;: {
+      &quot;source_commit&quot;: &quot;1dbc333010f5a544651cdef4637fc9b3ce39bf2e&quot;,
+      &quot;source_tree&quot;: &quot;921addc071c2db7a646f3c049329363ec187b77c&quot;,
+      &quot;source_verified&quot;: true,
+      &quot;ggml_commit&quot;: &quot;e1a9ac12edbb57402618fd6936598603f5ee6266&quot;,
+      &quot;created_utc&quot;: &quot;2026-11-06T20:56:52.589351+00:00&quot;,
+      &quot;build_flags&quot;: {
+        &quot;configure&quot;: [
+          &quot;-DCMAKE_BUILD_TYPE=Release&quot;,
+          &quot;-DGGML_NATIVE=ON&quot;,
+          &quot;-DGGML_METAL=ON&quot;
+        ],
+        &quot;build&quot;: [
+          &quot;--target&quot;,
+          &quot;speech-cli&quot;,
+          &quot;fastconformer-timing&quot;,
+          &quot;-j4&quot;
+        ]
+      },
+      &quot;cmake_cache_sha256&quot;: &quot;814de16de8856b2dfb7db570bdddab95804141eb1e885d6a5c04c249eb082c70&quot;,
+      &quot;build_log_sha256&quot;: &quot;5e09ee230952fb3a3e8433eb10179d806a21c0b50080920dc1e4bd435b2e8860&quot;,
+      &quot;stage_threads_argument&quot;: true,
+      &quot;speech&quot;: {
+        &quot;sha256&quot;: &quot;9fe35d5b44ac6ff24e7c8d335105909f9389ee2e43fb8cc2f4182ca60f977f33&quot;,
+        &quot;artifact_path&quot;: &quot;builds/005-production-base/speech&quot;
+      },
+      &quot;stage_tool&quot;: {
+        &quot;sha256&quot;: &quot;140f27e8862233ca1fe2ce7b5136db11a38207bedfdcd87ab31fb13eaffbcbc8&quot;,
+        &quot;artifact_path&quot;: &quot;builds/005-production-base/fastconformer-timing&quot;
+      }
+    },
+    &quot;candidate&quot;: {
+      &quot;source_commit&quot;: &quot;71c4fe9422a8337d5b75f3a6825c0bcb7e78a665&quot;,
+      &quot;source_tree&quot;: &quot;5713c1a6108d9a87f7d668f71b9e5c8d33d9bfc7&quot;,
+      &quot;source_verified&quot;: true,
+      &quot;ggml_commit&quot;: &quot;e1a9ac12edbb57402618fd6936598603f5ee6266&quot;,
+      &quot;created_utc&quot;: &quot;2026-11-06T20:57:49.475088+00:00&quot;,
+      &quot;build_flags&quot;: {
+        &quot;configure&quot;: [
+          &quot;-DCMAKE_BUILD_TYPE=Release&quot;,
+          &quot;-DGGML_NATIVE=ON&quot;,
+          &quot;-DGGML_METAL=ON&quot;
+        ],
+        &quot;build&quot;: [
+          &quot;--target&quot;,
+          &quot;speech-cli&quot;,
+          &quot;fastconformer-timing&quot;,
+          &quot;-j4&quot;
+        ]
+      },
+      &quot;cmake_cache_sha256&quot;: &quot;ed3d0981b1abbb944533d5b06420c065b14390dd96cd6e2b6beee0a19ed687d5&quot;,
+      &quot;build_log_sha256&quot;: &quot;947baafb93f92fcd3c14fd1118d27cfa53f7872391423b7e416422d4a53ec76d&quot;,
+      &quot;stage_threads_argument&quot;: true,
+      &quot;speech&quot;: {
+        &quot;sha256&quot;: &quot;bdcf83225ed4757e0ed25fb1edf54a2b28cc7efe86faf372fa9e036b954eccd9&quot;,
+        &quot;artifact_path&quot;: &quot;builds/005-production/speech&quot;
+      },
+      &quot;stage_tool&quot;: {
+        &quot;sha256&quot;: &quot;ea2ec9b278b30df6ac822781bd1556a114e205a4bbe5494e82320524772a7270&quot;,
+        &quot;artifact_path&quot;: &quot;builds/005-production/fastconformer-timing&quot;
+      }
+    },
+    &quot;anchor&quot;: {
+      &quot;source_commit&quot;: &quot;f976ebd8e2fca1f15ddc2e6fc9f99e7090b0f9ea&quot;,
+      &quot;source_tree&quot;: &quot;dee6405fbb3c50eb5f3113f76e6745f59c21b919&quot;,
+      &quot;source_verified&quot;: true,
+      &quot;ggml_commit&quot;: &quot;e1a9ac12edbb57402618fd6936598603f5ee6266&quot;,
+      &quot;created_utc&quot;: &quot;2026-11-06T17:35:25.712263+00:00&quot;,
+      &quot;cmake_cache_sha256&quot;: &quot;c3af3223b29cbc28d05f6c379b935c738fc1ccd8b53e553bb0d9d5a88829a171&quot;,
+      &quot;build_log_sha256&quot;: &quot;c13da50cb07e637c4858e256fb0eff3c80a4f1be693e01093cfda3ac589943e8&quot;,
+      &quot;stage_threads_argument&quot;: true,
+      &quot;speech&quot;: {
+        &quot;sha256&quot;: &quot;d493b968e7a94e45f93054bc899c9d20802bb781a19f8dc76cfd4fa6dd91413f&quot;,
+        &quot;artifact_path&quot;: &quot;builds/campaign-anchor/speech&quot;
+      },
+      &quot;stage_tool&quot;: {
+        &quot;sha256&quot;: &quot;3dc5c6f19a78153b5f8d0bbd3f08f6106825e5ebd9d9465283b6ebd01553f768&quot;,
+        &quot;artifact_path&quot;: &quot;builds/campaign-anchor/fastconformer-timing&quot;
+      },
+      &quot;build_flags&quot;: {
+        &quot;configure&quot;: [
+          &quot;-DCMAKE_BUILD_TYPE=Release&quot;,
+          &quot;-DGGML_NATIVE=ON&quot;,
+          &quot;-DGGML_METAL=ON&quot;
+        ],
+        &quot;build&quot;: [
+          &quot;--target&quot;,
+          &quot;speech-cli&quot;,
+          &quot;fastconformer-timing&quot;,
+          &quot;-j4&quot;
+        ]
+      }
+    }
+  },
+  &quot;fixed_anchor&quot;: {
+    &quot;measured_side&quot;: &quot;anchor&quot;,
+    &quot;source_commit&quot;: &quot;f976ebd8e2fca1f15ddc2e6fc9f99e7090b0f9ea&quot;,
+    &quot;speech_sha256&quot;: &quot;d493b968e7a94e45f93054bc899c9d20802bb781a19f8dc76cfd4fa6dd91413f&quot;,
+    &quot;environment&quot;: {},
+    &quot;build_manifest_sha256&quot;: &quot;47ff498e173967caf11c67571f38a6a0efe67e3d649bbfafb2738089951cd553&quot;
+  },
+  &quot;implementation_checkpoint&quot;: {
+    &quot;runtime_source_commit&quot;: &quot;37b71071212677bc8d67fe87373dbb43183c7367&quot;,
+    &quot;build_and_check_source_commit&quot;: &quot;71c4fe9422a8337d5b75f3a6825c0bcb7e78a665&quot;,
+    &quot;fresh_baseline_source_commit&quot;: &quot;1dbc333010f5a544651cdef4637fc9b3ce39bf2e&quot;,
+    &quot;evaluation_notes_commit&quot;: &quot;ac4b4ae81133498bfc4f1b3b13fa706d7f6f1d38&quot;,
+    &quot;evaluation_notes_path&quot;: &quot;experiments/haas-mac/005-production-evaluation.md&quot;,
+    &quot;evaluation_notes_sha256&quot;: &quot;85279f48160a9738d58fd57461d4c2229cba145d8580e52562eaf9d80b354ce8&quot;,
+    &quot;runtime_unchanged_between_build_and_evaluation&quot;: true,
+    &quot;official_joint_check_source_commit&quot;: &quot;0edd8e16ec16bda57a114e3af547e9b75d5722a2&quot;,
+    &quot;joint_check_linkage&quot;: &quot;Separately compiled and linked to seven preserved production libraries; the measured speech and stage binaries are unchanged.&quot;,
+    &quot;ggml_commit&quot;: &quot;e1a9ac12edbb57402618fd6936598603f5ee6266&quot;,
+    &quot;prototype_switch_removed&quot;: true,
+    &quot;adopted&quot;: false,
+    &quot;merged&quot;: false
+  },
+  &quot;diagnostics&quot;: [
+    {
+      &quot;title&quot;: &quot;Primary paired gains by round&quot;,
+      &quot;method&quot;: &quot;Pair the same thirty recordings within each round. Positive reduction means faster; these ratios differ from the primary median ratio across per-input three-round medians.&quot;,
+      &quot;headers&quot;: [
+        &quot;Type&quot;,
+        &quot;Reference&quot;,
+        &quot;Round 1&quot;,
+        &quot;Round 2&quot;,
+        &quot;Round 3&quot;,
+        &quot;Faster input medians / 30&quot;
+      ],
+      &quot;rows&quot;: [
+        [
+          &quot;Q4_K&quot;,
+          &quot;baseline&quot;,
+          &quot;1.697%&quot;,
+          &quot;0.135%&quot;,
+          &quot;2.487%&quot;,
+          &quot;22 / 30&quot;
+        ],
+        [
+          &quot;Q4_K&quot;,
+          &quot;anchor&quot;,
+          &quot;0.229%&quot;,
+          &quot;0.841%&quot;,
+          &quot;3.557%&quot;,
+          &quot;22 / 30&quot;
+        ],
+        [
+          &quot;Q8_0&quot;,
+          &quot;baseline&quot;,
+          &quot;3.685%&quot;,
+          &quot;-2.471%&quot;,
+          &quot;2.270%&quot;,
+          &quot;25 / 30&quot;
+        ],
+        [
+          &quot;Q8_0&quot;,
+          &quot;anchor&quot;,
+          &quot;3.924%&quot;,
+          &quot;-3.319%&quot;,
+          &quot;1.982%&quot;,
+          &quot;24 / 30&quot;
+        ]
+      ],
+      &quot;notes&quot;: [
+        &quot;Q8_0 is slower in the second round against both references. A positive three-round median is not evidence of a gain in every round.&quot;,
+        &quot;The fixed anchor is an independent reference with known literal build-flag differences; only the fresh pair has controlled matching flags.&quot;
+      ]
+    },
+    {
+      &quot;title&quot;: &quot;Primary paired gains by input duration&quot;,
+      &quot;method&quot;: &quot;Ten recordings per duration stratum, using each recording&#x27;s median over three rounds. This table is separate from differences between aggregate latency percentiles.&quot;,
+      &quot;headers&quot;: [
+        &quot;Type&quot;,
+        &quot;Reference&quot;,
+        &quot;Duration&quot;,
+        &quot;Median paired reduction&quot;,
+        &quot;Faster / equal / slower&quot;
+      ],
+      &quot;rows&quot;: [
+        [
+          &quot;Q4_K&quot;,
+          &quot;baseline&quot;,
+          &quot;10-20s&quot;,
+          &quot;2.289%&quot;,
+          &quot;9 / 0 / 1&quot;
+        ],
+        [
+          &quot;Q4_K&quot;,
+          &quot;baseline&quot;,
+          &quot;20-30s&quot;,
+          &quot;-0.592%&quot;,
+          &quot;5 / 0 / 5&quot;
+        ],
+        [
+          &quot;Q4_K&quot;,
+          &quot;baseline&quot;,
+          &quot;6-10s&quot;,
+          &quot;0.712%&quot;,
+          &quot;8 / 0 / 2&quot;
+        ],
+        [
+          &quot;Q4_K&quot;,
+          &quot;anchor&quot;,
+          &quot;10-20s&quot;,
+          &quot;1.239%&quot;,
+          &quot;9 / 0 / 1&quot;
+        ],
+        [
+          &quot;Q4_K&quot;,
+          &quot;anchor&quot;,
+          &quot;20-30s&quot;,
+          &quot;-0.405%&quot;,
+          &quot;5 / 0 / 5&quot;
+        ],
+        [
+          &quot;Q4_K&quot;,
+          &quot;anchor&quot;,
+          &quot;6-10s&quot;,
+          &quot;1.516%&quot;,
+          &quot;8 / 0 / 2&quot;
+        ],
+        [
+          &quot;Q8_0&quot;,
+          &quot;baseline&quot;,
+          &quot;10-20s&quot;,
+          &quot;3.557%&quot;,
+          &quot;9 / 0 / 1&quot;
+        ],
+        [
+          &quot;Q8_0&quot;,
+          &quot;baseline&quot;,
+          &quot;20-30s&quot;,
+          &quot;1.339%&quot;,
+          &quot;8 / 0 / 2&quot;
+        ],
+        [
+          &quot;Q8_0&quot;,
+          &quot;baseline&quot;,
+          &quot;6-10s&quot;,
+          &quot;2.322%&quot;,
+          &quot;8 / 0 / 2&quot;
+        ],
+        [
+          &quot;Q8_0&quot;,
+          &quot;anchor&quot;,
+          &quot;10-20s&quot;,
+          &quot;1.939%&quot;,
+          &quot;9 / 0 / 1&quot;
+        ],
+        [
+          &quot;Q8_0&quot;,
+          &quot;anchor&quot;,
+          &quot;20-30s&quot;,
+          &quot;1.097%&quot;,
+          &quot;6 / 0 / 4&quot;
+        ],
+        [
+          &quot;Q8_0&quot;,
+          &quot;anchor&quot;,
+          &quot;6-10s&quot;,
+          &quot;2.636%&quot;,
+          &quot;9 / 0 / 1&quot;
+        ]
+      ],
+      &quot;notes&quot;: [
+        &quot;Q4_K 20–30-second requests have a -0.592% paired reduction against the fresh baseline. Its aggregate p90 also rises from 121.78 to 126.04 ms. These are distinct observations, both retained.&quot;
+      ]
+    },
+    {
+      &quot;title&quot;: &quot;Memory and startup tradeoff&quot;,
+      &quot;method&quot;: &quot;Peak is the maximum gross process footprint across latency and quality workers. Load and first request are medians across three fresh latency workers, with filesystem and Metal caches retained.&quot;,
+      &quot;headers&quot;: [
+        &quot;Type&quot;,
+        &quot;Retained copies MiB&quot;,
+        &quot;Peak MiB: base / candidate&quot;,
+        &quot;Peak delta MiB&quot;,
+        &quot;Load ms: base / candidate&quot;,
+        &quot;First ms: base / candidate&quot;
+      ],
+      &quot;rows&quot;: [
+        [
+          &quot;Q4_K&quot;,
+          &quot;40.5&quot;,
+          &quot;459.626 / 497.110&quot;,
+          &quot;37.484&quot;,
+          &quot;139.317 / 143.190&quot;,
+          &quot;163.249 / 160.803&quot;
+        ],
+        [
+          &quot;Q8_0&quot;,
+          &quot;76.5&quot;,
+          &quot;752.204 / 827.158&quot;,
+          &quot;74.953&quot;,
+          &quot;193.249 / 196.980&quot;,
+          &quot;166.721 / 169.474&quot;
+        ]
+      ],
+      &quot;notes&quot;: [
+        &quot;The permanent copy byte counts come from the graph check. Gross process deltas include allocator and sampling differences and need not equal those counts.&quot;
+      ]
+    },
+    {
+      &quot;title&quot;: &quot;Separate two- and four-second artificial prefixes&quot;,
+      &quot;method&quot;: &quot;Six prefixes from three recordings, all-input warmup in every worker and three AB/BA/AB rounds. The primary binaries, model, CPU4 setting, Python and worker source remain fixed.&quot;,
+      &quot;headers&quot;: [
+        &quot;Type&quot;,
+        &quot;Median paired reduction&quot;,
+        &quot;Faster inputs&quot;,
+        &quot;Texts changed / compared&quot;,
+        &quot;Literal / repository CER&quot;
+      ],
+      &quot;rows&quot;: [
+        [
+          &quot;Q4_K&quot;,
+          &quot;3.708%&quot;,
+          &quot;6 / 6&quot;,
+          &quot;0 / 18&quot;,
+          &quot;null / null&quot;
+        ],
+        [
+          &quot;Q8_0&quot;,
+          &quot;2.749%&quot;,
+          &quot;6 / 6&quot;,
+          &quot;0 / 18&quot;,
+          &quot;null / null&quot;
+        ]
+      ],
+      &quot;notes&quot;: [
+        &quot;These are truncated prefixes of three longer FLEURS recordings, not naturally completed short utterances.&quot;,
+        &quot;The full-recording reference text does not label a prefix. Literal CER and repository CER are null and are never scored.&quot;,
+        &quot;Exact text agreement compares two implementations; it does not establish recognition accuracy on short utterances.&quot;,
+        &quot;Six prefixes from three recordings are a small related sample. Their p99 is not a production tail estimate.&quot;,
+        &quot;This supplement is separate from the primary 30-input latency and 650-input quality evaluation and cannot support adoption by itself.&quot;
+      ]
+    },
+    {
+      &quot;title&quot;: &quot;Prefix latency by duration and round&quot;,
+      &quot;method&quot;: &quot;Prefix strata use three per-input medians each. The separate round columns use paired times within that round, without pooling any primary request.&quot;,
+      &quot;headers&quot;: [
+        &quot;Type&quot;,
+        &quot;2-second paired reduction&quot;,
+        &quot;4-second paired reduction&quot;,
+        &quot;Round 1&quot;,
+        &quot;Round 2&quot;,
+        &quot;Round 3&quot;
+      ],
+      &quot;rows&quot;: [
+        [
+          &quot;Q4_K&quot;,
+          &quot;3.225%&quot;,
+          &quot;4.219%&quot;,
+          &quot;4.169%&quot;,
+          &quot;3.774%&quot;,
+          &quot;4.124%&quot;
+        ],
+        [
+          &quot;Q8_0&quot;,
+          &quot;0.932%&quot;,
+          &quot;3.489%&quot;,
+          &quot;3.872%&quot;,
+          &quot;-0.739%&quot;,
+          &quot;3.000%&quot;
+        ]
+      ],
+      &quot;notes&quot;: [
+        &quot;Q8_0 prefix round 2 is slower despite a positive combined median. The six related prefixes do not establish natural-short-utterance accuracy or a stable production p99.&quot;
+      ]
+    },
+    {
+      &quot;title&quot;: &quot;Prefix latency distribution&quot;,
+      &quot;method&quot;: &quot;Milliseconds across six input medians, or three medians within each duration stratum. CER is not computed for prefixes.&quot;,
+      &quot;headers&quot;: [
+        &quot;Type&quot;,
+        &quot;Duration&quot;,
+        &quot;Build&quot;,
+        &quot;p50 ms&quot;,
+        &quot;p90 ms&quot;,
+        &quot;p99 ms&quot;
+      ],
+      &quot;rows&quot;: [
+        [
+          &quot;Q4_K&quot;,
+          &quot;all six&quot;,
+          &quot;baseline&quot;,
+          &quot;35.215&quot;,
+          &quot;40.302&quot;,
+          &quot;40.317&quot;
+        ],
+        [
+          &quot;Q4_K&quot;,
+          &quot;2s&quot;,
+          &quot;baseline&quot;,
+          &quot;29.866&quot;,
+          &quot;30.547&quot;,
+          &quot;30.700&quot;
+        ],
+        [
+          &quot;Q4_K&quot;,
+          &quot;4s&quot;,
+          &quot;baseline&quot;,
+          &quot;40.284&quot;,
+          &quot;40.312&quot;,
+          &quot;40.318&quot;
+        ],
+        [
+          &quot;Q4_K&quot;,
+          &quot;all six&quot;,
+          &quot;candidate&quot;,
+          &quot;33.582&quot;,
+          &quot;39.301&quot;,
+          &quot;39.945&quot;
+        ],
+        [
+          &quot;Q4_K&quot;,
+          &quot;2s&quot;,
+          &quot;candidate&quot;,
+          &quot;28.970&quot;,
+          &quot;29.338&quot;,
+          &quot;29.421&quot;
+        ],
+        [
+          &quot;Q4_K&quot;,
+          &quot;4s&quot;,
+          &quot;candidate&quot;,
+          &quot;38.585&quot;,
+          &quot;39.730&quot;,
+          &quot;39.988&quot;
+        ],
+        [
+          &quot;Q8_0&quot;,
+          &quot;all six&quot;,
+          &quot;baseline&quot;,
+          &quot;31.307&quot;,
+          &quot;36.310&quot;,
+          &quot;36.406&quot;
+        ],
+        [
+          &quot;Q8_0&quot;,
+          &quot;2s&quot;,
+          &quot;baseline&quot;,
+          &quot;26.800&quot;,
+          &quot;26.991&quot;,
+          &quot;27.034&quot;
+        ],
+        [
+          &quot;Q8_0&quot;,
+          &quot;4s&quot;,
+          &quot;baseline&quot;,
+          &quot;36.203&quot;,
+          &quot;36.374&quot;,
+          &quot;36.412&quot;
+        ],
+        [
+          &quot;Q8_0&quot;,
+          &quot;all six&quot;,
+          &quot;candidate&quot;,
+          &quot;30.613&quot;,
+          &quot;35.311&quot;,
+          &quot;35.459&quot;
+        ],
+        [
+          &quot;Q8_0&quot;,
+          &quot;2s&quot;,
+          &quot;candidate&quot;,
+          &quot;26.550&quot;,
+          &quot;26.939&quot;,
+          &quot;27.026&quot;
+        ],
+        [
+          &quot;Q8_0&quot;,
+          &quot;4s&quot;,
+          &quot;candidate&quot;,
+          &quot;35.146&quot;,
+          &quot;35.410&quot;,
+          &quot;35.469&quot;
+        ]
+      ]
+    },
+    {
+      &quot;title&quot;: &quot;Source, toolchain and check boundaries&quot;,
+      &quot;method&quot;: &quot;The performance binary is fixed at the production build/check checkpoint. Supplemental correctness tools link to those preserved libraries and are not substituted into the latency run.&quot;,
+      &quot;headers&quot;: [
+        &quot;Evidence&quot;,
+        &quot;Coverage&quot;,
+        &quot;Limit&quot;
+      ],
+      &quot;rows&quot;: [
+        [
+          &quot;Fresh pair flags and links&quot;,
+          &quot;74 compile + 74 link files identical after source/build path normalization&quot;,
+          &quot;No assertion that anchor implicit/default flags are equivalent&quot;
+        ],
+        [
+          &quot;Official encoder&quot;,
+          &quot;F32 CPU16 / Metal, 11 cases each, minimum 104.4 / 56.4 dB&quot;,
+          &quot;Separate-QKV controls; not quantized packed-path equivalence&quot;
+        ],
+        [
+          &quot;Packed QKV&quot;,
+          &quot;Q4_K and Q8_0 Metal, 1125 exact tensors per type at nine lengths&quot;,
+          &quot;Differential against previous graph, not official quantized weights&quot;
+        ],
+        [
+          &quot;Official joint.enc&quot;,
+          &quot;0edd8e16 checker linked to 71c4fe9 libraries; F32/F16, 11 each, minimum 77.0 dB&quot;,
+          &quot;Isolated projection input; no packed QKV or full KDA/TDT&quot;
+        ],
+        [
+          &quot;Prototype continuity&quot;,
+          &quot;Three actual recordings per type, ordinary projection and public output exact&quot;,
+          &quot;Correctness only; prototype timing is not reused&quot;
+        ],
+        [
+          &quot;Independent latency repeat&quot;,
+          &quot;Not included at this checkpoint&quot;,
+          &quot;Separate thirty-input follow-up; no pooling or repeated quality&quot;
+        ]
+      ]
+    }
+  ],
+  &quot;input_hash&quot;: &quot;7196750a6d97b470abbcc6fc45bd3d82572473a5e778200a145fe82dbda03267&quot;,
+  &quot;assets_sha256&quot;: &quot;e82d03c053c861f4943907d67f28e191431f84706429b324e80368adf6808581&quot;,
+  &quot;evidence&quot;: {
+    &quot;directory&quot;: &quot;005-production&quot;,
+    &quot;run_manifest_sha256&quot;: &quot;20b160921e906552d7c4f8bd4913ce2d2c9f0f53c509f88e4ba75abfd0aaad57&quot;,
+    &quot;paths_relative_to&quot;: &quot;External campaign artifact directory.&quot;,
+    &quot;compact_manifest_sha256&quot;: &quot;5fa7745e5d82df8fa313c3a95386e61005c637874ce42abd1783516ddde59700&quot;,
+    &quot;checkpoint_summary_sha256&quot;: &quot;721ab7b045a6e444f58e1199edd5f349690133fb1d214d41bfd0b4423bff062e&quot;,
+    &quot;adoption_status_sha256&quot;: &quot;d2539d3197deeb06c9dfa74d7121503cd9e1a2bd45ff0862b489b4cab4c063ee&quot;,
+    &quot;full_summary_sha256&quot;: &quot;88fab3e52869efd01f9037d2edb606bb15c57bd539869a04397dca5dfd8985c4&quot;,
+    &quot;short_summary_sha256&quot;: &quot;c63111f57a80b3846e90fa57cd04c6e7ef537357f8f2725d4de98cdab0a92b73&quot;,
+    &quot;paired_analysis_sha256&quot;: &quot;968183091b741420f302955a01d80d38b9f3e1cd5f62b691eb13ce05d37c5902&quot;,
+    &quot;independent_manifest_path&quot;: &quot;report-imports/005-production/independent-evidence-sha256.json&quot;,
+    &quot;independent_manifest_sha256&quot;: &quot;9847a9d9854c3b62bdb521da67e42eff1854e2dc233afb400b33cd839b795076&quot;,
+    &quot;independent_manifest_files&quot;: 270,
+    &quot;independent_manifest_bytes&quot;: 54756039,
+    &quot;measurement_audit_path&quot;: &quot;report-imports/005-production/measurement-audit.json&quot;,
+    &quot;measurement_audit_sha256&quot;: &quot;dca8a3d23ab770681d14498cd6e0c60240d447b4a55ddc51b2dd17f7cc79e895&quot;,
+    &quot;check_audit_path&quot;: &quot;report-imports/005-production/check-audit.json&quot;,
+    &quot;check_audit_sha256&quot;: &quot;47b17ef6107aefa462e930bcf67635eca38564d234ceea2f23b9603d5336828a&quot;,
+    &quot;preparation_script_sha256&quot;: &quot;f1be0ed3f2c80072e28530285a4c536eae531eb92acae4d3de9e5779ae981d1d&quot;,
+    &quot;audit_source_sha256&quot;: {
+      &quot;run-audit.py&quot;: &quot;bed3c8ff2e43fc3ed54604768bf4361783ff847ab09e802014f1784265f61ac1&quot;,
+      &quot;audit-checks.py&quot;: &quot;c77e97d0097469a0bb606676647a02c9b068fcf8555584748725d583a4b52034&quot;,
+      &quot;audit-measurements.py&quot;: &quot;bce26c76ac0b84741c4380e365212d96f8c14a00827e0f1af4a6a4f68d57aa3f&quot;
+    },
+    &quot;review_log_sha256&quot;: &quot;41a8dc19a372023bc4321e8438036ed4682779ba1a50d5cc5da30ff2eef73dce&quot;
+  }
+}</pre></details><footer>Local experiment report · JSON is the source of truth · No external assets or telemetry</footer></main></body></html>

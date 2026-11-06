@@ -178,6 +178,8 @@ def main():
             if comparisons:
                 cumulative = number(comparisons['cumulative']['latency_reduction_percent']) + '%' if 'cumulative' in comparisons else 'not measured'
                 gains.append(f"{text(kind)}: {number(comparisons['relative']['latency_reduction_percent'])}% / {cumulative}")
+        if gains and entry.get('index_gain_note'):
+            gains.insert(0, '<small>' + text(entry['index_gain_note']) + '</small>')
         target = path.name if entry['status'] == 'pending' and entry['measure_id'] not in trials else path.with_suffix('.html').name
         reason = entry['reason'] if entry['measure_id'] not in trials else f"{len(trials[entry['measure_id']])} recorded variant(s). The measure is {entry['status'].replace('_', ' ')}."
         rows.append([text(entry['measure_id']), f'<a href="{text(target)}">{text(entry["title"])}</a>',

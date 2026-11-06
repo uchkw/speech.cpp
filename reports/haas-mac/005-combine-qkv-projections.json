@@ -3,7 +3,7 @@
   "measure_id": "005",
   "title": "Combine QKV projections",
   "status": "conditional",
-  "reason": "Promising, unadopted prototype: Q4_K and Q8_0 warm requests improve by 2.484% and 1.619% against the same binary with the switch off, and 1.986% and 1.247% against the fixed anchor. Each type preserves all 650 public quality outputs and 90 latency texts against both references. Peak memory and load time increase. Switch-free production reimplementation, official reference checks and Windows Vulkan validation remain incomplete.",
+  "reason": "Promising measure, no adopted implementation. The switch-free production candidate has been measured and is recorded as a separate trial below, with adoption pending because of long-input tail and round variation. The numbers and checks on this parent page preserve the historical switchable prototype checkpoint.",
   "checks": [
     {
       "name": "Clean runtime build and frozen runner identity",
@@ -1346,5 +1346,9 @@
         "Actual Q4_K/Q8_0/F16 weights with F32 activations are not official F32-weight reference checks. Original failed logs remain failed."
       ]
     }
-  ]
+  ],
+  "prototype_checkpoint_reason": "Promising, unadopted prototype: Q4_K and Q8_0 warm requests improve by 2.484% and 1.619% against the same binary with the switch off, and 1.986% and 1.247% against the fixed anchor. Each type preserves all 650 public quality outputs and 90 latency texts against both references. Peak memory and load time increase. Switch-free production reimplementation, official reference checks and Windows Vulkan validation remain incomplete.",
+  "prior_evidence_note": "All numbers, check statuses and limitations below belong to the prototype evaluated at 702a3837. Its historical pending production/reference work is not the current status of the separately measured production trial. No prototype and production results are pooled or added.",
+  "index_gain_note": "Historical prototype only; production trial is separate.",
+  "production_trial": "005-production"
 }
