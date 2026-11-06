@@ -1,0 +1,778 @@
+{
+  "schema_version": 1,
+  "measure_id": "001b",
+  "parent_measure_id": "001",
+  "title": "Reject the fixed 16-column SIMD GEMM variant",
+  "status": "rejected",
+  "reason": "The fixed 16-column variant provided no clear request-latency gain. Paired ratios were 1.0156 for Q8_0 and 1.0054 for F16, while the unchanged Q4_K control shifted to 0.9728. Target product timings regressed; small request differences are not isolated causal estimates.",
+  "scope": "exploratory_rejected_variant",
+  "conditions": {
+    "name": "Haas on Apple Silicon",
+    "repository": "https://github.com/uchkw/speech.cpp",
+    "tracking_issue": "https://github.com/uchkw/speech.cpp/issues/1",
+    "purpose": "Reduce warm latency for one Japanese voice input of a few seconds to 30 seconds while preserving recognition quality.",
+    "threads": 4,
+    "rounds": 3,
+    "decode_on_cpu": true,
+    "quality_policy": "exact",
+    "latency_count": 9,
+    "quality_count": 9,
+    "latency_definition": "Before encoding/sending first PCM16 chunk through terminal end; file/model load and warmup excluded.",
+    "aggregation": "Interpolated percentiles across nine per-input medians, exploratory rather than production p99 estimates.",
+    "literal_cer": "Total Unicode code-point Levenshtein edits divided by total reference code points, including punctuation, symbols and whitespace.",
+    "repository_cer": "NFKC followed by removing Unicode punctuation, symbols, separators and whitespace; no case folding or alternate-spelling substitutions. Edits and reference lengths are summed before division.",
+    "quality_comparison": "Nine files per type with timestamps; text and public token/segment fields are compared exactly.",
+    "latency_timestamps": false,
+    "quality_timestamps": true,
+    "unobserved_fields": "The worker does not expose raw TDT token IDs, frame indices or duration decisions. These are not claimed to match by this harness.",
+    "limitations": [
+      "No measurements below 6.36 seconds.",
+      "No production adoption or fixed-anchor/full 650 claim.",
+      "Official reference and Windows Vulkan validation remain unavailable.",
+      "The direct comparison is experimental 32 versus experimental 16, not original e1a9 versus production.",
+      "Q4_K is an unchanged-path control. Its paired latency ratio is 0.9728, so the small Q8_0/F16 request differences are not isolated causal estimates.",
+      "The source was committed after measuring; tested source hashes match the checkpoint, but the binary was not rebuilt from that clean checkpoint."
+    ],
+    "hardware": {
+      "chip": "Apple M2 Ultra",
+      "cpu_cores": 24,
+      "performance_cores": 16,
+      "efficiency_cores": 8,
+      "gpu_cores": 76,
+      "memory_gb": 192,
+      "source": "system_profiler SPHardwareDataType SPDisplaysDataType"
+    },
+    "created_utc": "2026-11-06T17:41:21.187593+00:00",
+    "minimum_audio_seconds": 6.36,
+    "maximum_audio_seconds": 28.2,
+    "noise_caveat": "The unchanged Q4_K control has a paired ratio 0.9728 (-2.7%). Q8_0 +1.6% and F16 +0.5% are not precise causal regression estimates. Neither profile establishes a gain.",
+    "comparison_reference": "Experimental 16 versus experimental 32 in the same binary; cumulative gain against the fixed anchor is not measured.",
+    "selection": {
+      "environment": "GGML_METAL_MM_TILE_N",
+      "baseline": "32",
+      "candidate": "16",
+      "default": "32",
+      "scope": "Non-tensor-API contiguous unbatched F16/Q8_0 by F32, M=1024, K=1024 or 4096, N>16. M4096 and Q4_K retain 32. Existing experimental 64 is preserved under its separate setting.",
+      "arithmetic": "K step 32; half operands; float accumulation; four simdgroups. Only first 64 threads stage B for 16 columns; every thread stages A and reaches all barriers. M5 tensor flag typing is unchanged."
+    }
+  },
+  "types": {
+    "q4_k": {
+      "sides": {
+        "baseline": {
+          "latency": {
+            "p50_ms": 80.68645799903607,
+            "p90_ms": 128.90250860036758,
+            "p99_ms": 151.59093836096872,
+            "count": 9,
+            "rtfx": 169.39677474680303
+          },
+          "strata": {
+            "10-20s": {
+              "p50_ms": 80.68645799903607,
+              "p90_ms": 110.5972251996718,
+              "p99_ms": 117.32714781981485,
+              "count": 3,
+              "rtfx": 164.10269622292367
+            },
+            "20-30s": {
+              "p50_ms": 122.6001670002006,
+              "p90_ms": 147.80953340086853,
+              "p99_ms": 153.48164084101882,
+              "count": 3,
+              "rtfx": 180.4102138812139
+            },
+            "6-10s": {
+              "p50_ms": 56.00537499958591,
+              "p90_ms": 61.51657499976864,
+              "p99_ms": 62.75659499980975,
+              "count": 3,
+              "rtfx": 151.73928432184104
+            }
+          },
+          "quality": {
+            "literal_edits": 40,
+            "literal_characters": 532,
+            "repository_edits": 22,
+            "repository_characters": 493,
+            "literal_cer": 0.07518796992481203,
+            "repository_cer": 0.04462474645030426
+          },
+          "rounds": [
+            {
+              "p50_ms": 80.68645799903607,
+              "p90_ms": 128.90250860036758,
+              "p99_ms": 151.59093836096872,
+              "count": 9,
+              "rtfx": 169.39677474680303
+            },
+            {
+              "p50_ms": 77.38229200003843,
+              "p90_ms": 125.16564159996052,
+              "p99_ms": 147.39750135988288,
+              "count": 9,
+              "rtfx": 176.03316899630153
+            },
+            {
+              "p50_ms": 88.4953749991837,
+              "p90_ms": 143.30275879947297,
+              "p99_ms": 165.87808807911642,
+              "count": 9,
+              "rtfx": 155.06033225589658
+            }
+          ],
+          "peak_memory_bytes": 447202384,
+          "load_ms": 144.0353749985661,
+          "first_request_ms": 186.07479099955526,
+          "stage_status": "unavailable",
+          "stages": {}
+        },
+        "candidate": {
+          "latency": {
+            "p50_ms": 77.65654099966923,
+            "p90_ms": 125.10343340072721,
+            "p99_ms": 146.13394363994303,
+            "count": 9,
+            "rtfx": 174.9178939843963
+          },
+          "strata": {
+            "10-20s": {
+              "p50_ms": 77.65654099966923,
+              "p90_ms": 104.0747082010057,
+              "p99_ms": 110.01879582130641,
+              "count": 3,
+              "rtfx": 171.82182630025113
+            },
+            "20-30s": {
+              "p50_ms": 119.26162500094506,
+              "p90_ms": 142.6288586000737,
+              "p99_ms": 147.88648615987768,
+              "count": 3,
+              "rtfx": 186.27693279770418
+            },
+            "6-10s": {
+              "p50_ms": 55.98499999905471,
+              "p90_ms": 60.376933599764016,
+              "p99_ms": 61.3651186599236,
+              "count": 3,
+              "rtfx": 153.38710750293555
+            }
+          },
+          "quality": {
+            "literal_edits": 40,
+            "literal_characters": 532,
+            "repository_edits": 22,
+            "repository_characters": 493,
+            "literal_cer": 0.07518796992481203,
+            "repository_cer": 0.04462474645030426
+          },
+          "rounds": [
+            {
+              "p50_ms": 77.65654099966923,
+              "p90_ms": 125.12985000066692,
+              "p99_ms": 146.25545999966562,
+              "count": 9,
+              "rtfx": 177.0862387347987
+            },
+            {
+              "p50_ms": 77.41974999953527,
+              "p90_ms": 124.47283280089324,
+              "p99_ms": 143.55028327998298,
+              "count": 9,
+              "rtfx": 174.30205645346348
+            },
+            {
+              "p50_ms": 80.32224999988102,
+              "p90_ms": 127.7181006003957,
+              "p99_ms": 146.39541035990987,
+              "count": 9,
+              "rtfx": 172.82766158748814
+            }
+          ],
+          "peak_memory_bytes": 457196624,
+          "load_ms": 143.34758400036662,
+          "first_request_ms": 166.9175830011227,
+          "stage_status": "unavailable",
+          "stages": {}
+        }
+      },
+      "comparisons": {
+        "relative": {
+          "text_changed": 0,
+          "public_tokens_changed": 0,
+          "segments_changed": 0,
+          "literal_better": 0,
+          "literal_worse": 0,
+          "literal_equal": 9,
+          "repository_better": 0,
+          "repository_worse": 0,
+          "repository_equal": 9,
+          "count": 9,
+          "median_latency_ratio": 0.9727688625477151,
+          "latency_rounds": [
+            {
+              "round": 0,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 1,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 2,
+              "count": 9,
+              "text_changed": 0
+            }
+          ],
+          "latency_text_changed": 0,
+          "latency_text_comparisons": 27,
+          "latency_reduction_percent": 2.7231137452284893
+        }
+      }
+    },
+    "q8_0": {
+      "sides": {
+        "baseline": {
+          "latency": {
+            "p50_ms": 75.20341699819255,
+            "p90_ms": 120.91147500068473,
+            "p99_ms": 141.99973500079068,
+            "count": 9,
+            "rtfx": 181.7975127102114
+          },
+          "strata": {
+            "10-20s": {
+              "p50_ms": 75.20341699819255,
+              "p90_ms": 98.52071699970111,
+              "p99_ms": 103.76710950004053,
+              "count": 3,
+              "rtfx": 179.08609239450013
+            },
+            "20-30s": {
+              "p50_ms": 115.0536250006553,
+              "p90_ms": 138.485025000773,
+              "p99_ms": 143.7570900007995,
+              "count": 3,
+              "rtfx": 193.49319956744375
+            },
+            "6-10s": {
+              "p50_ms": 54.74275000051421,
+              "p90_ms": 58.482516400181346,
+              "p99_ms": 59.323963840106444,
+              "count": 3,
+              "rtfx": 158.94719663800748
+            }
+          },
+          "quality": {
+            "literal_edits": 39,
+            "literal_characters": 532,
+            "repository_edits": 21,
+            "repository_characters": 493,
+            "literal_cer": 0.07330827067669173,
+            "repository_cer": 0.04259634888438134
+          },
+          "rounds": [
+            {
+              "p50_ms": 75.03708300100698,
+              "p90_ms": 120.63590859943362,
+              "p99_ms": 141.9721783606656,
+              "count": 9,
+              "rtfx": 181.70604189810737
+            },
+            {
+              "p50_ms": 75.20341699819255,
+              "p90_ms": 120.61866660042142,
+              "p99_ms": 140.65281635957945,
+              "count": 9,
+              "rtfx": 182.4197581987854
+            },
+            {
+              "p50_ms": 75.46408400048676,
+              "p90_ms": 121.33181659919501,
+              "p99_ms": 142.49375636100012,
+              "count": 9,
+              "rtfx": 181.62611638740685
+            }
+          ],
+          "peak_memory_bytes": 749864256,
+          "load_ms": 181.98887500147976,
+          "first_request_ms": 162.179124999966,
+          "stage_status": "unavailable",
+          "stages": {}
+        },
+        "candidate": {
+          "latency": {
+            "p50_ms": 75.85012500021548,
+            "p90_ms": 126.05815879978763,
+            "p99_ms": 147.57652807915292,
+            "count": 9,
+            "rtfx": 176.77122500218044
+          },
+          "strata": {
+            "10-20s": {
+              "p50_ms": 75.85012500021548,
+              "p90_ms": 102.04855860029056,
+              "p99_ms": 107.94320616030745,
+              "count": 3,
+              "rtfx": 175.13035854992432
+            },
+            "20-30s": {
+              "p50_ms": 120.08083399996394,
+              "p90_ms": 143.9901331992587,
+              "p99_ms": 149.36972551910003,
+              "count": 3,
+              "rtfx": 185.7028353605807
+            },
+            "6-10s": {
+              "p50_ms": 54.79416699927242,
+              "p90_ms": 58.67816700010736,
+              "p99_ms": 59.55206700029521,
+              "count": 3,
+              "rtfx": 157.98109931286393
+            }
+          },
+          "quality": {
+            "literal_edits": 39,
+            "literal_characters": 532,
+            "repository_edits": 21,
+            "repository_characters": 493,
+            "literal_cer": 0.07330827067669173,
+            "repository_cer": 0.04259634888438134
+          },
+          "rounds": [
+            {
+              "p50_ms": 75.85012500021548,
+              "p90_ms": 126.10652439943806,
+              "p99_ms": 147.58136463911796,
+              "count": 9,
+              "rtfx": 176.9348723544247
+            },
+            {
+              "p50_ms": 76.38041700010945,
+              "p90_ms": 124.2155082003592,
+              "p99_ms": 147.2921389200928,
+              "count": 9,
+              "rtfx": 177.7898022089829
+            },
+            {
+              "p50_ms": 74.32150000022375,
+              "p90_ms": 126.14885059992959,
+              "p99_ms": 147.99371035980585,
+              "count": 9,
+              "rtfx": 175.9377688020826
+            }
+          ],
+          "peak_memory_bytes": 750355752,
+          "load_ms": 194.1062919995602,
+          "first_request_ms": 169.18145900126547,
+          "stage_status": "unavailable",
+          "stages": {}
+        }
+      },
+      "comparisons": {
+        "relative": {
+          "text_changed": 0,
+          "public_tokens_changed": 0,
+          "segments_changed": 0,
+          "literal_better": 0,
+          "literal_worse": 0,
+          "literal_equal": 9,
+          "repository_better": 0,
+          "repository_worse": 0,
+          "repository_equal": 9,
+          "count": 9,
+          "median_latency_ratio": 1.015627380212292,
+          "latency_rounds": [
+            {
+              "round": 0,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 1,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 2,
+              "count": 9,
+              "text_changed": 0
+            }
+          ],
+          "latency_text_changed": 0,
+          "latency_text_comparisons": 27,
+          "latency_reduction_percent": -1.562738021229193
+        }
+      }
+    },
+    "f16": {
+      "sides": {
+        "baseline": {
+          "latency": {
+            "p50_ms": 74.01183300135017,
+            "p90_ms": 121.52805040095701,
+            "p99_ms": 142.302330640523,
+            "count": 9,
+            "rtfx": 182.16170495280898
+          },
+          "strata": {
+            "10-20s": {
+              "p50_ms": 74.01183300135017,
+              "p90_ms": 98.48623299949395,
+              "p99_ms": 103.9929729990763,
+              "count": 3,
+              "rtfx": 180.88400740382085
+            },
+            "20-30s": {
+              "p50_ms": 115.75741700107756,
+              "p90_ms": 138.83995060059533,
+              "p99_ms": 144.03352066048683,
+              "count": 3,
+              "rtfx": 191.74061538890516
+            },
+            "6-10s": {
+              "p50_ms": 53.39037500016275,
+              "p90_ms": 57.633308599906734,
+              "p99_ms": 58.58796865984914,
+              "count": 3,
+              "rtfx": 161.48019182356134
+            }
+          },
+          "quality": {
+            "literal_edits": 39,
+            "literal_characters": 532,
+            "repository_edits": 21,
+            "repository_characters": 493,
+            "literal_cer": 0.07330827067669173,
+            "repository_cer": 0.04259634888438134
+          },
+          "rounds": [
+            {
+              "p50_ms": 73.49100000101316,
+              "p90_ms": 119.76257520000217,
+              "p99_ms": 141.30149472010086,
+              "count": 9,
+              "rtfx": 184.89835949564053
+            },
+            {
+              "p50_ms": 74.01183300135017,
+              "p90_ms": 121.52805040095701,
+              "p99_ms": 142.302330640523,
+              "count": 9,
+              "rtfx": 182.47356797250958
+            },
+            {
+              "p50_ms": 78.27520800128696,
+              "p90_ms": 126.91299179969064,
+              "p99_ms": 147.0945622806175,
+              "count": 9,
+              "rtfx": 174.79204281346443
+            }
+          ],
+          "peak_memory_bytes": 1350403752,
+          "load_ms": 262.46379199983494,
+          "first_request_ms": 162.3909169993567,
+          "stage_status": "unavailable",
+          "stages": {}
+        },
+        "candidate": {
+          "latency": {
+            "p50_ms": 72.87020799958555,
+            "p90_ms": 122.25165859999834,
+            "p99_ms": 143.07537835862604,
+            "count": 9,
+            "rtfx": 182.20999909472445
+          },
+          "strata": {
+            "10-20s": {
+              "p50_ms": 72.87020799958555,
+              "p90_ms": 98.51400879961149,
+              "p99_ms": 104.28386397961731,
+              "count": 3,
+              "rtfx": 181.12209628522228
+            },
+            "20-30s": {
+              "p50_ms": 116.46729200037953,
+              "p90_ms": 139.60475839885476,
+              "p99_ms": 144.81068833851168,
+              "count": 3,
+              "rtfx": 192.24519411410463
+            },
+            "6-10s": {
+              "p50_ms": 53.839042000618065,
+              "p90_ms": 58.35297480007284,
+              "p99_ms": 59.36860967995017,
+              "count": 3,
+              "rtfx": 160.37390703178338
+            }
+          },
+          "quality": {
+            "literal_edits": 39,
+            "literal_characters": 532,
+            "repository_edits": 21,
+            "repository_characters": 493,
+            "literal_cer": 0.07330827067669173,
+            "repository_cer": 0.04259634888438134
+          },
+          "rounds": [
+            {
+              "p50_ms": 72.35741700060316,
+              "p90_ms": 122.25165859999834,
+              "p99_ms": 143.07537835862604,
+              "count": 9,
+              "rtfx": 183.61922416352363
+            },
+            {
+              "p50_ms": 72.87020799958555,
+              "p90_ms": 121.5295255988167,
+              "p99_ms": 142.704065358339,
+              "count": 9,
+              "rtfx": 182.55697836546577
+            },
+            {
+              "p50_ms": 73.63670899940189,
+              "p90_ms": 122.71096720069181,
+              "p99_ms": 143.95054672029804,
+              "count": 9,
+              "rtfx": 181.10587736919024
+            }
+          ],
+          "peak_memory_bytes": 1338066672,
+          "load_ms": 263.3276670003397,
+          "first_request_ms": 161.4512090000062,
+          "stage_status": "unavailable",
+          "stages": {}
+        }
+      },
+      "comparisons": {
+        "relative": {
+          "text_changed": 0,
+          "public_tokens_changed": 0,
+          "segments_changed": 0,
+          "literal_better": 0,
+          "literal_worse": 0,
+          "literal_equal": 9,
+          "repository_better": 0,
+          "repository_worse": 0,
+          "repository_equal": 9,
+          "count": 9,
+          "median_latency_ratio": 1.005383706893793,
+          "latency_rounds": [
+            {
+              "round": 0,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 1,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 2,
+              "count": 9,
+              "text_changed": 0
+            }
+          ],
+          "latency_text_changed": 0,
+          "latency_text_comparisons": 27,
+          "latency_reduction_percent": -0.5383706893792972
+        }
+      }
+    }
+  },
+  "builds": {
+    "baseline": {
+      "speech": {
+        "sha256": "fb4bdd92921181319a073c2a4c0385737c059e58b839a45049ffc384a8553efb",
+        "artifact_path": "001b/binaries/speech"
+      },
+      "source_commit": "b130c22619024f47425a8ae13e56d22a784e7d34",
+      "ggml_base_commit": "ba747f41f8e865dd6c4f524ceea88584c9cd6648",
+      "ggml_diff_sha256": "ff49df4fc9f4a827f841a1ed9adfb606aff6953411264d344518dbf804b377ef",
+      "source_verified": false,
+      "provenance": "Built locally from the recorded base plus the preserved experimental diff before committing; binary identity is verified for each worker.",
+      "ggml_commit": "78daa836bbead8272bf066de4f481357bf518ed4",
+      "stage_tool": {
+        "sha256": "d1f7dd5d34650db2c2efab9d1e39775d9e9e877ffef29274409cc4fcb8bdc813",
+        "artifact_path": "001b/binaries/fastconformer-timing"
+      },
+      "build_flags": [
+        "CMAKE_BUILD_TYPE:STRING=Release",
+        "GGML_METAL:BOOL=ON",
+        "GGML_NATIVE:BOOL=ON"
+      ]
+    },
+    "candidate": {
+      "speech": {
+        "sha256": "fb4bdd92921181319a073c2a4c0385737c059e58b839a45049ffc384a8553efb",
+        "artifact_path": "001b/binaries/speech"
+      },
+      "source_commit": "b130c22619024f47425a8ae13e56d22a784e7d34",
+      "ggml_base_commit": "ba747f41f8e865dd6c4f524ceea88584c9cd6648",
+      "ggml_diff_sha256": "ff49df4fc9f4a827f841a1ed9adfb606aff6953411264d344518dbf804b377ef",
+      "source_verified": false,
+      "provenance": "Built locally from the recorded base plus the preserved experimental diff before committing; binary identity is verified for each worker.",
+      "ggml_commit": "78daa836bbead8272bf066de4f481357bf518ed4",
+      "stage_tool": {
+        "sha256": "d1f7dd5d34650db2c2efab9d1e39775d9e9e877ffef29274409cc4fcb8bdc813",
+        "artifact_path": "001b/binaries/fastconformer-timing"
+      },
+      "build_flags": [
+        "CMAKE_BUILD_TYPE:STRING=Release",
+        "GGML_METAL:BOOL=ON",
+        "GGML_NATIVE:BOOL=ON"
+      ]
+    }
+  },
+  "execution_environments": {
+    "baseline": {
+      "GGML_METAL_MM_TILE_N": "32"
+    },
+    "candidate": {
+      "GGML_METAL_MM_TILE_N": "16"
+    }
+  },
+  "models": {
+    "q4_k": {
+      "type": "q4_k",
+      "size": 351901216,
+      "sha256": "d24d53f29b75214a933ff482b0de1217e0a800f4118cca39ad6cf03609a89d6f",
+      "revision": "6b965d5007ba780585de51549d57a8c1c0d67c7e"
+    },
+    "q8_0": {
+      "type": "q8_0",
+      "size": 656381472,
+      "sha256": "cd5f60b2f1c411404b83fca4a65e3ce30a26d9e951b6a346529e65f22758afeb",
+      "revision": "6b965d5007ba780585de51549d57a8c1c0d67c7e"
+    },
+    "f16": {
+      "type": "f16",
+      "size": 1233128832,
+      "sha256": "f752e02f68c1dfff795900e40aa82e5302976fb5360080fcbd330d8b3c992cd8",
+      "revision": "6b965d5007ba780585de51549d57a8c1c0d67c7e"
+    }
+  },
+  "input_hash": "aed313bef7c4390bef71aa262dc2f6be3bd578bb8fb4fe9363549be2e2a1c70a",
+  "assets_sha256": "e82d03c053c861f4943907d67f28e191431f84706429b324e80368adf6808581",
+  "implementation_checkpoint": {
+    "speech_cpp": "eea78cd01b9864b071135d36efc860b005f88439",
+    "ggml": "78daa836bbead8272bf066de4f481357bf518ed4",
+    "tested_source_matches_checkpoint": true,
+    "tested_source_sha256": {
+      "src/ggml-metal/ggml-metal-device.cpp": "db5503ad5fdbcccba79fafe265cf7f3ed46b1b63b2a8ddbd80f331313d78b282",
+      "src/ggml-metal/kernels/mul_mm.metal": "afd9988e0f5a861a5285030eb42f3dc300775e8af2840df543e2dfd84e011b96",
+      "tests/test-backend-ops.cpp": "53aa23d0dc9cd2fb1a57fbc44c2073064c152fe02944b0676b0a6429d3817f98",
+      "tests/test-metal-mm-tile.cpp": "18ceb04bc8cd799ade39f7dd39d7f174a806231a0fd7af1ac4680c85cf9a33df",
+      "tests/CMakeLists.txt": "6b04e10689b4a617dfffca4c2b84e59967490f99851b3d1549d1e4b983b705fe"
+    },
+    "integrated": false
+  },
+  "product_summary": {
+    "unchanged_control_shapes": 20,
+    "localized_observation": "At N=172, F16 down/projection improve 6.6%/6.2%; at N=38 they improve 3.3%/1.5%. These observations are not a measured shape-selection policy.",
+    "method": "Five alternating rounds in one process; the same MUL_MAT product repeats 64 times into the same output buffer with write-after-write dependencies; same input buffers; wall time includes encoding/submission/synchronization; compilation and warmup excluded.",
+    "target_shapes": 28,
+    "rounds": 5,
+    "median_shape_latency_ratio": {
+      "f16": 1.0461999415375622,
+      "q8_0": 1.0843925360747493
+    }
+  },
+  "evidence": {
+    "directory": "001b",
+    "run_manifest_sha256": "93567804b4784aba11ed200e69cb4a928109c811bb4b096ab8ae9f529ee01138",
+    "source_trial_sha256": "e96aa1a636c71c0c8a5aba304c8dca875ebbd2ccf7e041b9862c60c1d1170ac9",
+    "evidence_manifest_sha256": "642f146028a1b428bff8933e1d0d50229d39dd5085b09c8df7e90e67e7250472",
+    "preparation_script_sha256": "03d1b08dac75a299f4e7b3ede136af80a5fbf281ac030cbc41bf8f54fcbd8ab1",
+    "source_paths": [
+      "product-timing.jsonl",
+      "product-summary.json",
+      "direct-comparison.jsonl",
+      "asr-subset/summary.json",
+      "tested-manifest.json",
+      "runner-snapshot.json",
+      "checks.json"
+    ],
+    "paths_relative_to": "External campaign artifact directory supplied to compare.py record."
+  },
+  "checks": [
+    {
+      "name": "001a experimental 32-column shader against CPU reference",
+      "status": "passed",
+      "cases": 156,
+      "evidence": "001b/backend-before32.log",
+      "scope": "mac",
+      "required": true
+    },
+    {
+      "name": "001b 16-column selection against CPU reference",
+      "status": "passed",
+      "cases": 156,
+      "target_cases": 96,
+      "unchanged_controls": 60,
+      "evidence": "001b/backend-after16.log",
+      "reason": "96 F16/Q8_0 target cases and 66 unchanged-path control cases.",
+      "scope": "mac",
+      "required": true
+    },
+    {
+      "name": "001b experimental 32 vs 16 on identical input buffers",
+      "status": "passed",
+      "target_cases": 96,
+      "unchanged_controls": 66,
+      "maximum_absolute_difference": 0,
+      "evidence": "001b/direct-comparison.jsonl",
+      "scope": "mac",
+      "reason": "Controls comprise 52 M4096 cases, eight M1024 N<=16 cases and six Q4_K cases. Only 96 M1024 F16/Q8_0 cases select 16 columns. This does not compare the original upstream shader.",
+      "required": true
+    },
+    {
+      "name": "Unchanged-path regression cases",
+      "status": "passed",
+      "cases": 58,
+      "evidence": "001b/backend-regressions.log",
+      "scope": "mac",
+      "required": true
+    },
+    {
+      "name": "Nine-utterance public text/token/segment equality",
+      "status": "passed",
+      "comparisons": 27,
+      "evidence": "001b/asr-subset/summary.json",
+      "scope": "mac",
+      "required": true
+    },
+    {
+      "name": "Original e1a9 shader versus no-switch production patch",
+      "status": "unavailable",
+      "reason": "No production patch is proposed; direct original-shader comparison remains required for adoption.",
+      "scope": "mac",
+      "required": true
+    },
+    {
+      "name": "Official FastConformer reference stage checks",
+      "status": "unavailable",
+      "reason": "Official reference tensors are not available for this bounded experiment.",
+      "scope": "mac",
+      "required": true
+    },
+    {
+      "name": "Windows Vulkan cases, stage checks and timings",
+      "status": "unavailable",
+      "reason": "No Windows machine or reference dumps are available for this bounded experiment.",
+      "scope": "windows",
+      "required": true
+    },
+    {
+      "name": "Fixed-anchor full 650 quality comparison",
+      "status": "skipped",
+      "required": false,
+      "reason": "The fixed 16 variant does not establish a gain; no adoption is proposed.",
+      "scope": "mac"
+    }
+  ],
+  "updated_utc": "2026-11-06T17:55:14.329337+00:00"
+}

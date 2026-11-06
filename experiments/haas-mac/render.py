@@ -80,7 +80,7 @@ def report_html(entry, filename, campaign, trials=()):
     if trials:
         body += '<h2>Recorded variants</h2><p>A rejected variant does not close the whole measure.</p>'
         body += table(['Trial', 'Verdict', 'Reason'], [[f'<a href="{text(p.with_suffix(".html").name)}">{text(e["measure_id"])} · {text(e["title"])}</a>', badge(e['status']), text(e['reason'])] for p, e in trials])
-    if not entry.get('types'):
+    if not entry.get('types') and not trials:
         body += '<section class="panel"><h2>Evidence</h2><p>No new measurement is recorded. Pending work is not a measured failure or a speed-up.</p></section>'
     for kind, profile in entry.get('types', {}).items():
         sides = profile['sides']
