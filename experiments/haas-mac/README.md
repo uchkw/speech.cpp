@@ -40,8 +40,9 @@ For a switchable prototype, pass the same build manifest on both sides and recor
 `--baseline-env GGML_METAL_MM_TILE_N=32 --candidate-env GGML_METAL_MM_TILE_N=64`.
 Only named campaign variables are allowed. The source-verified runner refuses an inherited experiment variable
 that the invocation does not record. The CPU prepacking prototype uses `SPEECH_HAAS_CPU_REPACK=0` and `=1` on its two
-sides; the selective FFN dequantization prototype uses `SPEECH_HAAS_FFN_F16=0` and `=1`. Both switches require these
-explicit binary values. Build manifests retain their configure/build commands; public reports preserve their flags without source or
+sides; the selective FFN dequantization prototype uses `SPEECH_HAAS_FFN_F16=0` and `=1`, and the TDT resident-state
+prototype uses `SPEECH_HAAS_TDT_RESIDENT_STATE=0` and `=1`. These switches require explicit binary values.
+Build manifests retain their configure/build commands; public reports preserve their flags without source or
 build directory paths. The adopted implementation must be rebuilt without experiment switches and
 measured again. An exploratory result without a verified build manifest may be imported as a rejected or conditional
 trial, with its original provenance and evidence hashes; it must not be relabeled as a verified build.
