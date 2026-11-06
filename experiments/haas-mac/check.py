@@ -126,12 +126,16 @@ def main():
     refused(lambda: compare.environment(['HOME=elsewhere']), 'An unrelated environment variable was accepted.')
     assert compare.environment(['GGML_METAL_MM_TILE_N=64'])['GGML_METAL_MM_TILE_N'] == '64'
     for key in ['SPEECH_HAAS_CPU_REPACK', 'SPEECH_HAAS_FFN_F16', 'SPEECH_HAAS_TDT_RESIDENT_STATE',
-                'SPEECH_HAAS_TDT_JOINT_REUSE', 'SPEECH_HAAS_TDT_CPU_PLAN', 'SPEECH_HAAS_ENCODER_QKV']:
+                'SPEECH_HAAS_TDT_JOINT_REUSE', 'SPEECH_HAAS_TDT_CPU_PLAN', 'SPEECH_HAAS_ENCODER_QKV',
+                'GGML_METAL_MM_SILU']:
         for value in ['0', '1']:
             assert compare.environment([f'{key}={value}'])[key] == value
         refused(lambda: compare.environment([f'{key}=2']), 'An invalid binary switch was accepted.', expected='0 or 1')
-        with patch.dict(compare.os.environ, {key: '1'}):
-            refused(lambda: compare.environment([]), 'An inherited switch was not recorded.', expected='inherited')
+        for value in ['0', '1']:
+            with patch.dict(compare.os.environ, {key: value}):
+                refused(lambda: compare.environment([]), 'An inherited switch was not recorded.', expected='inherited')
+                assert compare.environment([f'{key}=0'])[key] == '0'
+                assert compare.environment([f'{key}=1'])[key] == '1'
     subset = [{'file': f'{group}-{i}', 'seconds': seconds + i / 10, 'stratum': group}
               for group, seconds in [('6-10s', 6), ('10-20s', 10), ('20-30s', 20)] for i in range(10)]
     selected = compare.screen_inputs(list(reversed(subset)))
