@@ -52,6 +52,13 @@ def check(root):
     manifest['conditions']['runner_sha256']['worker.py'] = 'changed'; save_primary()
     refused(lambda: repeat.primary(args), 'identical primary frozen runner source: worker.py')
     manifest['conditions']['runner_sha256']['worker.py'] = original; save_primary()
+    with patch.object(repeat, 'source_identity', return_value={'commit': 'fixture'}), patch.object(repeat, 'run_worker') as launch:
+        for side in ['baseline', 'candidate']:
+            manifest['builds'][side] = {**build, 'performance_evaluation_eligible': False}; save_primary()
+            refused(lambda: repeat.run(args), 'performance_evaluation_eligible=false')
+            launch.assert_not_called()
+            assert not Path(args.out).exists()
+            manifest['builds'][side] = build; save_primary()
     with patch.object(repeat.platform, 'python_version', return_value='different'):
         refused(lambda: repeat.primary(args), 'recorded Python')
     with patch.dict(compare.os.environ, {'GGML_METAL_FUSION_DISABLE': '0'}):

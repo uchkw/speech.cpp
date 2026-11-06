@@ -110,6 +110,7 @@ def primary(path, data):
         raise ValueError('The primary comparison must retain the three-round 30/650 CPU-decoder campaign conditions.')
     for side in ['baseline', 'candidate']:
         build = manifest['builds'][side]
+        compare.require_evaluation_build(build)
         if not build['source_verified'] or compare.sha(build['speech']['path']) != build['speech']['sha256']:
             raise ValueError('Every supplement binary must match its verified primary build.')
         environment = manifest['execution_environments'][side]

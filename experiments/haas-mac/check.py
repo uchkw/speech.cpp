@@ -45,6 +45,32 @@ def environment_launch_checks():
                 git.assert_not_called()
 
 
+def performance_build_checks(root):
+    root.mkdir()
+    binary = root / 'binary'; binary.write_bytes(b'fixture')
+    identity = {'path': str(binary), 'sha256': compare.sha(binary)}
+    build = {'source_verified': True, 'source_commit': 'fixture', 'speech': identity,
+             'stage_tool': identity, 'stage_threads_argument': True}
+    rows = [{'file': f'{group}-{i}', 'seconds': seconds, 'stratum': group}
+            for group, seconds in [('6-10s', 6), ('10-20s', 12), ('20-30s', 24)] for i in range(10)]
+    assets = root / 'assets.json'
+    compare.write(assets, {'models': [{**identity, 'type': 'q4_k'}], 'stages': [], 'subset': rows,
+                          'input_hash': 'fixture', 'source_environment': {'hardware': {}}})
+    paths = {side: root / f'{side}.json' for side in ['baseline', 'candidate', 'anchor']}
+    for side in paths:
+        for name, path in paths.items():
+            compare.write(path, {**build, **({'performance_evaluation_eligible': False} if name == side else {})})
+        args = SimpleNamespace(out=root / f'refused-{side}', assets=assets, baseline=paths['baseline'],
+                               candidate=paths['candidate'], anchor=paths['anchor'], baseline_env=[],
+                               candidate_env=[], anchor_env=[], smoke=False, screen=True, types='q4_k',
+                               quality_policy='exact', measure='fixture')
+        with patch.object(compare, 'locked', side_effect=AssertionError('An ineligible build reached a worker launch.')) as launch, \
+                patch.object(compare.subprocess, 'check_output', return_value='fixture'):
+            refused(lambda: compare.run_comparison(args), 'An instrumented build was evaluated.', expected='performance_evaluation_eligible=false')
+            launch.assert_not_called()
+            assert not Path(args.out).exists()
+
+
 class Links(HTMLParser):
     def __init__(self):
         super().__init__(); self.hrefs = []
@@ -170,6 +196,7 @@ def main():
     assert [r['file'] for r in selected] == [f'{group}-{i}' for group in ['6-10s', '10-20s', '20-30s'] for i in [0, 4, 9]]
     assert compare.percentile([1., 4., 9.], .9) == 8.
     with tempfile.TemporaryDirectory(prefix='haas-campaign-check-') as temporary:
+        performance_build_checks(Path(temporary) / 'performance-builds')
         from worker_check import check as check_worker_threads
         check_worker_threads(Path(temporary) / 'worker-threads')
         review_regressions(Path(temporary))

@@ -65,6 +65,14 @@ def check(root):
     manifest['conditions']['runner_sha256']['worker.py'] = 'different-timer'; save_primary()
     refused(lambda: short.primary(primary, data), 'same worker timer source')
     manifest['conditions']['runner_sha256']['worker.py'] = timer; save_primary()
+    with patch.object(short, 'run_worker') as launch:
+        for side in ['baseline', 'candidate']:
+            manifest['builds'][side] = {**build, 'performance_evaluation_eligible': False}; save_primary()
+            refused(lambda: short.run(SimpleNamespace(primary_run=primary, inputs=input_dir / 'inputs.json', out=root / 'ineligible')),
+                    'performance_evaluation_eligible=false')
+            launch.assert_not_called()
+            assert not (root / 'ineligible').exists()
+            manifest['builds'][side] = build; save_primary()
     with patch.dict(compare.os.environ, {'GGML_METAL_FUSION_DISABLE': '0'}):
         refused(lambda: short.primary(primary, data), 'inherited')
     changed = compare.read(input_dir / 'inputs.json'); changed['records'][0]['reference'] = 'full recording'

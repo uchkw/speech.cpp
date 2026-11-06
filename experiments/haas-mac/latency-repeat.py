@@ -46,6 +46,7 @@ def primary(args):
         raise ValueError('Repeat the original 30 unique recordings, ten per duration stratum, not the six prefixes.')
     for side in SIDES:
         build = manifest['builds'][side]
+        compare.require_evaluation_build(build)
         if not build['source_verified'] or compare.sha(build['speech']['path']) != build['speech']['sha256']:
             raise ValueError('Every repeat binary must match its verified primary build.')
         compare.execution_environment(manifest['execution_environments'][side])

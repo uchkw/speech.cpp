@@ -26,7 +26,7 @@ import sys
 import unicodedata
 
 sys.dont_write_bytecode = True
-from worker import execution_environment
+from worker import execution_environment, require_evaluation_build
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
@@ -303,6 +303,7 @@ def run_comparison(args):
                         'speech_sha256': anchor['speech']['sha256'], 'environment': anchor_environment,
                         'build_manifest_sha256': sha(args.anchor)}
     for b in manifests_to_verify:
+        require_evaluation_build(b)
         if not b.get('source_verified') or any(sha(b[k]['path']) != b[k]['sha256'] for k in ['speech', 'stage_tool']):
             raise ValueError('Every binary must match a verified build manifest.')
         if not (args.smoke or args.screen) and not b['stage_threads_argument']:

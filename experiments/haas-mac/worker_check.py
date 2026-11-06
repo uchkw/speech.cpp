@@ -18,8 +18,9 @@ def check(root):
     base = {'environment': {}, 'build': {'speech': identity}, 'model': {**identity, 'type': 'fixture'},
             'phase': 'latency', 'round': 0, 'side': 'fixture', 'warmup': [record], 'records': [record]}
 
-    def launch(name, requested, expected, resolved, accepted):
-        spec = {**base, 'threads': requested, 'directory': str(root / name)}
+    def launch(name, requested, expected, resolved, accepted, phase='latency', build_flags=None):
+        spec = {**base, 'threads': requested, 'directory': str(root / name), 'phase': phase,
+                'build': {**base['build'], **(build_flags or {})}}
         if expected is not None:
             spec['expected_threads'] = expected
         sent = []
@@ -45,6 +46,7 @@ def check(root):
             if accepted:
                 worker.run(spec)
                 report = json.loads((Path(spec['directory']) / 'result.json').read_text())
+                assert report['phase'] == phase and report['build'] == spec['build']
                 assert report['thread_selection'] == {
                     'requested_mode': 'explicit' if requested else 'auto', 'requested_threads': requested,
                     'expected_threads': expected if expected is not None else requested, 'resolved_threads': resolved}
@@ -62,6 +64,20 @@ def check(root):
         launch(f'pass-{requested}-{resolved}', requested, expected, resolved, True)
     for requested, expected, resolved in [(0, 4, 16), (16, None, 4), (4, None, None), (4, None, True)]:
         launch(f'refuse-{requested}-{resolved}', requested, expected, resolved, False)
+    for phase in ['latency', 'quality', 'diagnostic']:
+        with patch.object(worker.subprocess, 'Popen') as start:
+            try:
+                worker.run({**base, 'phase': phase, 'threads': 4, 'directory': str(root / 'ineligible'),
+                            'build': {**base['build'], 'performance_evaluation_eligible': False}})
+            except ValueError as error:
+                assert 'performance_evaluation_eligible=false' in str(error), error
+            else:
+                raise AssertionError('An ineligible build reached evaluation.')
+            start.assert_not_called()
+            assert not (root / 'ineligible').exists()
+    launch('training-only', 4, None, 4, True, 'pgo_train',
+           {'instrumented': True, 'performance_evaluation_eligible': False})
+    launch('eligible', 4, None, 4, True, build_flags={'performance_evaluation_eligible': True})
     for values, reason in [({'threads': 0}, 'expected_threads'), ({'threads': -1}, 'threads'),
                            ({'threads': True}, 'threads'), ({'threads': 0, 'expected_threads': 0}, 'expected_threads'),
                            ({'threads': 4, 'expected_threads': 16}, 'explicit thread')]:

@@ -36,8 +36,16 @@ def execution_environment(recorded):
     return {**os.environ, **recorded}
 
 
+def require_evaluation_build(build):
+    """Reject a build explicitly reserved for profile training before any evaluation launch."""
+    if build.get('performance_evaluation_eligible') is False:
+        raise ValueError('A build marked performance_evaluation_eligible=false cannot run an evaluation; use the dedicated pgo_train driver.')
+
+
 def run(spec):
     child_environment = execution_environment(spec['environment'])
+    if spec['phase'] != 'pgo_train':
+        require_evaluation_build(spec['build'])
     threads = spec['threads']
     if type(threads) is not int or threads < 0:
         raise ValueError('threads must be a nonnegative integer; use 0 to omit the CLI option.')

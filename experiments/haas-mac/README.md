@@ -22,6 +22,9 @@ python3 -B experiments/haas-mac/compare.py run --measure 001a \
 and Metal enabled, at four compile jobs, and hashes both executables. Build and inference commands hold
 `/private/tmp/speech-haas-mac-perf.lock`. Do not compile outside that lock while a timing run is active.
 The output directories must be new. No command downloads assets, installs packages, pushes or changes an app setting.
+Performance drivers reject any build manifest explicitly marked `performance_evaluation_eligible=false`, including
+an otherwise identical fixed anchor. The worker permits such a build only for the dedicated `pgo_train` phase.
+Existing manifests without that field retain their previous behavior. Training measurements are not evaluation results.
 
 The default comparison uses four CPU decoder threads, 30 duration-stratified inputs over three alternating rounds,
 and a separate 650-input quality run with timestamps. Every latency input is warmed once in each fresh worker.
