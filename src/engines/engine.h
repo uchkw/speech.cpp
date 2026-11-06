@@ -358,6 +358,8 @@ void make_drama3_voice(const std::string & model_path, const VoiceRecipe & recip
 
 FamilyInfo describe_fastconformer(const std::shared_ptr<const ModelFile> & file);
 std::unique_ptr<Engine> load_fastconformer(const std::string & path, ggml_backend_t backend, int threads);
+/** Resolves the family's unset CPU thread preference before its engine or backend is created. */
+int fastconformer_auto_threads(const ModelFile & file, ggml_backend_dev_t device, int machine_default);
 
 FamilyInfo describe_qwen3_asr(const std::shared_ptr<const ModelFile> & file);
 std::unique_ptr<Engine> load_qwen3_asr(const std::string & path, ggml_backend_t backend, int threads);

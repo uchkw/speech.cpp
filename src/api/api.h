@@ -28,6 +28,8 @@ struct Family {
     FamilyInfo (*describe)(const std::shared_ptr<const ModelFile> & file);
     std::unique_ptr<Engine> (*load)(const std::string & path, ggml_backend_t backend, int threads);
     void (*make_voice)(const std::string & model_path, const VoiceRecipe & recipe, const std::string & voice_path, ggml_backend_t backend);
+    /** Selects an unset CPU thread preference from the machine default before any backend or engine is created. */
+    int (*auto_threads)(const ModelFile & file, ggml_backend_dev_t device, int machine_default) = nullptr;
 };
 
 /** The family of the model file at `path`, by its general.architecture; an architecture no family has throws. */

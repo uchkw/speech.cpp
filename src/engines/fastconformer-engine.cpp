@@ -1,4 +1,7 @@
+#include <algorithm>
 #include <cmath>
+#include <cstdlib>
+#include <cstring>
 #include <optional>
 #include <string>
 #include <vector>
@@ -155,4 +158,23 @@ FamilyInfo describe_fastconformer(const std::shared_ptr<const ModelFile> & file)
 
 std::unique_ptr<Engine> load_fastconformer(const std::string & path, ggml_backend_t backend, int threads) {
     return std::make_unique<FastConformerEngine>(path, backend, threads);
+}
+
+int fastconformer_auto_threads(const ModelFile & file, ggml_backend_dev_t device, int machine_default) {
+#ifdef __APPLE__
+    if (std::strcmp(ggml_backend_reg_name(ggml_backend_dev_backend_reg(device)), "MTL") != 0 ||
+        file.str("general.name") != "Haas-ja-v1.0" || file.str("fastconformer.decoder.prediction") != "kda") {
+        return machine_default;
+    }
+    const char * value = std::getenv("SPEECH_HAAS_AUTO_THREADS");
+    if (!value || std::strcmp(value, "0") == 0) return machine_default;
+    if (std::strcmp(value, "1") != 0) {
+        throw Error(Fault::InvalidArgument, "SPEECH_HAAS_AUTO_THREADS must be 0 or 1");
+    }
+    return std::min(4, machine_default);
+#else
+    (void) file;
+    (void) device;
+    return machine_default;
+#endif
 }

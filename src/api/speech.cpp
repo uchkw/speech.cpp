@@ -40,7 +40,7 @@ const Family families[] = {
     {SPEECH_TASK_SYNTHESIS, qwen3_tts_layout, describe_qwen3_tts, load_qwen3_tts, nullptr},
     {SPEECH_TASK_SYNTHESIS, irodori::model_layout, describe_irodori_tts, load_irodori_tts, make_irodori_tts_voice},
     {SPEECH_TASK_SYNTHESIS, drama3::model_layout, describe_drama3, load_drama3, make_drama3_voice},
-    {SPEECH_TASK_RECOGNITION, fastconformer::layout, describe_fastconformer, load_fastconformer, nullptr},
+    {SPEECH_TASK_RECOGNITION, fastconformer::layout, describe_fastconformer, load_fastconformer, nullptr, fastconformer_auto_threads},
     {SPEECH_TASK_RECOGNITION, qwen3_asr::layout, describe_qwen3_asr, load_qwen3_asr, nullptr},
     {SPEECH_TASK_RECOGNITION, nemotron_transcribe::layout, describe_nemotron_transcribe, load_nemotron_transcribe, nullptr},
     {SPEECH_TASK_DETECTION, silero_vad::layout, describe_silero_vad, load_silero_vad, nullptr},
@@ -465,7 +465,10 @@ speech_status speech_model_load(const char * path, const speech_load_params * pa
         auto m = std::make_unique<speech_model>();
         m->file = read_file_info(path);
         ggml_backend_dev_t device = find_device(p.device);
-        const int threads = p.threads > 0 ? p.threads : default_threads();
+        int threads = p.threads > 0 ? p.threads : default_threads();
+        if (p.threads == 0 && m->file->family->auto_threads) {
+            threads = m->file->family->auto_threads(*m->file->file, device, threads);
+        }
         m->backend.reset(start_device(device, threads));
         m->engine = m->file->family->load(path, m->backend.get(), threads);
         m->device = ggml_backend_dev_name(device);
