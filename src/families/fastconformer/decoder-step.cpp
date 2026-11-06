@@ -4,7 +4,8 @@
 
 namespace fastconformer {
 
-DecoderStep::DecoderStep(const PredictionNetwork & prediction, const Joint & joint, ggml_backend_t backend, int64_t frames)
+DecoderStep::DecoderStep(const PredictionNetwork & prediction, const Joint & joint, ggml_backend_t backend, int64_t frames,
+                         int tdt_blank)
     : backend_(backend), allocator_(ggml_gallocr_new(ggml_backend_get_default_buffer_type(backend)), ggml_gallocr_free) {
     if (!allocator_) throw Error(Fault::OutOfMemory, "cannot create a graph allocator");
     label_ = graph_.input(std::vector<int32_t>{0}, 1);
@@ -16,6 +17,7 @@ DecoderStep::DecoderStep(const PredictionNetwork & prediction, const Joint & joi
     graph_.output(logits_);
     graph_.output(predicted_);
     graph_.output(step_.state);
+    if (tdt_blank >= 0) argmax_ = TdtArgmax(graph_, logits_, tdt_blank, backend);
 }
 
 void DecoderStep::compute(int32_t label, const PredictionState & state, const std::vector<float> & frames) {

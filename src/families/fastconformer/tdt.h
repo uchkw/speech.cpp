@@ -29,6 +29,9 @@ public:
 
     int blank() const override { return blank_; }
 
+    /** Whether this experiment reduces the joint row on the requested decoding backend. */
+    bool uses_device_argmax(ggml_backend_t backend, bool boosted = false) const;
+
 private:
     Decoding run(const std::vector<float> & projected, ggml_backend_t backend, const DecodingProgress & progress, const Boost * boost) const;
 
@@ -37,6 +40,7 @@ private:
     int blank_;
     std::vector<int32_t> durations_;
     uint32_t max_symbols_;
+    bool device_argmax_;
 };
 
 }  // namespace fastconformer

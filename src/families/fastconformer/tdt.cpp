@@ -1,5 +1,7 @@
 #include "tdt.h"
 
+#include <cstdlib>
+#include <cstring>
 #include <memory>
 #include <stdexcept>
 
@@ -18,6 +20,14 @@ Allocator new_allocator(ggml_backend_t backend) {
     return a;
 }
 
+bool device_argmax_enabled(const ModelFile & model) {
+    if (model.str("general.name") != "Haas-ja-v1.0" || model.str("fastconformer.decoder.prediction") != "kda") return false;
+    const char * value = std::getenv("SPEECH_HAAS_TDT_DEVICE_ARGMAX");
+    if (!value || std::strcmp(value, "0") == 0) return false;
+    if (std::strcmp(value, "1") == 0) return true;
+    throw Error(Fault::InvalidArgument, "SPEECH_HAAS_TDT_DEVICE_ARGMAX must be 0 or 1");
+}
+
 }  // namespace
 
 TdtDecoder::TdtDecoder(const ModelFile & m, const PredictionNetwork & prediction, const Joint & joint)
@@ -25,7 +35,14 @@ TdtDecoder::TdtDecoder(const ModelFile & m, const PredictionNetwork & prediction
       joint_(joint),
       blank_((int) m.u32("fastconformer.decoder.blank_id")),
       durations_(m.i32_array("fastconformer.decoder.tdt.durations")),
-      max_symbols_(m.u32("fastconformer.decoder.tdt.max_symbols")) {}
+      max_symbols_(m.u32("fastconformer.decoder.tdt.max_symbols")),
+      device_argmax_(device_argmax_enabled(m)) {}
+
+bool TdtDecoder::uses_device_argmax(ggml_backend_t backend, bool boosted) const {
+    if (!device_argmax_ || boosted) return false;
+    const auto registry = ggml_backend_dev_backend_reg(ggml_backend_get_device(backend));
+    return std::strcmp(ggml_backend_reg_name(registry), "MTL") == 0;
+}
 
 Decoding TdtDecoder::decode(const std::vector<float> & projected, ggml_backend_t backend, const DecodingProgress & progress) const {
     return run(projected, backend, progress, nullptr);
@@ -46,7 +63,8 @@ Decoding TdtDecoder::run(const std::vector<float> & projected, ggml_backend_t ba
     };
     // The step's graph and the joint's alone keep an allocator each, so that neither is planned again when the
     // other runs.
-    DecoderStep step(prediction_, joint_, backend, 1);
+    const bool device_argmax = uses_device_argmax(backend, boost != nullptr);
+    DecoderStep step(prediction_, joint_, backend, 1, device_argmax ? blank_ : -1);
     const Allocator joint_allocator = new_allocator(backend);
 
     // The tree's bonus of each token from its state, which the tokens emitted so far reached, and the state each leads to.
@@ -81,13 +99,17 @@ Decoding TdtDecoder::run(const std::vector<float> & projected, ggml_backend_t ba
         state = step.state();
         const std::vector<float> prediction = step.prediction();
         std::vector<float> out;
-        step.logits(out);
+        TdtDecision decision{};
+        if (device_argmax) decision = step.decision();
+        else step.logits(out);
 
         int64_t label_frame;
         int32_t duration;
         for (;;) {
-            label = label_of(out.data());
-            duration = durations_[(size_t) first_argmax(out.data() + blank_ + 1, (int) durations_.size())];
+            label = device_argmax ? decision.label : label_of(out.data());
+            const int duration_index = device_argmax ? decision.duration_index :
+                                       first_argmax(out.data() + blank_ + 1, (int) durations_.size());
+            duration = durations_[(size_t) duration_index];
             if (label == blank_ && duration == 0) duration = 1;
             label_frame = t;
             t += duration;
@@ -95,9 +117,12 @@ Decoding TdtDecoder::run(const std::vector<float> & projected, ggml_backend_t ba
             Graph j(64);
             ggml_tensor * next = joint_.build(j.ctx(), j.input(frame(t), hidden), j.input(prediction, hidden));
             j.output(next);
+            TdtArgmax next_argmax;
+            if (device_argmax) next_argmax = TdtArgmax(j, next, blank_, backend);
             j.compute(backend, joint_allocator.get());
             d.graphs++;
-            out = Graph::read(next);
+            if (device_argmax) decision = next_argmax.read();
+            else out = Graph::read(next);
         }
         if (label == blank_) break;
         d.ids.push_back(label);

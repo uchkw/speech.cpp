@@ -110,6 +110,7 @@ add_library(fastconformer STATIC
     src/families/fastconformer/decoder-step.cpp
     src/families/fastconformer/decoder.cpp
     src/families/fastconformer/tdt.cpp
+    src/families/fastconformer/tdt-argmax.cpp
     src/families/fastconformer/boosting.cpp
     src/families/fastconformer/words.cpp
     src/families/fastconformer/alsd.cpp
@@ -439,6 +440,10 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
 endif()
 
 # The checks of FastConformer's stages.
+add_executable(fastconformer-tdt-argmax-check checks/fastconformer/fastconformer-tdt-argmax-check.cpp)
+target_include_directories(fastconformer-tdt-argmax-check PRIVATE checks)
+target_link_libraries(fastconformer-tdt-argmax-check PRIVATE fastconformer)
+
 foreach(stage frontend encoder transducer times sentencepiece)
     add_executable(fastconformer-${stage}-check checks/fastconformer/fastconformer-${stage}-check.cpp)
     target_include_directories(fastconformer-${stage}-check PRIVATE checks)

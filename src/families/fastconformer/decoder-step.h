@@ -3,19 +3,23 @@
 #include <memory>
 
 #include "transducer.h"
+#include "tdt-argmax.h"
 
 namespace fastconformer {
 
 /** A fixed-shape prediction and joint graph, reused with new labels, prediction states and encoder frames. */
 class DecoderStep {
 public:
-    DecoderStep(const PredictionNetwork & prediction, const Joint & joint, ggml_backend_t backend, int64_t frames);
+    /** A nonnegative tdt_blank adds token and duration argmax outputs for one frame. */
+    DecoderStep(const PredictionNetwork & prediction, const Joint & joint, ggml_backend_t backend, int64_t frames,
+                int tdt_blank = -1);
 
     /** Computes the next prediction and the joint at each of the given projected encoder frames. */
     void compute(int32_t label, const PredictionState & state, const std::vector<float> & frames);
     PredictionState state() const { return PredictionNetwork::read_state(step_); }
     std::vector<float> prediction() const { return Graph::read(predicted_); }
     void logits(std::vector<float> & out) const { Graph::read(logits_, out); }
+    TdtDecision decision() const { return argmax_.read(); }
 
 private:
     ggml_backend_t backend_;
@@ -27,6 +31,7 @@ private:
     ggml_tensor * predicted_;
     ggml_tensor * logits_;
     PredictionNetwork::Step step_;
+    TdtArgmax argmax_;
     bool allocated_ = false;
 };
 
