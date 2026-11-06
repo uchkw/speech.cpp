@@ -25,6 +25,11 @@ The output directories must be new. No command downloads assets, installs packag
 Performance drivers reject any build manifest explicitly marked `performance_evaluation_eligible=false`, including
 an otherwise identical fixed anchor. The worker permits such a build only for the dedicated `pgo_train` phase.
 Existing manifests without that field retain their previous behavior. Training measurements are not evaluation results.
+The `GGML_CPU_NORM_MUL_ADD_FUSION_TRACE` and `SPEECH_HAAS_WORKER_TRANSPORT_TRACE` selectors accept explicit `0`
+in performance runs; `1` requires a worker specification with `phase=diagnostic`. Unrecorded inherited selectors
+are always refused. A transport-trace binary with tracing disabled still retains instrumentation structure and
+belongs to separate overhead diagnostics, not primary performance evidence. Freeze the uninstrumented candidate
+for primary timing. Registering a selector does not enable it or mark its trial as evaluated.
 
 The default comparison uses four CPU decoder threads, 30 duration-stratified inputs over three alternating rounds,
 and a separate 650-input quality run with timestamps. Every latency input is warmed once in each fresh worker.

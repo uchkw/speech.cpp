@@ -31,6 +31,7 @@ def environment_launch_checks():
     values = {'GGML_METAL_FUSION_DEBUG': '2', 'GGML_METAL_GRAPH_DEBUG': '1',
               'GGML_METAL_FUSION_DISABLE': '0', 'GGML_METAL_N_CB': '0',
               'GGML_METAL_GRAPH_OPTIMIZE_DISABLE': '0', 'GGML_NATIVE': 'OFF',
+              'GGML_CPU_NORM_MUL_ADD_TRACE': '0',
               'SPEECH_UNRECORDED_EXPERIMENT': '0'}
     for key, value in values.items():
         refused(lambda: compare.environment([f'{key}={value}']),
@@ -43,6 +44,26 @@ def environment_launch_checks():
             with patch.object(compare, 'git') as git:
                 refused(lambda: compare.build(SimpleNamespace()), 'Build setup inherited an unrecorded switch.', expected='inherited')
                 git.assert_not_called()
+
+
+def diagnostic_environment_checks():
+    for key in ['GGML_CPU_NORM_MUL_ADD_FUSION_TRACE', 'SPEECH_HAAS_WORKER_TRANSPORT_TRACE']:
+        assert compare.environment([f'{key}=0'])[key] == '0'
+        refused(lambda: compare.environment([f'{key}=1']), 'A trace entered primary timing.', expected='diagnostic phase')
+        refused(lambda: worker.execution_environment({key: '2'}, diagnostic=True),
+                'An invalid trace value was accepted.', expected='0 or 1')
+        for value in ['0', '1']:
+            assert worker.execution_environment({key: value}, diagnostic=True)[key] == value
+            with patch.dict(worker.os.environ, {key: value}):
+                refused(lambda: worker.execution_environment({}, diagnostic=True),
+                        'A diagnostic inherited an unrecorded trace.', expected='inherited')
+                assert worker.execution_environment({key: '0'})[key] == '0'
+                assert worker.execution_environment({key: '1'}, diagnostic=True)[key] == '1'
+        for phase in ['latency', 'quality', 'pgo_train']:
+            with patch.object(worker.subprocess, 'Popen') as launch:
+                refused(lambda: worker.run({'phase': phase, 'environment': {key: '1'}}),
+                        'A trace reached a nondiagnostic worker.', expected='diagnostic phase')
+                launch.assert_not_called()
 
 
 def performance_build_checks(root):
@@ -170,6 +191,7 @@ def main():
     refused(lambda: compare.paired(a, b[:1]), 'Missing paired input was accepted.')
     refused(lambda: compare.environment(['HOME=elsewhere']), 'An unrelated environment variable was accepted.')
     environment_launch_checks()
+    diagnostic_environment_checks()
     assert compare.environment(['GGML_METAL_MM_TILE_N=64'])['GGML_METAL_MM_TILE_N'] == '64'
     for key in ['SPEECH_HAAS_CPU_REPACK', 'SPEECH_HAAS_FFN_F16', 'SPEECH_HAAS_TDT_RESIDENT_STATE',
                 'SPEECH_HAAS_TDT_JOINT_REUSE', 'SPEECH_HAAS_TDT_CPU_PLAN', 'SPEECH_HAAS_ENCODER_QKV',
@@ -178,7 +200,9 @@ def main():
                 'SPEECH_HAAS_ENCODER_GRAPH_CACHE', 'SPEECH_HAAS_ENCODER_GRAPH_CACHE_TRACE',
                 'GGML_METAL_DW_SILU', 'SPEECH_HAAS_DEPTHWISE_PREPACK', 'GGML_METAL_RESIDUAL_NORM',
                 'GGML_METAL_HEAD_STORE', 'SPEECH_HAAS_TDT_BUFFER_REUSE', 'SPEECH_HAAS_FRONTEND_PARALLEL',
-                'SPEECH_HAAS_FRONTEND_VDSP', 'SPEECH_HAAS_AUTO_THREADS']:
+                'SPEECH_HAAS_FRONTEND_VDSP', 'SPEECH_HAAS_AUTO_THREADS', 'SPEECH_HAAS_KDA_CONSTANTS',
+                'GGML_CPU_NORM_MUL_ADD_FUSION', 'SPEECH_HAAS_WORKER_UNSYNC', 'SPEECH_HAAS_WORKER_UNTIE',
+                'SPEECH_HAAS_TDT_DEVICE_ARGMAX']:
         for value in ['0', '1']:
             assert compare.environment([f'{key}={value}'])[key] == value
         refused(lambda: compare.environment([f'{key}=2']), 'An invalid binary switch was accepted.', expected='0 or 1')

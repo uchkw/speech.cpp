@@ -18,9 +18,9 @@ def check(root):
     base = {'environment': {}, 'build': {'speech': identity}, 'model': {**identity, 'type': 'fixture'},
             'phase': 'latency', 'round': 0, 'side': 'fixture', 'warmup': [record], 'records': [record]}
 
-    def launch(name, requested, expected, resolved, accepted, phase='latency', build_flags=None):
+    def launch(name, requested, expected, resolved, accepted, phase='latency', build_flags=None, environment=None):
         spec = {**base, 'threads': requested, 'directory': str(root / name), 'phase': phase,
-                'build': {**base['build'], **(build_flags or {})}}
+                'build': {**base['build'], **(build_flags or {})}, 'environment': environment or {}}
         if expected is not None:
             spec['expected_threads'] = expected
         sent = []
@@ -34,7 +34,7 @@ def check(root):
             if requested:
                 suffix = ['--threads', str(requested), *suffix]
             assert command[4:] == [str(artifact), 'worker', str(artifact), '--device', 'gpu', *suffix]
-            assert options['env'] == worker.execution_environment(spec['environment'])
+            assert options['env'] == worker.execution_environment(spec['environment'], diagnostic=phase == 'diagnostic')
             Path(command[3]).write_text('100 peak memory footprint\n')
             messages = [{'type': 'ready', 'protocol': 4, 'model': {'threads': resolved}}]
             messages.extend({'type': 'end', 'id': request_id, 'stop': 'complete', 'text': 'same'}
@@ -47,6 +47,7 @@ def check(root):
                 worker.run(spec)
                 report = json.loads((Path(spec['directory']) / 'result.json').read_text())
                 assert report['phase'] == phase and report['build'] == spec['build']
+                assert report['environment'] == spec['environment']
                 assert report['thread_selection'] == {
                     'requested_mode': 'explicit' if requested else 'auto', 'requested_threads': requested,
                     'expected_threads': expected if expected is not None else requested, 'resolved_threads': resolved}
@@ -78,6 +79,8 @@ def check(root):
     launch('training-only', 4, None, 4, True, 'pgo_train',
            {'instrumented': True, 'performance_evaluation_eligible': False})
     launch('eligible', 4, None, 4, True, build_flags={'performance_evaluation_eligible': True})
+    for key in ['GGML_CPU_NORM_MUL_ADD_FUSION_TRACE', 'SPEECH_HAAS_WORKER_TRANSPORT_TRACE']:
+        launch(key, 4, None, 4, True, phase='diagnostic', environment={key: '1'})
     for values, reason in [({'threads': 0}, 'expected_threads'), ({'threads': -1}, 'threads'),
                            ({'threads': True}, 'threads'), ({'threads': 0, 'expected_threads': 0}, 'expected_threads'),
                            ({'threads': 4, 'expected_threads': 16}, 'explicit thread')]:

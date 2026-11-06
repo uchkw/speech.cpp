@@ -12,6 +12,7 @@ import subprocess
 import threading
 import time
 
+DIAGNOSTIC_EXPERIMENT_ENVIRONMENT = {'GGML_CPU_NORM_MUL_ADD_FUSION_TRACE', 'SPEECH_HAAS_WORKER_TRANSPORT_TRACE'}
 BINARY_EXPERIMENT_ENVIRONMENT = {'SPEECH_HAAS_CPU_REPACK', 'SPEECH_HAAS_FFN_F16', 'SPEECH_HAAS_TDT_RESIDENT_STATE',
                                  'SPEECH_HAAS_TDT_JOINT_REUSE', 'SPEECH_HAAS_TDT_CPU_PLAN', 'SPEECH_HAAS_ENCODER_QKV',
                                  'GGML_METAL_MM_SILU', 'GGML_METAL_ADD_SOFTMAX', 'SPEECH_HAAS_TDT_BLANK_BATCH',
@@ -19,17 +20,21 @@ BINARY_EXPERIMENT_ENVIRONMENT = {'SPEECH_HAAS_CPU_REPACK', 'SPEECH_HAAS_FFN_F16'
                                  'SPEECH_HAAS_ENCODER_GRAPH_CACHE', 'SPEECH_HAAS_ENCODER_GRAPH_CACHE_TRACE',
                                  'GGML_METAL_DW_SILU', 'SPEECH_HAAS_DEPTHWISE_PREPACK', 'GGML_METAL_RESIDUAL_NORM',
                                  'GGML_METAL_HEAD_STORE', 'SPEECH_HAAS_TDT_BUFFER_REUSE', 'SPEECH_HAAS_FRONTEND_PARALLEL',
-                                 'SPEECH_HAAS_FRONTEND_VDSP', 'SPEECH_HAAS_AUTO_THREADS'}
+                                 'SPEECH_HAAS_FRONTEND_VDSP', 'SPEECH_HAAS_AUTO_THREADS', 'SPEECH_HAAS_KDA_CONSTANTS',
+                                 'GGML_CPU_NORM_MUL_ADD_FUSION', 'SPEECH_HAAS_WORKER_UNSYNC', 'SPEECH_HAAS_WORKER_UNTIE',
+                                 'SPEECH_HAAS_TDT_DEVICE_ARGMAX'} | DIAGNOSTIC_EXPERIMENT_ENVIRONMENT
 EXPERIMENT_ENVIRONMENT = BINARY_EXPERIMENT_ENVIRONMENT | {'GGML_METAL_MM_TILE_N'}
 
 
-def execution_environment(recorded):
+def execution_environment(recorded, *, diagnostic=False):
     """Return the launch environment only when every backend override is explicitly recorded and allowed."""
     for key, value in recorded.items():
         if key not in EXPERIMENT_ENVIRONMENT:
             raise ValueError('Only explicitly allowed experiment environment variables can be recorded.')
         if key in BINARY_EXPERIMENT_ENVIRONMENT and value not in {'0', '1'}:
             raise ValueError(f'{key} must be explicitly set to 0 or 1.')
+        if key in DIAGNOSTIC_EXPERIMENT_ENVIRONMENT and value == '1' and not diagnostic:
+            raise ValueError(f'{key}=1 requires the dedicated diagnostic phase; do not enable it in performance runs.')
     for key in os.environ:
         if key.startswith(('GGML_', 'SPEECH_')) and key not in recorded:
             raise ValueError(f'{key} is inherited but not explicitly recorded; unset it or record an allowed switch explicitly.')
@@ -43,7 +48,7 @@ def require_evaluation_build(build):
 
 
 def run(spec):
-    child_environment = execution_environment(spec['environment'])
+    child_environment = execution_environment(spec['environment'], diagnostic=spec.get('phase') == 'diagnostic')
     if spec['phase'] != 'pgo_train':
         require_evaluation_build(spec['build'])
     threads = spec['threads']
