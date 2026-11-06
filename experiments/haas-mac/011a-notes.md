@@ -1,14 +1,20 @@
 # Trial 011a: fuse Conformer's sigmoid and multiplication
 
-This is an unbuilt, unmeasured source checkpoint for [campaign issue 1](https://github.com/uchkw/speech.cpp/issues/1).
+This GLU-only prototype was rejected after the Mac screen for
+[campaign issue 1](https://github.com/uchkw/speech.cpp/issues/1). The correctness checks passed, but the latency
+gain did not exceed round variation. [The evaluation](011a-results.md) records the measurements and limits.
+The broader pointwise-projection-plus-GLU measure remains unfinished.
 It starts from speech.cpp `114c514430c8aa1455c077819f8e72e674a48b75` and ggml
 `e1a9ac12edbb57402618fd6936598603f5ee6266`. The initial ggml case-first commit is
 `57af121df58bf5de8e8fa4987f507d3dd6a53d8f`, followed by kernel commit
 `d219664b7accaedc8adc2c6c22ccc1742a42459f`. Additional mapped-buffer controls are in case-first commit
 `c1f0bfedf63fc4c577d99fc9cdc8da36dc47cce9`, followed by the single-buffer gate in
 `232e507d0c35312b77a57720a4c7095b3c77ff5e`, the current candidate pin. The original-kernel comparison must add the
-test-only `c1f0bfed` change to `57af121d` so its fixture includes the same mapped-buffer controls. Both repository
-origins are the `uchkw` forks. Neither repository has been pushed.
+test-only `c1f0bfed` change to `57af121d` so its fixture includes the same mapped-buffer controls. That control is
+ggml `caa352ff64190598e6661a383c4768110dc47fd9`, pinned by speech.cpp
+`d8971602369b9fe4478d52e797bde48d718729cb`. Both repository origins are the `uchkw` forks; the coordinator has
+pushed the candidate and control branches. Evaluation used speech.cpp `54dd7a5df9b3646b03581c9b4cd27cb3a3b55600`
+without a runtime-source change.
 
 ## Operation and scope
 
@@ -18,7 +24,7 @@ The pinned Metal fusion table and unary dispatcher have no sigmoid-plus-multipli
 Each Haas Conformer layer computes `a * sigmoid(gate)` after two independent pointwise projections. This is GLU,
 not SiLU (`gate * sigmoid(gate)`) or SwiGLU. Trial 011a leaves the two projections and all speech.cpp inference source
 unchanged. Projection packing belongs to a separate trial. One eligible fusion removes one dispatch per layer;
-24 per encoder is a target to verify, not a measured fact.
+24 per normal encoder was verified for each of seven lengths and all three model types, separately from timing.
 
 `GGML_METAL_GLU=1` enables the experiment. An unset variable or `0` keeps it disabled; any other value aborts with the
 accepted values. The process reads the switch once at its first matching pattern, so each setting uses a fresh
@@ -29,7 +35,7 @@ excluded. The existing generic matcher protects a public sigmoid result and extr
 The kernel evaluates the same float4 expression as the separate F32 sigmoid: `1 / (1 + exp(-gate))`. A small helper
 with safe math and contraction disabled multiplies that F32 result in the original MUL operand order, so the
 compiler must not fold the two operations into `a / (1 + exp(-gate))`. The sigmoid expression keeps its existing
-math mode. Whether the compiler preserves exact bits on the current Metal compiler remains a required direct check.
+math mode. Direct original/off/on Metal output files were byte-identical on the tested M2 Ultra and compiler.
 Each thread loads four original gate and factor values before writing their four result indices; there is no shared
 memory or barrier. The integer guard bounds the four-value group and the fixed width makes every group complete.
 
@@ -42,9 +48,10 @@ rejection still executes both ordinary operations.
 The FULL matcher requires the gate, factor, sigmoid result and product to share one underlying MTLBuffer. It uses
 the existing identity helper for three comparisons; common overlap logic and the structural matcher are unchanged.
 Distinct Metal wrappers can map overlapping host memory, which the common same-buffer range check does not see.
-Such wrappers are therefore outside this experiment even when their tensor ranges do not overlap. This limitation
-comes from source review, not an executed reproduction. The normal Haas graph arena remains the intended target;
-24 normal-graph fusions still require execution evidence.
+Such wrappers are therefore outside this experiment even when their tensor ranges do not overlap. Twelve mapped
+controls verified zero fusions and original/off/on output identity. The pre-gate kernel was not run to reproduce
+its missing guard. The normal Haas graph arena remains the intended target; the separate normal-graph check
+verified 24 fusions.
 
 Within that buffer, same-shape, same-stride output aliases with the exact starting address of either original
 operand are allowed. Every element reads its two inputs before storing that element. Partial overlap is rejected.
@@ -98,18 +105,16 @@ the ordinary two-command-buffer boundary is retained. Counter initialization bef
 force one command buffer and is deliberately avoided. A graph-debug trace without counters remains an independent
 way to confirm the dispatches; counter collection is not a performance measurement.
 
-## Pending execution
+## Execution and remaining limits
 
-No build, CPU reference, Metal dispatch, performance run or Vulkan check has occurred. Source inspection and
-`git diff --check` are the only completed implementation checks. Serialize every later build and execution with
-`/private/tmp/speech-haas-mac-perf.lock`, and bound builds to `-j4`.
+The clean original and candidate builds, CPU-reference Metal cases, direct Metal comparisons, normal encoder checks,
+official frontend/encoder checks and worker screen completed under `/private/tmp/speech-haas-mac-perf.lock`, with
+builds bounded to `-j4`. The result files and original logs are under `outputs/haas-mac-campaign/011a/`.
 
-After the coordinator opens the slot, prepare the original comparison source with both test-only commits above,
-then build it and the candidate separately with Metal and tests enabled. The intermediate `c1f0bfed` source retains
-the pre-gate kernel and can test whether the new controls detect its missing gate; that failure is not yet observed.
-Run `test-backend-ops -o CONFORMER_GLU -b MTL0` on both, with candidate env `0` and `1`. Related
-regressions include `SIGMOID_MUL`, `SILU_MUL`, `SIGMOID`, `MUL`, `SWIGLU` and existing unary/multiply layout controls.
-Keep CPU F32 reference results apart from Metal strict-byte results. Then run, under the shared lock:
+The original comparison includes both test-only changes above. The intermediate `c1f0bfed` source retains the
+pre-gate kernel; no failure on that intermediate source is claimed. `CONFORMER_GLU` passed 64 CPU-reference cases
+on original, candidate-off and candidate-on Metal. Related regressions passed 158 supported cases per side, with
+the same 111 unsupported cases per side excluded from the pass count. Direct comparisons used:
 
 ```sh
 GGML_METAL_GLU=0 original/bin/test-metal-conformer-glu 0 outputs/original.bin
@@ -119,15 +124,19 @@ cmp outputs/original.bin outputs/off.bin
 cmp outputs/original.bin outputs/on.bin
 ```
 
-Build speech.cpp against each pinned ggml and compile `011a-glu-check.cpp` against each exact build's static
-libraries, preserving source, compile command and binary hashes. The command is the campaign's standalone-check
+The normal helper was compiled against each exact build's static libraries, preserving source, compile command
+and binary hashes. The command is the campaign's standalone-check
 link procedure with `src/common`, `src/families` and `ggml/include` on the include path, `libfastconformer.a`,
 `libspeechcommon.a`, ggml's static libraries and the Metal/Accelerate/Foundation frameworks. For each of the existing
-Q4_K, Q8_0 and F16 model files, run the original and candidate-off helper with expected count `0`, and candidate-on
-with `24`, and compare their binary outputs. A count other than 24 is a finding about the normal path, not a reason
-to replace it with an instrumented or fusion-debug count.
+Q4_K, Q8_0 and F16 model files, the original and candidate-off helper reported `0`, candidate-on reported `24`,
+and retained graphs reported `0`. Their binary outputs matched across original/off/on for all seven lengths.
 
-Full worker/ASR output equality, official stage-reference checks, alternating latency and memory measurements, and
-Windows Vulkan validation remain separate pending work. An unchanged Vulkan kernel does not constitute a Vulkan
-pass. The new checks must also be run there when a build and machine are available. No tolerance, adoption decision,
-release, model file or public interface is changed by this prototype.
+An independent graph-debug capture initially failed to capture node logs because speech.cpp's default sink filters
+Debug messages. The failed capture is preserved. A separate diagnostic-only launcher enabled that log level for
+the unchanged stage tool and confirmed 24 fusions per normal encoder. Its times, flags and binary were excluded
+from the worker screen; `GGML_METAL_FUSION_DEBUG` was never used.
+
+The nine-input worker screen kept public text, token text/times and segments exact, including text from every
+latency round. Full 650-input and sub-6-second follow-up were not run after the screen rejection. Windows Vulkan
+execution and official KDA/full-TDT validation are unavailable. No tolerance, release, model file or public
+interface is changed by this prototype.
