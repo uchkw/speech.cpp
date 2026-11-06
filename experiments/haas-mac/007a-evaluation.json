@@ -1,0 +1,299 @@
+{
+  "measure_id": "007a",
+  "status": "rejected",
+  "reason": "Small encoder-only reduction does not establish a stable complete-request latency gain. Preserve the experiment; do not integrate it.",
+  "measured_source_commit": "bda92ef4e899c9d7b12e790e6e9d283794ba874a",
+  "ggml_commit": "f4832b21818fd1d0ba4d250e803af97ae2909024",
+  "original_ggml_commit": "0cea543c0f37b04de86e3312b21ab5efffa4fc35",
+  "encoder_and_path_helper_commit": "1afbcb5",
+  "stage_driver_commit": "0129883",
+  "screen_runner_commit": "b899922d5f71c5f66be33e0add13f1d310b5f74b",
+  "hardware": {
+    "chip": "Apple M2 Ultra",
+    "cpu_cores": "24",
+    "memory_bytes": "206158430208",
+    "macos": "26.7.2"
+  },
+  "python": "3.9.6",
+  "decoder_threads": 4,
+  "scope": "9 inputs x 3 rotating rounds; 9 separate timestamp-enabled quality requests per type and side.",
+  "models": {
+    "q4_k": {
+      "model_sha256": "d24d53f29b75214a933ff482b0de1217e0a800f4118cca39ad6cf03609a89d6f",
+      "screen_request_reduction_percent": -0.2985773002246894,
+      "screen_request_reduction_vs_anchor_percent": 0.10534248449365347,
+      "raw_screen_observation_not_accepted_gain": true,
+      "alternating_encoder_reduction_percent": {
+        "1321491767934942997": 0.2513310749961306,
+        "2330237947966115273": 0.5886154776467478,
+        "8675814957598723431": 0.991518793605195
+      },
+      "alternating_core_reduction_percent": {
+        "1321491767934942997": 0.6028420604620832,
+        "2330237947966115273": -0.03608075047960568,
+        "8675814957598723431": 0.541422833330818
+      },
+      "screen_side_metrics": {
+        "baseline": {
+          "load_ms": 139.23562500000003,
+          "first_request_ms": 166.92837500000002,
+          "peak_memory_bytes": 456950984,
+          "latency": {
+            "p50_ms": 78.11433299999982,
+            "p90_ms": 123.24334199999993,
+            "p99_ms": 143.16097200000002,
+            "count": 9,
+            "rtfx": 177.1947660230556
+          }
+        },
+        "candidate": {
+          "load_ms": 140.415833,
+          "first_request_ms": 166.411125,
+          "peak_memory_bytes": 443532272,
+          "latency": {
+            "p50_ms": 77.37133299999988,
+            "p90_ms": 123.3422666,
+            "p99_ms": 143.81507635999998,
+            "count": 9,
+            "rtfx": 176.56621893798132
+          }
+        },
+        "anchor": {
+          "load_ms": 138.50220800000002,
+          "first_request_ms": 163.521708,
+          "peak_memory_bytes": 450216944,
+          "latency": {
+            "p50_ms": 77.65920800000004,
+            "p90_ms": 123.81358280000009,
+            "p99_ms": 146.13913327999995,
+            "count": 9,
+            "rtfx": 176.3368326887956
+          }
+        }
+      },
+      "quality_comparisons": {
+        "text_changed": 0,
+        "public_tokens_changed": 0,
+        "segments_changed": 0,
+        "literal_better": 0,
+        "literal_worse": 0,
+        "literal_equal": 9,
+        "repository_better": 0,
+        "repository_worse": 0,
+        "repository_equal": 9,
+        "count": 9,
+        "median_latency_ratio": 1.002985773002247,
+        "latency_rounds": [
+          {
+            "round": 0,
+            "count": 9,
+            "text_changed": 0
+          },
+          {
+            "round": 1,
+            "count": 9,
+            "text_changed": 0
+          },
+          {
+            "round": 2,
+            "count": 9,
+            "text_changed": 0
+          }
+        ],
+        "latency_text_changed": 0,
+        "latency_text_comparisons": 27,
+        "latency_reduction_percent": -0.2985773002246894
+      }
+    },
+    "q8_0": {
+      "model_sha256": "cd5f60b2f1c411404b83fca4a65e3ce30a26d9e951b6a346529e65f22758afeb",
+      "screen_request_reduction_percent": 0.3595408183744042,
+      "screen_request_reduction_vs_anchor_percent": 0.29137070916221974,
+      "raw_screen_observation_not_accepted_gain": true,
+      "alternating_encoder_reduction_percent": {
+        "1321491767934942997": 0.30484872561523657,
+        "2330237947966115273": 0.8001918247017348,
+        "8675814957598723431": 1.3323869622597462
+      },
+      "alternating_core_reduction_percent": {
+        "1321491767934942997": 0.0530023014157166,
+        "2330237947966115273": 0.5801141169043067,
+        "8675814957598723431": 2.45871015847543
+      },
+      "screen_side_metrics": {
+        "baseline": {
+          "load_ms": 184.91220800000002,
+          "first_request_ms": 159.528291,
+          "peak_memory_bytes": 764724520,
+          "latency": {
+            "p50_ms": 74.098958,
+            "p90_ms": 119.33010799999991,
+            "p99_ms": 138.20634800000002,
+            "count": 9,
+            "rtfx": 184.10795943454875
+          }
+        },
+        "candidate": {
+          "load_ms": 185.56908300000003,
+          "first_request_ms": 162.15995800000005,
+          "peak_memory_bytes": 756253896,
+          "latency": {
+            "p50_ms": 73.83254199999989,
+            "p90_ms": 120.0985254,
+            "p99_ms": 144.88881444000003,
+            "count": 9,
+            "rtfx": 180.99582098617768
+          }
+        },
+        "anchor": {
+          "load_ms": 183.73420800000002,
+          "first_request_ms": 159.29274999999998,
+          "peak_memory_bytes": 747046136,
+          "latency": {
+            "p50_ms": 74.42504100000002,
+            "p90_ms": 119.6950336,
+            "p99_ms": 138.45730335999977,
+            "count": 9,
+            "rtfx": 183.4336893287657
+          }
+        }
+      },
+      "quality_comparisons": {
+        "text_changed": 0,
+        "public_tokens_changed": 0,
+        "segments_changed": 0,
+        "literal_better": 0,
+        "literal_worse": 0,
+        "literal_equal": 9,
+        "repository_better": 0,
+        "repository_worse": 0,
+        "repository_equal": 9,
+        "count": 9,
+        "median_latency_ratio": 0.996404591816256,
+        "latency_rounds": [
+          {
+            "round": 0,
+            "count": 9,
+            "text_changed": 0
+          },
+          {
+            "round": 1,
+            "count": 9,
+            "text_changed": 0
+          },
+          {
+            "round": 2,
+            "count": 9,
+            "text_changed": 0
+          }
+        ],
+        "latency_text_changed": 0,
+        "latency_text_comparisons": 27,
+        "latency_reduction_percent": 0.3595408183744042
+      }
+    },
+    "f16": {
+      "model_sha256": "f752e02f68c1dfff795900e40aa82e5302976fb5360080fcbd330d8b3c992cd8",
+      "screen_request_reduction_percent": 5.357810311673883,
+      "screen_request_reduction_vs_anchor_percent": 2.5197084020529004,
+      "raw_screen_observation_not_accepted_gain": true,
+      "alternating_encoder_reduction_percent": {
+        "1321491767934942997": 0.3882116849088124,
+        "2330237947966115273": 0.7460951321841991,
+        "8675814957598723431": 1.2522408520510453
+      },
+      "alternating_core_reduction_percent": {
+        "1321491767934942997": 0.5741358705481425,
+        "2330237947966115273": 0.7682461606552393,
+        "8675814957598723431": 0.8071798370590355
+      },
+      "screen_side_metrics": {
+        "baseline": {
+          "load_ms": 274.616125,
+          "first_request_ms": 165.20866599999994,
+          "peak_memory_bytes": 1345783560,
+          "latency": {
+            "p50_ms": 76.37025000000008,
+            "p90_ms": 126.65804220000004,
+            "p99_ms": 148.55939172000004,
+            "count": 9,
+            "rtfx": 174.1950354947568
+          }
+        },
+        "candidate": {
+          "load_ms": 296.347041,
+          "first_request_ms": 176.05904099999992,
+          "peak_memory_bytes": 1344538256,
+          "latency": {
+            "p50_ms": 73.01000000000002,
+            "p90_ms": 119.15785039999989,
+            "p99_ms": 141.22831064000013,
+            "count": 9,
+            "rtfx": 185.19584015895174
+          }
+        },
+        "anchor": {
+          "load_ms": 299.435666,
+          "first_request_ms": 165.02270900000005,
+          "peak_memory_bytes": 1342342824,
+          "latency": {
+            "p50_ms": 79.13124999999965,
+            "p90_ms": 118.73910879999983,
+            "p99_ms": 140.7729980799999,
+            "count": 9,
+            "rtfx": 180.27753876017067
+          }
+        }
+      },
+      "quality_comparisons": {
+        "text_changed": 0,
+        "public_tokens_changed": 0,
+        "segments_changed": 0,
+        "literal_better": 0,
+        "literal_worse": 0,
+        "literal_equal": 9,
+        "repository_better": 0,
+        "repository_worse": 0,
+        "repository_equal": 9,
+        "count": 9,
+        "median_latency_ratio": 0.9464218968832612,
+        "latency_rounds": [
+          {
+            "round": 0,
+            "count": 9,
+            "text_changed": 0
+          },
+          {
+            "round": 1,
+            "count": 9,
+            "text_changed": 0
+          },
+          {
+            "round": 2,
+            "count": 9,
+            "text_changed": 0
+          }
+        ],
+        "latency_text_changed": 0,
+        "latency_text_comparisons": 27,
+        "latency_reduction_percent": 5.357810311673883
+      }
+    }
+  },
+  "strict_dump_sha256": "81cd2c19a0074a8c7f54b11747723be549ac3ebab8dfa491c48eb7c23297bce8",
+  "ordinary_encoder_fusions": 24,
+  "normal_encoder_conditions": 9,
+  "alternating_stage_outputs": 243,
+  "full_and_short": "skipped after rejection",
+  "official_f32_reference": "unavailable",
+  "vulkan_and_m5": "unavailable or untested",
+  "compile_flag_limitation": "The literal flag comparison fails because candidate explicitly names arm64 and Xcode MacOSX.sdk while anchor leaves them implicit. Other optimization, CPU feature and preprocessor flags agree. Effective defaults are not independently verified. Same-binary OFF/ON has no such flag difference.",
+  "artifact_root": "outputs/haas-mac-campaign/007a",
+  "evidence": {
+    "screen_summary_sha256": "4567760022abfffb4ccdb7fea584f379f94df269035b248a14d90e8126707236",
+    "stage_summary_sha256": "6ea9ec464bd4b7f815559f709303a23679daf3b6964bd4b7b197dc656a407f85",
+    "normal_encoder_summary_sha256": "1bb22e4baa9fa68161c769c262584b1a6ea6cec8645e67208ed7529f85a75b7f",
+    "checks_sha256": "fce10dc0d5cd32c5b4814f791152fccbfce7daa28ab7821d02398cbe36d3beb7"
+  },
+  "all_differential_outputs_exact": true
+}

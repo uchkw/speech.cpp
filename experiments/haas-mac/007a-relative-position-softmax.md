@@ -1,7 +1,8 @@
 # Trial 007a: relative-position ADD and softmax fusion
 
-This is an unbuilt source checkpoint for [issue 1](https://github.com/uchkw/speech.cpp/issues/1).
-It establishes neither numerical equivalence nor a speed-up. It is not an adopted runtime change.
+This prototype is rejected after the Mac screen for [issue 1](https://github.com/uchkw/speech.cpp/issues/1).
+The checks establish equality on their tested inputs and a small encoder gain, but not a stable complete-request
+latency gain. It is not an adopted runtime change.
 
 ## Source
 
@@ -16,8 +17,8 @@ It establishes neither numerical equivalence nor a speed-up. It is not an adopte
 - Original-kernel branch: `codex/exp-haas-007a-original-cases`, at `0cea543c`, with identical check sources and no
   runtime changes. The original stricter prototype remains preserved by its earlier commit and parent `cbf59a9`.
 
-No earlier runtime trial is included. The adopted fork's decision table is unchanged because this is an
-unmeasured experiment. The coordinator owns publication, with ggml published before its parent gitlink.
+No earlier runtime trial is included. The measured product is parent `bda92ef4` with ggml `f4832b21`. The adopted
+fork's decision table is unchanged because this prototype is not adopted. The coordinator owns publication, with ggml published before its parent gitlink.
 
 ## Operation and bounds
 
@@ -55,10 +56,10 @@ has no added arithmetic, but equivalence to the independently built original ker
 The local pragma follows [Apple's Metal Shading Language Specification, section 1.6.3](https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf),
 dated 2026-06-04. It prevents reassociation of the new sum without changing the softmax's math-function mode.
 The downloaded source has SHA-256 `41538b30d2f1140a5b2a0c84ce0a9f7b67bf0c707e224cfea0bfe5a44aa26cf5`.
-Compiler acceptance and emitted arithmetic have not yet been checked. Non-finite inputs are not an equivalence
-claim: the existing fast-math path does not define their general behavior.
+The Metal compiler accepted the pragma and every deterministic direct comparison passed; emitted instructions
+were not disassembled. Non-finite inputs are not an equivalence claim: the existing fast-math path does not define their general behavior.
 
-## Prepared checks
+## Checks
 
 `test-backend-ops -o ADD_SOFT_MAX_RELPOS` contains 44 cases. Fourteen use `T=1,31,32,33,171,172,375`, eight heads
 and two asymmetric input sets, including logits near positive and negative 10000. Fourteen controls cover
@@ -85,18 +86,82 @@ input bytes and output bytes for both switch values. Require the two complete fi
 save their SHA-256 hashes. An existing dump is refused. Leave the generic Metal-fusion-disable and tensor-enable
 settings unset. CPU-only and Vulkan runs do not execute this Metal-specific direct comparison.
 
-## Pending evaluation
+## Measured result
 
-Only source inspection and `git diff --check` have run. No configure, build, backend execution or timing has run.
-Wait for the coordinator after trials 005 and 006. Every build and device execution holds
-`/usr/bin/lockf -k /private/tmp/speech-haas-mac-perf.lock`; builds use four jobs.
+All builds use Release/native/Metal and four compile jobs. Every build or inference holds the shared performance
+lock; diagnostic linking uses one compiler process. The worker uses `/usr/bin/python3` 3.9.6 and four CPU decoder
+threads. The product build uses runner `0656426`; the screen uses frozen runner `b899922`, whose additional launch
+validation rejects unrecorded `GGML_*` and `SPEECH_*` settings. The request timer is unchanged. No experiment variable
+is inherited at launch, and graph logging is absent from every timing process.
 
-First build the original and candidate ggml checks and compare CPU, Metal, actual fusion counts and the original
-output dump. Verify the prototype's disabled path against the fixed original-runtime anchor. If those checks pass,
-use the frozen common runner and `/usr/bin/python3` for Q4_K, Q8_0 and F16 with CPU decoder threads=4, the same
-nine-input screen, complete-input warmup and three alternating rounds. Keep load, first request, peak memory,
-encoder timing and warm complete-request latency separate. A promising screen alone cannot support adoption;
-continue to 30 inputs, exact 650-input quality, the anchor and the separate short-input supplement only if warranted.
+- Original and candidate Metal each pass 44/44 CPU-reference cases with the switch unset/default OFF, followed by
+  176 deterministic direct OFF/ON executions. The direct byte equality connects the fused path to that reference check.
+  Candidate CPU also passes 44/44 cases. The complete original and candidate input/output dumps compare equal with
+  `cmp`; both have SHA-256 `81cd2c19a0074a8c7f54b11747723be549ac3ebab8dfa491c48eb7c23297bce8`.
+- Existing Metal ADD/SOFT_MAX regression cases pass 298/298. The new fusion's tested square shapes use 32 threads;
+  the generic softmax's multiple-SIMD-group path is not a tested execution path of this new fusion.
+- The ordinary encoder diagnostic runs three real inputs for each of Q4_K, Q8_0 and F16, with only the projected
+  output marked. It uses `GGML_METAL_GRAPH_DEBUG=1`, not fusion debugging or statistics initialization. The default
+  Metal command-buffer policy is retained (`n_cb=1` in this ggml version). OFF has the same dispatch counts as the
+  fixed anchor. ON has 24 fewer SOFT_MAX dispatches and 24 additional two-operation fusions, with no other count
+  difference. All nine projected tensors match the anchor and both switch values byte for byte. These log-enabled
+  executions are correctness evidence, not timing evidence.
+- The screen compares the same candidate binary with its switch OFF and ON, and the fixed original-runtime anchor,
+  on nine inputs in three rotating rounds. Every type has 27/27 ordinary latency texts and 9/9 timestamp-enabled
+  public outputs equal to both the disabled path and the anchor. These are a quality screen, not a 650-input result.
 
-Official stage tensors, Windows Vulkan and M5 execution remain unavailable or untested. A bitwise differential
-check cannot substitute for an official reference check. No result may be recorded as passed before it is run.
+| Type | Screen request reduction, ON versus OFF | ON versus anchor | Alternating encoder reduction, short / medium / long |
+|---|---:|---:|---:|
+| Q4_K | -0.299% | 0.105% | 0.251% / 0.589% / 0.992% |
+| Q8_0 | 0.360% | 0.291% | 0.305% / 0.800% / 1.332% |
+| F16 | 5.358% | 2.520% | 0.388% / 0.746% / 1.252% |
+
+Request figures are medians of paired per-file latency ratios after each file's median over three rounds. They are
+observations, not accepted gains. Q4_K and Q8_0 do not establish a stable request improvement. F16's apparently larger
+request change is not explained by the isolated encoder change. Its ON/OFF round ratios are 0.9279, 0.9946 and 0.9464,
+while the unchanged OFF/anchor paths also vary. Do not present the 5.358% figure as a stable kernel speed-up.
+
+A bounded stage diagnostic rotates OFF, ON and anchor for three rounds, with three real inputs and three measured
+repeats per input in each process. It warms each input immediately before its measured repeats; the worker screen
+instead warms all inputs before measuring requests. The helper keeps the existing `steady_clock` intervals and
+prints raw IDs, emission frames and durations only after the final timer ends. It links the preserved product
+libraries, not another model runtime. All 243 measured outputs agree in IDs, frames, durations, token and graph counts,
+and text across conditions and repeats. This is separate evidence from the worker's public-output screen.
+
+The F16 stage core decreases only 0.574%, 0.768% and 0.807% on the three inputs. Its OFF/anchor decoder ratios change
+from the screen's sequential stage observations of 0.659/0.646/0.630 to 0.938/0.978/0.995 in the alternating diagnostic.
+F16 ON/OFF decoder round medians are 0.980, 1.209 and 0.941. The changed order and rounds expose variation in an
+unchanged stage; they do not identify a unique cause. Stage core time excludes the worker's outer request processing
+and graph destruction, and is not interchangeable with warm request latency.
+
+The compiler-flag audit found a literal difference: the candidate explicitly passes `-arch arm64` and the Xcode
+`MacOSX.sdk` sysroot, while the fixed anchor leaves those implicit. The literal-equality assertion and both flag sets
+are preserved. Other recorded optimization, CPU feature and preprocessor flags agree. Effective compiler defaults
+have not been independently shown equal; this is not evidence that different SDKs were used. Same-binary OFF/ON has
+identical flags and libraries and does not have this between-build limitation. The F16 model hash and CPU4 setting
+are identical throughout. Load, first-request and peak-memory observations remain in the screen report without a
+claim of a stable gain in those metrics.
+
+The trial is rejected at the screen: preserve the 0.25% to 1.33% local encoder gain, but do not generalize it to an
+end-to-end improvement. No full 30-input/650-input run or short-input supplement is performed. Official F32 stage
+references, Windows Vulkan and M5 execution remain unavailable or untested, not passed. No runtime is integrated.
+
+## Reproduction and evidence
+
+The ignored artifact root is `outputs/haas-mac-campaign/007a`. Its `checkpoint.json`, `checks.json` and
+`evidence-sha256.json` identify the measurements, diagnostics, source blobs, preserved binaries and hashes.
+`screen/summary.json` is the original common-runner result; `screen-review.json` adds per-file, round and length
+comparisons. `normal-encoder/summary.json` holds graph dispatch and tensor equality, and
+`stage-alternating/summary.json` with `stage-review.json` holds the bounded path/timing diagnostic. None is an official
+reference dump. The original PDF remains in `source-evidence/`.
+
+The reusable diagnostic sources are `007a-encoder-trace.cpp` and `007a-stage-path.cpp` (checkpoint `1afbcb5`). Link each
+with the compile flags and static-library list recorded by the corresponding preserved product's
+`CMakeFiles/fastconformer-timing.dir/flags.make` and `link.txt`; the raw build manifests record the exact commands and
+hashes. The source snapshot is distinct from the unchanged measured product commit. The ordinary trace helper is a
+byte-identical copy of the helper used in trial 006a. Only its final projected output is marked.
+
+`007a-stage-compare.py` (checkpoint `0129883`) runs the limited diagnostic from its assets and two helper build
+manifests. It rejects inherited experiment variables, preserves the order, verifies binary/model/input hashes and
+compares raw paths after timing. The runtime and every dump remain fixed after evaluation; any new experiment uses
+a new output directory. Publication belongs to the coordinator, with ggml published before the parent gitlink.
