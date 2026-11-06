@@ -40,5 +40,43 @@ alternating rounds. A combined 004a/004b result is not this trial. Preserve
 load, first request and peak memory separately. Native F16 on the CPU also
 uses the plan, so it is not an unchanged-path control.
 
-Status: source preparation only. No build, check or performance result is
-claimed by this document.
+## Evaluation on November 7, 2026
+
+The prototype is rejected at the screen stage. With Python 3.9.6 and four CPU
+decoder threads on the M2 Ultra, nine inputs in three alternating worker
+rounds give paired request reductions of 0.09% for Q4_K, 0.21% for Q8_0 and
+1.02% for F16 against the fixed campaign anchor. Q4_K paired round ratios are
+1.01372, 1.00279 and 0.99901. All 81 latency texts and 27 timestamped public
+outputs match exactly. These small differences do not establish a gain.
+
+The supplementary three-input stage comparison uses three alternating
+fresh-process rounds, each with three warm observations per input. Decoder
+total candidate/baseline ratios are 0.95565/0.89024/1.02030 for Q4_K,
+0.96432/0.91807/1.12278 for Q8_0, and 0.96178/1.00427/1.03816 for F16.
+Every type has rounds that improve and rounds that regress. Median ratios
+across input/round pairs for core time are 0.99621, 0.99413 and 0.99383,
+respectively. The much larger Q4_K decoder difference in the screen's separate
+single-process stage measurement does not reproduce. All 81 paired stage
+text/token-count/graph-count observations match. No full 30-input latency,
+650-input quality or short-prefix extension is performed.
+
+The measured clean source is `1f1a1f60411df0e16d7c4f80ca1b39b92ec0a70f`,
+built with Release/native/Metal and four build jobs. All nine differential
+conditions pass. Synthetic F32 on CPU with one and four threads passes 164
+assertions each; Metal passes 154. Q4_K/Q8_0/F16 each pass 135 on CPU and 125
+on Metal, with four threads. These cover full state/prediction/logit equality,
+CPU abort and recovery, a fresh request with a new callback setting, explicit
+non-CPU plan refusal, TDT cancellation after reuse, and synthetic history
+sensitivity with identical final label/frame inputs.
+
+Build and check manifests, raw observations, load/first-request/peak-memory
+measurements and source snapshots remain in the external `004b/` and
+`builds/004b-cpu-plan/` campaign artifacts. Official Haas F32 stage references
+and Windows Vulkan remain unavailable. No adoption is claimed.
+
+`stage-pairs.py` is the byte-identical supplementary driver used in 004a and
+004b. Replay with `/usr/bin/python3`, `--run` pointing to the screen's
+`run.json`, `--assets` to the matching `assets.json`, and `--out` to a new
+directory. It checks Python, binary, model and input identities and holds the
+shared lock separately per process. This evaluation commit changes no
+inference source after the measured checkpoint.
