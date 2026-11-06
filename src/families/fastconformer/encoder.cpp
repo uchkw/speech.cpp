@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <limits>
 #include <map>
 
@@ -55,6 +56,48 @@ struct Encoder::Positions {
     }
 };
 
+struct Encoder::F16FeedForward {
+    std::unique_ptr<ggml_context, decltype(&ggml_free)> context{nullptr, ggml_free};
+    std::unique_ptr<ggml_backend_buffer, decltype(&ggml_backend_buffer_free)> buffer{nullptr, ggml_backend_buffer_free};
+    std::map<std::string, ggml_tensor *> weights;
+
+    F16FeedForward(const ModelFile & model, ggml_backend_t backend, int layers) {
+        std::vector<std::string> names;
+        for (int layer = 0; layer < layers; ++layer) {
+            for (const char * suffix : {"ff1_up", "ff1_down", "ff2_up", "ff2_down"}) {
+                const std::string name = "blk." + std::to_string(layer) + "." + suffix;
+                if (ggml_is_quantized(model.tensor(name + ".weight")->type)) names.push_back(name);
+            }
+        }
+        if (names.empty()) return;
+        context.reset(ggml_init({ggml_tensor_overhead() * names.size(), nullptr, true}));
+        if (!context) throw Error(Fault::OutOfMemory, "cannot create the F16 feed-forward weight context");
+        for (const std::string & name : names) {
+            const auto * source = model.tensor(name + ".weight");
+            auto * weight = ggml_new_tensor_2d(context.get(), GGML_TYPE_F16, source->ne[0], source->ne[1]);
+            ggml_set_name(weight, (name + ".weight").c_str());
+            weights.emplace(name, weight);
+        }
+        buffer.reset(ggml_backend_alloc_ctx_tensors(context.get(), backend));
+        if (!buffer) throw Error(Fault::OutOfMemory, "cannot allocate the F16 feed-forward weights");
+        ggml_backend_buffer_set_usage(buffer.get(), GGML_BACKEND_BUFFER_USAGE_WEIGHTS);
+        std::vector<uint8_t> quantized;
+        std::vector<float> expanded;
+        std::vector<ggml_fp16_t> half;
+        for (const auto & item : weights) {
+            const auto * source = model.tensor(item.first + ".weight");
+            const int64_t count = ggml_nelements(source);
+            quantized.resize(ggml_nbytes(source));
+            expanded.resize((size_t) count);
+            half.resize((size_t) count);
+            ggml_backend_tensor_get(source, quantized.data(), 0, quantized.size());
+            ggml_get_type_traits(source->type)->to_float(quantized.data(), expanded.data(), count);
+            ggml_fp32_to_fp16_row(expanded.data(), half.data(), count);
+            ggml_backend_tensor_set(item.second, half.data(), 0, ggml_nbytes(item.second));
+        }
+    }
+};
+
 Encoder::~Encoder() = default;
 
 Encoder::Encoder(const ModelFile & m, ggml_backend_t backend)
@@ -80,6 +123,14 @@ Encoder::Encoder(const ModelFile & m, ggml_backend_t backend)
     cached_span_ = local_ ? context_ : rows > 0 ? (rows - 1) / 2 : -1;
     sub_layers_ = 0;
     for (uint32_t f = m.u32("fastconformer.encoder.subsampling_factor"); f > 1; f /= 2) sub_layers_++;
+    if (const char * value = std::getenv("SPEECH_HAAS_FFN_F16")) {
+        const std::string setting(value);
+        if (setting != "0" && setting != "1") throw Error(Fault::InvalidArgument, "SPEECH_HAAS_FFN_F16 must be 0 or 1");
+        if (setting == "1" && m.str("fastconformer.decoder.prediction") == "kda") {
+            auto weights = std::make_unique<F16FeedForward>(m, backend, layers_);
+            if (!weights->weights.empty()) f16_feed_forward_ = std::move(weights);
+        }
+    }
 }
 
 int64_t Encoder::subsampled_frames(int64_t frames) const {
@@ -88,7 +139,12 @@ int64_t Encoder::subsampled_frames(int64_t frames) const {
 }
 
 ggml_tensor * Encoder::linear(ggml_context * ctx, ggml_tensor * x, const std::string & name, bool bias) const {
-    ggml_tensor * y = mul_mat(ctx, m_.tensor(name + ".weight"), x);
+    ggml_tensor * weight = m_.tensor(name + ".weight");
+    if (f16_feed_forward_) {
+        const auto found = f16_feed_forward_->weights.find(name);
+        if (found != f16_feed_forward_->weights.end()) weight = found->second;
+    }
+    ggml_tensor * y = mul_mat(ctx, weight, x);
     return bias ? ggml_add(ctx, y, m_.tensor(name + ".bias")) : y;
 }
 

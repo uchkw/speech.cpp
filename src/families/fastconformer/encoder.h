@@ -64,6 +64,9 @@ private:
     /** The projections of attention's fixed positions, shared by every utterance. */
     struct Positions;
     mutable std::unique_ptr<Positions> positions_;
+    /** F16 copies of the quantized feed-forward matrices, retained for the load-time expansion experiment. */
+    struct F16FeedForward;
+    std::unique_ptr<F16FeedForward> f16_feed_forward_;
     ggml_backend_t backend_;
     const ModelFile & m_;
     int mels_, d_model_, layers_, heads_, conv_kernel_, sub_layers_;
