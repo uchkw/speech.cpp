@@ -1,8 +1,1771 @@
 {
-  "schema_version": 1,
   "measure_id": "010",
+  "status": "conditional",
+  "reason": "Q4_K is a conditional candidate for longer warm inputs, not an adopted default: its 30-input paired median improves 3.39% (1.82% against the independent anchor), while Q8_0 improves 2.38% overall but has weaker long-input reproducibility and F16 has no full run. The larger cache adds 39.94 MiB, the six short prefixes regress by 1.19% for Q4_K and 0.15% for Q8_0, and a separate first-eligible request is slower. No blanket adoption, production merge or baseline change follows.",
+  "scope": "full",
+  "conditions": {
+    "name": "Haas on Apple Silicon",
+    "repository": "https://github.com/uchkw/speech.cpp",
+    "tracking_issue": "https://github.com/uchkw/speech.cpp/issues/1",
+    "purpose": "Reduce warm latency for one Japanese voice input of a few seconds to 30 seconds while preserving recognition quality.",
+    "threads": 4,
+    "rounds": 3,
+    "decode_on_cpu": true,
+    "quality_policy": "exact",
+    "latency_count": 30,
+    "quality_count": 650,
+    "latency_definition": "Time from before sending the first PCM16 chunk through receipt of the terminal result. File reading, model loading and warmup are excluded. Each measured input is warmed once per fresh worker.",
+    "aggregation": "Median over rounds for each input, then linearly interpolated p50, p90 and p99 across the measured input medians. RTFx divides total audio duration by summed request time.",
+    "literal_cer": "Total Unicode code-point Levenshtein edits divided by total reference code points, including punctuation, symbols and whitespace.",
+    "repository_cer": "NFKC followed by removing Unicode punctuation, symbols, separators and whitespace; no case folding or alternate-spelling substitutions. Edits and reference lengths are summed before division.",
+    "quality_comparison": "The same quality files on both builds; text and public token/segment text and times are compared exactly. Text from every timestamp-disabled latency round is also compared. A changed CER is not evidence of exact output equality.",
+    "latency_timestamps": false,
+    "quality_timestamps": true,
+    "unobserved_fields": "The worker does not expose raw TDT token IDs, frame indices or duration decisions. These are not claimed to match by this harness.",
+    "limitations": [
+      "The current corpus is FLEURS Japanese test, with inputs from 6.36 to 28.2 seconds.",
+      "The p99 of a small duration-stratified sample is not a precise estimate of production tail latency.",
+      "The repository CER is not the published metric accepting alternative spellings of words.",
+      "Fresh-process load and first-request times do not reset filesystem or system Metal caches.",
+      "Q4_K is retained only as a conditional longer-input candidate. Q8_0 is not accepted and F16 has only the two nine-input screens. No switch-free production implementation or new default is adopted.",
+      "The old cache covers encoder T<=171; the candidate covers T<=384. The 172..384 range avoids 24 position-projection products per request. Larger inputs retain the uncached path. The 30-second shape is T=375.",
+      "The candidate retains 75,399,168 bytes instead of 33,521,664 bytes, an additional 41,877,504 bytes (39.9375 MiB), whenever the cache is created. Already-cached short inputs also pay the larger allocation. Process peak memory is a different quantity.",
+      "The primary first warmup is the longest recording; only the candidate can create its cache there. The baseline creates its cache on a later shorter warmup whose time is not retained individually. Do not call their first_request difference isolated cache-build cost.",
+      "The separate startup diagnostic uses one fresh process per setting and the same 7.98-second cache-eligible recording. It separates no-warmup ready, first request, repeated request and standard warmup ready. The first request also includes other initialization, not just cache construction.",
+      "The short supplement is six truncated two/four-second prefixes, not naturally finished short utterances. Text is exact across implementations, but CER is null because no prefix reference labels exist.",
+      "Full Q8_0 has six slower medians among 14 newly cached inputs, all in the long stratum. Its 20-30s paired reduction is negative and p99 is higher. A positive overall median does not remove these tails or round variation.",
+      "Primary same-binary flags are identical. The candidate explicitly passes -arch arm64 and -isysroot; the retained anchor has implicit defaults. Equivalent effective architecture/SDK defaults are not established.",
+      "Screen, independent screen repeat, full and short-retry blocks remain separate. Gains are direct paired comparisons, not sums or pooled percentages.",
+      "Official executed checks compare the encoder against reference features/subsampling/layers/encoded tensors. Other frontend/joint.enc tensors are available in the corpus but are not additional executed official checks in this trial.",
+      "All 72-vs-32 strict numeric comparisons are exact. Separate cache-versus-zero diagnostics differ at T=1 on Metal; those observations are not failures of the actual candidate-versus-baseline gate and do not relax it.",
+      "The first short launch failed before ready because Metal could not create a command queue. Its logs are preserved under short; only the separate successful short-retry is summarized. No failed request is included in latency statistics.",
+      "Windows Vulkan, other Macs, CPU performance and a production implementation without the switch remain unverified. Four decoder threads are an explicit tuned campaign setting, not the normal automatic value of 16 on this host."
+    ],
+    "thread_setting_note": "Four CPU threads are an explicit tuned campaign setting, not the runtime default. Unspecified threads (threads=0) use performance cores: 16 on this M2 Ultra. Code gains compare the tuned anchor and do not include the preliminary thread-tuning gain; measure 021 evaluates automatic versus four threads separately.",
+    "hardware": {
+      "chip": "Apple M2 Ultra",
+      "cpu_cores": 24,
+      "performance_cores": 16,
+      "efficiency_cores": 8,
+      "gpu_cores": 76,
+      "memory_gb": 192,
+      "source": "system_profiler SPHardwareDataType SPDisplaysDataType"
+    },
+    "current_machine": {
+      "chip": "Apple M2 Ultra",
+      "cpu_cores": "24",
+      "memory_bytes": "206158430208",
+      "macos": "26.7.2"
+    },
+    "python": "3.9.6",
+    "python_executable": "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+    "runner_sha256": {
+      "compare.py": "f638e5c4914231e8957ca05513366b06cb2dfb7914922a276b5affb07e4fcc21",
+      "worker.py": "fa7f31c2a69bfb42abe8741f07b56c1103f2b5a60e93d41c544ec7e3d88b8b0a",
+      "campaign.json": "2a03d0e925e3433b437ec908326db42e5576c585abd5da8929f4c2b24b20d840"
+    },
+    "created_utc": "2026-11-06T22:10:24.129538+00:00",
+    "comparison_reference": "Relative: identical source/binary b476967 with SPEECH_HAAS_POSITION_CACHE=1 (72 MiB budget) against 0 (32 MiB budget). Cumulative: the separately measured fixed anchor f976ebd; its literal architecture/SDK flags differ."
+  },
+  "types": {
+    "q4_k": {
+      "sides": {
+        "baseline": {
+          "latency": {
+            "p50_ms": 86.55849949999973,
+            "p90_ms": 133.77530409999994,
+            "p99_ms": 163.03951218000017,
+            "count": 30,
+            "rtfx": 162.21433235128887
+          },
+          "strata": {
+            "10-20s": {
+              "p50_ms": 86.55849949999973,
+              "p90_ms": 106.63732050000046,
+              "p99_ms": 116.64578175000024,
+              "count": 10,
+              "rtfx": 159.14294963255713
+            },
+            "20-30s": {
+              "p50_ms": 127.91329150000008,
+              "p90_ms": 155.70428780000043,
+              "p99_ms": 165.44450378000008,
+              "count": 10,
+              "rtfx": 172.28414367213333
+            },
+            "6-10s": {
+              "p50_ms": 59.93733350000019,
+              "p90_ms": 65.51012440000004,
+              "p99_ms": 66.53241243999997,
+              "count": 10,
+              "rtfx": 144.30619087449858
+            }
+          },
+          "rounds": [
+            {
+              "p50_ms": 86.03820799999973,
+              "p90_ms": 133.47319580000044,
+              "p99_ms": 149.66126857000015,
+              "count": 30,
+              "rtfx": 165.77474723580983
+            },
+            {
+              "p50_ms": 84.63468699999987,
+              "p90_ms": 133.77530409999994,
+              "p99_ms": 165.12069763999963,
+              "count": 30,
+              "rtfx": 164.6172372588942
+            },
+            {
+              "p50_ms": 88.41672949999979,
+              "p90_ms": 140.6688833000005,
+              "p99_ms": 163.03951218000017,
+              "count": 30,
+              "rtfx": 161.73503933397987
+            }
+          ],
+          "quality": {
+            "literal_edits": 2608,
+            "literal_characters": 34928,
+            "repository_edits": 1520,
+            "repository_characters": 32648,
+            "literal_cer": 0.07466788822721027,
+            "repository_cer": 0.04655721636853712
+          },
+          "stages": {
+            "1321491767934942997": {
+              "core_total_ms": 32.3828,
+              "frontend_ms": 2.0046,
+              "encoder_build_ms": 0.2883,
+              "encoder_compute_ms": 26.5271,
+              "encoder_read_ms": 0.0131,
+              "decoder_ms": 3.6567
+            },
+            "2330237947966115273": {
+              "core_total_ms": 47.159,
+              "frontend_ms": 3.6212,
+              "encoder_build_ms": 1.4207,
+              "encoder_compute_ms": 35.8921,
+              "encoder_read_ms": 0.018,
+              "decoder_ms": 6.0562
+            },
+            "8675814957598723431": {
+              "core_total_ms": 69.1067,
+              "frontend_ms": 6.1403,
+              "encoder_build_ms": 2.1597,
+              "encoder_compute_ms": 49.5053,
+              "encoder_read_ms": 0.0303,
+              "decoder_ms": 10.7393
+            }
+          },
+          "stage_status": "measured",
+          "peak_memory_bytes": 477496376,
+          "load_ms": 155.88020899999998,
+          "first_request_ms": 169.200833,
+          "repeated_text_changes": 0
+        },
+        "candidate": {
+          "latency": {
+            "p50_ms": 82.1962085000001,
+            "p90_ms": 126.05507050000003,
+            "p99_ms": 148.71621860999971,
+            "count": 30,
+            "rtfx": 169.87289351975406
+          },
+          "strata": {
+            "10-20s": {
+              "p50_ms": 82.1962085000001,
+              "p90_ms": 97.29569579999989,
+              "p99_ms": 105.32235678000032,
+              "count": 10,
+              "rtfx": 166.46035401021754
+            },
+            "20-30s": {
+              "p50_ms": 123.06295799999978,
+              "p90_ms": 145.65414609999996,
+              "p99_ms": 149.72017680999966,
+              "count": 10,
+              "rtfx": 183.0215599541136
+            },
+            "6-10s": {
+              "p50_ms": 59.875520999999935,
+              "p90_ms": 63.98920859999988,
+              "p99_ms": 65.24605805999997,
+              "count": 10,
+              "rtfx": 146.73686578197697
+            }
+          },
+          "rounds": [
+            {
+              "p50_ms": 83.66787500000017,
+              "p90_ms": 119.98484969999961,
+              "p99_ms": 146.20794828999962,
+              "count": 30,
+              "rtfx": 173.4914473203451
+            },
+            {
+              "p50_ms": 82.1962085000001,
+              "p90_ms": 126.05507050000003,
+              "p99_ms": 147.6811869999997,
+              "count": 30,
+              "rtfx": 170.2329705235156
+            },
+            {
+              "p50_ms": 80.80541649999984,
+              "p90_ms": 132.82238269999968,
+              "p99_ms": 155.11346049999972,
+              "count": 30,
+              "rtfx": 167.35124777951563
+            }
+          ],
+          "quality": {
+            "literal_edits": 2608,
+            "literal_characters": 34928,
+            "repository_edits": 1520,
+            "repository_characters": 32648,
+            "literal_cer": 0.07466788822721027,
+            "repository_cer": 0.04655721636853712
+          },
+          "stages": {
+            "1321491767934942997": {
+              "core_total_ms": 31.3041,
+              "frontend_ms": 2.0025,
+              "encoder_build_ms": 0.2895,
+              "encoder_compute_ms": 26.4297,
+              "encoder_read_ms": 0.0076,
+              "decoder_ms": 2.5776
+            },
+            "2330237947966115273": {
+              "core_total_ms": 45.0393,
+              "frontend_ms": 3.6812,
+              "encoder_build_ms": 0.2955,
+              "encoder_compute_ms": 34.5258,
+              "encoder_read_ms": 0.0168,
+              "decoder_ms": 6.477
+            },
+            "8675814957598723431": {
+              "core_total_ms": 65.8122,
+              "frontend_ms": 6.3055,
+              "encoder_build_ms": 0.3207,
+              "encoder_compute_ms": 46.9338,
+              "encoder_read_ms": 0.0282,
+              "decoder_ms": 12.1272
+            }
+          },
+          "stage_status": "measured",
+          "peak_memory_bytes": 476070944,
+          "load_ms": 146.12462500000004,
+          "first_request_ms": 182.894875,
+          "repeated_text_changes": 0
+        },
+        "anchor": {
+          "latency": {
+            "p50_ms": 82.4942919999998,
+            "p90_ms": 135.98675029999936,
+            "p99_ms": 159.83716874999965,
+            "count": 30,
+            "rtfx": 164.59156799121655
+          },
+          "strata": {
+            "10-20s": {
+              "p50_ms": 82.4942919999998,
+              "p90_ms": 100.42177889999975,
+              "p99_ms": 108.89900319000046,
+              "count": 10,
+              "rtfx": 164.6715596057002
+            },
+            "20-30s": {
+              "p50_ms": 132.48481199999995,
+              "p90_ms": 154.37881249999973,
+              "p99_ms": 161.62679374999962,
+              "count": 10,
+              "rtfx": 172.12922168370508
+            },
+            "6-10s": {
+              "p50_ms": 59.228521000000086,
+              "p90_ms": 64.29185890000015,
+              "p99_ms": 66.32414808999998,
+              "count": 10,
+              "rtfx": 147.3776422003262
+            }
+          },
+          "rounds": [
+            {
+              "p50_ms": 79.4783330000004,
+              "p90_ms": 139.98823329999956,
+              "p99_ms": 161.74616982000018,
+              "count": 30,
+              "rtfx": 163.48745173514914
+            },
+            {
+              "p50_ms": 82.4942919999998,
+              "p90_ms": 135.98675029999936,
+              "p99_ms": 159.83716874999965,
+              "count": 30,
+              "rtfx": 164.33829164082252
+            },
+            {
+              "p50_ms": 83.87258350000005,
+              "p90_ms": 123.87777080000018,
+              "p99_ms": 147.2403852800006,
+              "count": 30,
+              "rtfx": 168.50020851733882
+            }
+          ],
+          "quality": {
+            "literal_edits": 2608,
+            "literal_characters": 34928,
+            "repository_edits": 1520,
+            "repository_characters": 32648,
+            "literal_cer": 0.07466788822721027,
+            "repository_cer": 0.04655721636853712
+          },
+          "stages": {
+            "1321491767934942997": {
+              "core_total_ms": 31.344,
+              "frontend_ms": 1.978,
+              "encoder_build_ms": 0.2834,
+              "encoder_compute_ms": 26.4872,
+              "encoder_read_ms": 0.0066,
+              "decoder_ms": 2.5845
+            },
+            "2330237947966115273": {
+              "core_total_ms": 45.5303,
+              "frontend_ms": 3.6015,
+              "encoder_build_ms": 1.3846,
+              "encoder_compute_ms": 36.2508,
+              "encoder_read_ms": 0.0256,
+              "decoder_ms": 4.2493
+            },
+            "8675814957598723431": {
+              "core_total_ms": 69.9948,
+              "frontend_ms": 6.2407,
+              "encoder_build_ms": 2.174,
+              "encoder_compute_ms": 49.5959,
+              "encoder_read_ms": 0.0356,
+              "decoder_ms": 11.8553
+            }
+          },
+          "stage_status": "measured",
+          "peak_memory_bytes": 477791264,
+          "load_ms": 157.396583,
+          "first_request_ms": 180.22137500000002,
+          "repeated_text_changes": 0
+        }
+      },
+      "comparisons": {
+        "relative": {
+          "text_changed": 0,
+          "public_tokens_changed": 0,
+          "segments_changed": 0,
+          "literal_better": 0,
+          "literal_worse": 0,
+          "literal_equal": 650,
+          "repository_better": 0,
+          "repository_worse": 0,
+          "repository_equal": 650,
+          "count": 650,
+          "median_latency_ratio": 0.9661286505023224,
+          "latency_rounds": [
+            {
+              "round": 0,
+              "count": 30,
+              "text_changed": 0
+            },
+            {
+              "round": 1,
+              "count": 30,
+              "text_changed": 0
+            },
+            {
+              "round": 2,
+              "count": 30,
+              "text_changed": 0
+            }
+          ],
+          "latency_text_changed": 0,
+          "latency_text_comparisons": 90,
+          "latency_reduction_percent": 3.387134949767756
+        },
+        "cumulative": {
+          "text_changed": 0,
+          "public_tokens_changed": 0,
+          "segments_changed": 0,
+          "literal_better": 0,
+          "literal_worse": 0,
+          "literal_equal": 650,
+          "repository_better": 0,
+          "repository_worse": 0,
+          "repository_equal": 650,
+          "count": 650,
+          "median_latency_ratio": 0.9818077673651355,
+          "latency_rounds": [
+            {
+              "round": 0,
+              "count": 30,
+              "text_changed": 0
+            },
+            {
+              "round": 1,
+              "count": 30,
+              "text_changed": 0
+            },
+            {
+              "round": 2,
+              "count": 30,
+              "text_changed": 0
+            }
+          ],
+          "latency_text_changed": 0,
+          "latency_text_comparisons": 90,
+          "latency_reduction_percent": 1.819223263486447
+        }
+      }
+    },
+    "q8_0": {
+      "sides": {
+        "baseline": {
+          "latency": {
+            "p50_ms": 82.64622949999989,
+            "p90_ms": 128.32855869999958,
+            "p99_ms": 146.88585607,
+            "count": 30,
+            "rtfx": 171.3425778459533
+          },
+          "strata": {
+            "10-20s": {
+              "p50_ms": 82.64622949999989,
+              "p90_ms": 100.9610965000006,
+              "p99_ms": 110.32479775000017,
+              "count": 10,
+              "rtfx": 165.8036312759883
+            },
+            "20-30s": {
+              "p50_ms": 125.06791649999994,
+              "p90_ms": 142.6622667,
+              "p99_ms": 148.27063946999996,
+              "count": 10,
+              "rtfx": 184.22352032001095
+            },
+            "6-10s": {
+              "p50_ms": 58.27229199999984,
+              "p90_ms": 62.499449999999705,
+              "p99_ms": 62.5709324999998,
+              "count": 10,
+              "rtfx": 151.36228652202638
+            }
+          },
+          "rounds": [
+            {
+              "p50_ms": 85.58152100000038,
+              "p90_ms": 128.32855869999958,
+              "p99_ms": 145.0803701800002,
+              "count": 30,
+              "rtfx": 171.5072861672319
+            },
+            {
+              "p50_ms": 77.3017709999999,
+              "p90_ms": 124.68918749999969,
+              "p99_ms": 154.11377013999962,
+              "count": 30,
+              "rtfx": 174.04248972026122
+            },
+            {
+              "p50_ms": 82.64622949999989,
+              "p90_ms": 132.0165291999997,
+              "p99_ms": 146.88585607,
+              "count": 30,
+              "rtfx": 168.845562055918
+            }
+          ],
+          "quality": {
+            "literal_edits": 2623,
+            "literal_characters": 34928,
+            "repository_edits": 1494,
+            "repository_characters": 32648,
+            "literal_cer": 0.07509734310581768,
+            "repository_cer": 0.04576084293065425
+          },
+          "stages": {
+            "1321491767934942997": {
+              "core_total_ms": 28.8987,
+              "frontend_ms": 1.9816,
+              "encoder_build_ms": 0.2792,
+              "encoder_compute_ms": 24.0768,
+              "encoder_read_ms": 0.0258,
+              "decoder_ms": 2.554
+            },
+            "2330237947966115273": {
+              "core_total_ms": 41.9327,
+              "frontend_ms": 3.5968,
+              "encoder_build_ms": 1.3783,
+              "encoder_compute_ms": 32.6093,
+              "encoder_read_ms": 0.0428,
+              "decoder_ms": 4.3169
+            },
+            "8675814957598723431": {
+              "core_total_ms": 62.2215,
+              "frontend_ms": 6.042,
+              "encoder_build_ms": 2.0935,
+              "encoder_compute_ms": 45.2798,
+              "encoder_read_ms": 0.0594,
+              "decoder_ms": 8.68
+            }
+          },
+          "stage_status": "measured",
+          "peak_memory_bytes": 786384168,
+          "load_ms": 186.91416699999996,
+          "first_request_ms": 173.52112500000004,
+          "repeated_text_changes": 0
+        },
+        "candidate": {
+          "latency": {
+            "p50_ms": 79.29412500000032,
+            "p90_ms": 126.63213750000033,
+            "p99_ms": 149.26001875000006,
+            "count": 30,
+            "rtfx": 174.38536196620342
+          },
+          "strata": {
+            "10-20s": {
+              "p50_ms": 79.29412500000032,
+              "p90_ms": 97.64139169999994,
+              "p99_ms": 104.29972697000008,
+              "count": 10,
+              "rtfx": 172.5613377689524
+            },
+            "20-30s": {
+              "p50_ms": 122.76691699999986,
+              "p90_ms": 143.21606250000008,
+              "p99_ms": 151.24164375,
+              "count": 10,
+              "rtfx": 183.65687047991858
+            },
+            "6-10s": {
+              "p50_ms": 56.68983300000008,
+              "p90_ms": 59.76611220000003,
+              "p99_ms": 59.78659871999977,
+              "count": 10,
+              "rtfx": 156.13233703362064
+            }
+          },
+          "rounds": [
+            {
+              "p50_ms": 80.77747900000021,
+              "p90_ms": 126.95433340000034,
+              "p99_ms": 150.69149306999975,
+              "count": 30,
+              "rtfx": 174.22804867596665
+            },
+            {
+              "p50_ms": 80.39450000000015,
+              "p90_ms": 126.09701659999972,
+              "p99_ms": 142.7740994300003,
+              "count": 30,
+              "rtfx": 174.9154877852581
+            },
+            {
+              "p50_ms": 76.44183349999989,
+              "p90_ms": 127.36934999999994,
+              "p99_ms": 149.26001875000006,
+              "count": 30,
+              "rtfx": 177.57974615096455
+            }
+          ],
+          "quality": {
+            "literal_edits": 2623,
+            "literal_characters": 34928,
+            "repository_edits": 1494,
+            "repository_characters": 32648,
+            "literal_cer": 0.07509734310581768,
+            "repository_cer": 0.04576084293065425
+          },
+          "stages": {
+            "1321491767934942997": {
+              "core_total_ms": 28.724,
+              "frontend_ms": 1.9765,
+              "encoder_build_ms": 0.2773,
+              "encoder_compute_ms": 24.0038,
+              "encoder_read_ms": 0.0259,
+              "decoder_ms": 2.4403
+            },
+            "2330237947966115273": {
+              "core_total_ms": 39.603,
+              "frontend_ms": 3.6,
+              "encoder_build_ms": 0.2801,
+              "encoder_compute_ms": 31.4067,
+              "encoder_read_ms": 0.0435,
+              "decoder_ms": 4.2883
+            },
+            "8675814957598723431": {
+              "core_total_ms": 57.7597,
+              "frontend_ms": 6.0826,
+              "encoder_build_ms": 0.2617,
+              "encoder_compute_ms": 42.7828,
+              "encoder_read_ms": 0.061,
+              "decoder_ms": 8.5754
+            }
+          },
+          "stage_status": "measured",
+          "peak_memory_bytes": 777192816,
+          "load_ms": 193.481917,
+          "first_request_ms": 175.58937500000005,
+          "repeated_text_changes": 0
+        },
+        "anchor": {
+          "latency": {
+            "p50_ms": 80.74591600000014,
+            "p90_ms": 131.95740029999945,
+            "p99_ms": 147.4983632499997,
+            "count": 30,
+            "rtfx": 171.13407610728095
+          },
+          "strata": {
+            "10-20s": {
+              "p50_ms": 80.74591600000014,
+              "p90_ms": 103.42673809999998,
+              "p99_ms": 112.54149880999998,
+              "count": 10,
+              "rtfx": 167.63794012106524
+            },
+            "20-30s": {
+              "p50_ms": 127.74816700000046,
+              "p90_ms": 143.90950449999985,
+              "p99_ms": 148.67503824999966,
+              "count": 10,
+              "rtfx": 179.09519106006977
+            },
+            "6-10s": {
+              "p50_ms": 55.85691650000002,
+              "p90_ms": 60.01313330000011,
+              "p99_ms": 61.1269505300002,
+              "count": 10,
+              "rtfx": 157.79534521434385
+            }
+          },
+          "rounds": [
+            {
+              "p50_ms": 81.01637450000032,
+              "p90_ms": 132.52156699999946,
+              "p99_ms": 153.72574014,
+              "count": 30,
+              "rtfx": 169.60911483265681
+            },
+            {
+              "p50_ms": 81.08845799999997,
+              "p90_ms": 130.1676368999993,
+              "p99_ms": 147.28619199999966,
+              "count": 30,
+              "rtfx": 172.59601676027216
+            },
+            {
+              "p50_ms": 78.16929149999984,
+              "p90_ms": 132.14388749999975,
+              "p99_ms": 146.26967842999989,
+              "count": 30,
+              "rtfx": 171.54053344015406
+            }
+          ],
+          "quality": {
+            "literal_edits": 2623,
+            "literal_characters": 34928,
+            "repository_edits": 1494,
+            "repository_characters": 32648,
+            "literal_cer": 0.07509734310581768,
+            "repository_cer": 0.04576084293065425
+          },
+          "stages": {
+            "1321491767934942997": {
+              "core_total_ms": 28.508,
+              "frontend_ms": 1.9707,
+              "encoder_build_ms": 0.2709,
+              "encoder_compute_ms": 23.941,
+              "encoder_read_ms": 0.0092,
+              "decoder_ms": 2.369
+            },
+            "2330237947966115273": {
+              "core_total_ms": 41.6932,
+              "frontend_ms": 3.5834,
+              "encoder_build_ms": 1.3708,
+              "encoder_compute_ms": 32.5673,
+              "encoder_read_ms": 0.043,
+              "decoder_ms": 4.1292
+            },
+            "8675814957598723431": {
+              "core_total_ms": 61.9276,
+              "frontend_ms": 6.1031,
+              "encoder_build_ms": 2.0738,
+              "encoder_compute_ms": 45.1245,
+              "encoder_read_ms": 0.0581,
+              "decoder_ms": 8.5663
+            }
+          },
+          "stage_status": "measured",
+          "peak_memory_bytes": 786744592,
+          "load_ms": 192.75866600000003,
+          "first_request_ms": 165.13479100000006,
+          "repeated_text_changes": 0
+        }
+      },
+      "comparisons": {
+        "relative": {
+          "text_changed": 0,
+          "public_tokens_changed": 0,
+          "segments_changed": 0,
+          "literal_better": 0,
+          "literal_worse": 0,
+          "literal_equal": 650,
+          "repository_better": 0,
+          "repository_worse": 0,
+          "repository_equal": 650,
+          "count": 650,
+          "median_latency_ratio": 0.9762321179712401,
+          "latency_rounds": [
+            {
+              "round": 0,
+              "count": 30,
+              "text_changed": 0
+            },
+            {
+              "round": 1,
+              "count": 30,
+              "text_changed": 0
+            },
+            {
+              "round": 2,
+              "count": 30,
+              "text_changed": 0
+            }
+          ],
+          "latency_text_changed": 0,
+          "latency_text_comparisons": 90,
+          "latency_reduction_percent": 2.37678820287599
+        },
+        "cumulative": {
+          "text_changed": 0,
+          "public_tokens_changed": 0,
+          "segments_changed": 0,
+          "literal_better": 0,
+          "literal_worse": 0,
+          "literal_equal": 650,
+          "repository_better": 0,
+          "repository_worse": 0,
+          "repository_equal": 650,
+          "count": 650,
+          "median_latency_ratio": 0.988105563607881,
+          "latency_rounds": [
+            {
+              "round": 0,
+              "count": 30,
+              "text_changed": 0
+            },
+            {
+              "round": 1,
+              "count": 30,
+              "text_changed": 0
+            },
+            {
+              "round": 2,
+              "count": 30,
+              "text_changed": 0
+            }
+          ],
+          "latency_text_changed": 0,
+          "latency_text_comparisons": 90,
+          "latency_reduction_percent": 1.1894436392118957
+        }
+      }
+    }
+  },
+  "builds": {
+    "baseline": {
+      "source_commit": "b47696771ff816224701e8942a81aeeda64a4fd4",
+      "source_tree": "6468f92f6464cf9f56260eb5bc5c15521f7e18a1",
+      "source_verified": true,
+      "ggml_commit": "e1a9ac12edbb57402618fd6936598603f5ee6266",
+      "created_utc": "2026-11-06T21:54:20.139210+00:00",
+      "build_flags": {
+        "configure": [
+          "-DCMAKE_BUILD_TYPE=Release",
+          "-DGGML_NATIVE=ON",
+          "-DGGML_METAL=ON"
+        ],
+        "build": [
+          "--target",
+          "speech-cli",
+          "fastconformer-timing",
+          "-j4"
+        ]
+      },
+      "cmake_cache_sha256": "f00f3443956fb621fd5bcd28bd056b118e7d2c8c071eb66c4df33f37009b9324",
+      "build_log_sha256": "4893906ec02956b7e6e4539d8367f973487f8938431c1cbf94480ad9be153e74",
+      "stage_threads_argument": true,
+      "speech": {
+        "sha256": "1d4dac30fc89c0f3a4290ba760755238629fc1f81c033f66c12e973fe36d7acb",
+        "artifact_path": "builds/010-position-cache/speech"
+      },
+      "stage_tool": {
+        "sha256": "8710aada6df46dba87bd9f254ebfad7a43cf8ce248433294385d9ab4ab0d2d3f",
+        "artifact_path": "builds/010-position-cache/fastconformer-timing"
+      }
+    },
+    "candidate": {
+      "source_commit": "b47696771ff816224701e8942a81aeeda64a4fd4",
+      "source_tree": "6468f92f6464cf9f56260eb5bc5c15521f7e18a1",
+      "source_verified": true,
+      "ggml_commit": "e1a9ac12edbb57402618fd6936598603f5ee6266",
+      "created_utc": "2026-11-06T21:54:20.139210+00:00",
+      "build_flags": {
+        "configure": [
+          "-DCMAKE_BUILD_TYPE=Release",
+          "-DGGML_NATIVE=ON",
+          "-DGGML_METAL=ON"
+        ],
+        "build": [
+          "--target",
+          "speech-cli",
+          "fastconformer-timing",
+          "-j4"
+        ]
+      },
+      "cmake_cache_sha256": "f00f3443956fb621fd5bcd28bd056b118e7d2c8c071eb66c4df33f37009b9324",
+      "build_log_sha256": "4893906ec02956b7e6e4539d8367f973487f8938431c1cbf94480ad9be153e74",
+      "stage_threads_argument": true,
+      "speech": {
+        "sha256": "1d4dac30fc89c0f3a4290ba760755238629fc1f81c033f66c12e973fe36d7acb",
+        "artifact_path": "builds/010-position-cache/speech"
+      },
+      "stage_tool": {
+        "sha256": "8710aada6df46dba87bd9f254ebfad7a43cf8ce248433294385d9ab4ab0d2d3f",
+        "artifact_path": "builds/010-position-cache/fastconformer-timing"
+      }
+    },
+    "anchor": {
+      "source_commit": "f976ebd8e2fca1f15ddc2e6fc9f99e7090b0f9ea",
+      "source_tree": "dee6405fbb3c50eb5f3113f76e6745f59c21b919",
+      "source_verified": true,
+      "ggml_commit": "e1a9ac12edbb57402618fd6936598603f5ee6266",
+      "created_utc": "2026-11-06T17:35:25.712263+00:00",
+      "cmake_cache_sha256": "c3af3223b29cbc28d05f6c379b935c738fc1ccd8b53e553bb0d9d5a88829a171",
+      "build_log_sha256": "c13da50cb07e637c4858e256fb0eff3c80a4f1be693e01093cfda3ac589943e8",
+      "stage_threads_argument": true,
+      "speech": {
+        "sha256": "d493b968e7a94e45f93054bc899c9d20802bb781a19f8dc76cfd4fa6dd91413f",
+        "artifact_path": "builds/campaign-anchor/speech"
+      },
+      "stage_tool": {
+        "sha256": "3dc5c6f19a78153b5f8d0bbd3f08f6106825e5ebd9d9465283b6ebd01553f768",
+        "artifact_path": "builds/campaign-anchor/fastconformer-timing"
+      },
+      "build_flags": {
+        "configure": [
+          "-DCMAKE_BUILD_TYPE=Release",
+          "-DGGML_NATIVE=ON",
+          "-DGGML_METAL=ON"
+        ],
+        "build": [
+          "--target",
+          "speech-cli",
+          "fastconformer-timing",
+          "-j4"
+        ]
+      }
+    }
+  },
+  "execution_environments": {
+    "baseline": {
+      "SPEECH_HAAS_POSITION_CACHE": "0"
+    },
+    "candidate": {
+      "SPEECH_HAAS_POSITION_CACHE": "1"
+    },
+    "anchor": {}
+  },
+  "models": {
+    "q4_k": {
+      "type": "q4_k",
+      "sha256": "d24d53f29b75214a933ff482b0de1217e0a800f4118cca39ad6cf03609a89d6f",
+      "size": 351901216,
+      "revision": "6b965d5007ba780585de51549d57a8c1c0d67c7e"
+    },
+    "q8_0": {
+      "type": "q8_0",
+      "sha256": "cd5f60b2f1c411404b83fca4a65e3ce30a26d9e951b6a346529e65f22758afeb",
+      "size": 656381472,
+      "revision": "6b965d5007ba780585de51549d57a8c1c0d67c7e"
+    }
+  },
+  "fixed_anchor": {
+    "measured_side": "anchor",
+    "source_commit": "f976ebd8e2fca1f15ddc2e6fc9f99e7090b0f9ea",
+    "speech_sha256": "d493b968e7a94e45f93054bc899c9d20802bb781a19f8dc76cfd4fa6dd91413f",
+    "environment": {},
+    "build_manifest_sha256": "47ff498e173967caf11c67571f38a6a0efe67e3d649bbfafb2738089951cd553"
+  },
+  "assets_sha256": "e82d03c053c861f4943907d67f28e191431f84706429b324e80368adf6808581",
+  "input_hash": "7196750a6d97b470abbcc6fc45bd3d82572473a5e778200a145fe82dbda03267",
+  "evidence": {
+    "directory": "010",
+    "run_manifest_sha256": "9109d11a955cc4f9fe37b0d0a523ade39ac5ff371cf72ef7abeed39d3fa2fb07",
+    "paths_relative_to": "External campaign artifact directory.",
+    "checkpoint_summary_sha256": "3b47a82cbe865d8d595e6023807c1fa8a4eb0bf8c1203fba21c2fe56036ab7a5",
+    "evidence_manifest_sha256": "aff3b279c2195d86f25fd25dfc743a70ae1622aea2d58d079448fa830491090b",
+    "raw_freeze_sha256": "bb87ba48569712fc12117fb0886033aa0ca09a983ac8dde85010815771721628",
+    "owner_raw_files": 613,
+    "owner_raw_bytes": 30937986,
+    "independent_manifest_path": "report-imports/010/independent-evidence-sha256.json",
+    "independent_manifest_sha256": "4ea45092f4edb67cb09b7f6f9fe37de05692c66dfc57ec79e7b266b5e39684ad",
+    "independent_manifest_files": 617,
+    "verified_external_files": 24,
+    "request_audit_path": "report-imports/010/request-audit.json",
+    "request_audit_sha256": "9deb2340f37e058aa107aa875125c5f5c6019a7ec449ac23fc736f3bd95f91c0",
+    "check_audit_path": "report-imports/010/check-audit.json",
+    "check_audit_sha256": "42de4efea58aaafb97250553c1b15dfad880dcf768595d722e7677614b10de4a",
+    "audit_source_sha256": {
+      "audit-requests.py": "a03e5bb166dc6398891b0d36eea44850c562d4fc5d17a1b4b2cbed9d0e1d6435",
+      "audit-checks.py": "12e43931f1fee3a2ef6614315e06cf6940b30c812ebf8e5e8574851d27df1a97",
+      "hash-evidence.py": "d4bc8f2c0d8533c58f259c66c77c3ccd5adf1efc6ae437b8932c9542dc8a062e"
+    },
+    "import_source_sha256": "da9a1a87794c01957d2d6a5bec070bad78843068efb0753625eba269c4b4b6bf"
+  },
+  "checks": [
+    {
+      "name": "Position, boundary and ordinary-output differential checks",
+      "status": "passed",
+      "required": true,
+      "scope": "mac",
+      "reason": "Q4_K/Q8_0/F16 on CPU4 and Metal: 2628 strict numeric comparisons are exact. Ordinary final joint.enc output and 24 emitted-path comparisons pass, including return-to-first recordings; 12 synthetic boundary paths are separate from real speech.",
+      "evidence": "010/checks.json"
+    },
+    {
+      "name": "Official F32 encoder references",
+      "status": "passed",
+      "required": true,
+      "scope": "reference",
+      "reason": "11 inputs on CPU16 and Metal with each switch value. Minimum final-encoder SNR is 104.4 dB on CPU and 56.4 dB on Metal; existing thresholds are 90 and 25 dB. Starts from official features; does not rerun frontend or joint.enc official checks.",
+      "evidence": "010/checks.json"
+    },
+    {
+      "name": "Full public quality and latency output equality",
+      "status": "passed",
+      "required": true,
+      "scope": "mac",
+      "reason": "Q4_K and Q8_0 each have 650 timestamped text/token/segment outputs and 90 timestamp-disabled texts exact against same-binary off and the fixed anchor. Disabled versus anchor outputs also match.",
+      "evidence": "010/full/summary.json"
+    },
+    {
+      "name": "Independent screen and repeat output equality",
+      "status": "passed",
+      "required": true,
+      "scope": "mac",
+      "reason": "Each separate nine-input screen compares Q4_K/Q8_0/F16: 27 latency texts and nine public quality outputs per type match. This is the entire request-quality scope for F16.",
+      "evidence": "010/screen-repeat/summary.json"
+    },
+    {
+      "name": "Short-prefix text equality",
+      "status": "passed",
+      "required": true,
+      "scope": "mac",
+      "reason": "Successful separate retry: 18 text pairs per Q4_K/Q8_0 type match. Both CER values remain null; six prefixes do not have reference labels.",
+      "evidence": "010/short-retry/summary.json"
+    },
+    {
+      "name": "Complete official KDA/TDT references",
+      "status": "unavailable",
+      "required": false,
+      "scope": "reference",
+      "reason": "No complete official KDA/TDT reference check is claimed; the cache changes encoder position projection reuse.",
+      "evidence": "010/checks.json"
+    },
+    {
+      "name": "Windows Vulkan and other hardware",
+      "status": "unavailable",
+      "required": true,
+      "scope": "vulkan",
+      "reason": "No Windows Vulkan, other Mac or CPU performance run is executed in this trial.",
+      "evidence": "010/checkpoint-summary.json"
+    },
+    {
+      "name": "Switch-free production reimplementation",
+      "status": "unavailable",
+      "required": true,
+      "scope": "production",
+      "reason": "The prototype remains unadopted. No production reimplementation or new baseline is evaluated.",
+      "evidence": "010/checkpoint-summary.json"
+    }
+  ],
+  "schema_version": 1,
   "title": "Cache longer position projections",
-  "status": "pending",
-  "reason": "Not evaluated.",
-  "checks": []
+  "updated_utc": "2026-11-06T22:34:32.261864+00:00",
+  "measurements_complete": true,
+  "integrated": false,
+  "type_decisions": {
+    "q4_k": "Conditional candidate for longer inputs; no production/default/baseline change.",
+    "q8_0": "Full-run long-input benefit is weak and varies by round; not accepted.",
+    "f16": "Screen and repeat only; overall gain is unstable and existing-cache inputs regress; no full run.",
+    "additional_measurement": "No additional measurement is requested for this prototype.",
+    "scope": "The coordinator retains the prototype and evidence. It is not an all-type adoption or a production patch."
+  },
+  "retained_cache_bytes": {
+    "baseline": 33521664,
+    "candidate": 75399168,
+    "increase": 41877504,
+    "increase_mib": 39.9375,
+    "eligible_encoder_T": {
+      "baseline": [
+        1,
+        171
+      ],
+      "candidate": [
+        1,
+        384
+      ]
+    }
+  },
+  "full_quality_types": [
+    "q4_k",
+    "q8_0"
+  ],
+  "short_prefix_types": [
+    "q4_k",
+    "q8_0"
+  ],
+  "f16_full_quality_executed": false,
+  "first_request_scope": "The primary first warmup is not a matched first-cache-construction timer. A separate same-input startup diagnostic is reported below.",
+  "implementation_checkpoint": {
+    "measured_source_commit": "b47696771ff816224701e8942a81aeeda64a4fd4",
+    "evaluation_commit": "c5f81e4c02f8e95749062083b9882529d6af0aa8",
+    "base_source_commit": "114c514430c8aa1455c077819f8e72e674a48b75",
+    "ggml_commit": "e1a9ac12edbb57402618fd6936598603f5ee6266",
+    "runner_commit": "b5799744ef7166a4c93dd775d8c7f8a05321379c",
+    "runtime_unchanged_by_evaluation_notes": true,
+    "integrated": false,
+    "switch": "SPEECH_HAAS_POSITION_CACHE=0/1"
+  },
+  "diagnostics": [
+    {
+      "title": "Full comparison by round and input group",
+      "method": "30 inputs per type, three rounds. Positive paired reduction means faster. The independent anchor comparison is measured directly, not added to prior gains.",
+      "headers": [
+        "Type",
+        "Same-binary median paired reduction",
+        "Anchor reduction",
+        "Round 1",
+        "Round 2",
+        "Round 3"
+      ],
+      "rows": [
+        [
+          "Q4_K",
+          "+3.387%",
+          "+1.819%",
+          "+3.296%",
+          "+2.734%",
+          "+2.239%"
+        ],
+        [
+          "Q8_0",
+          "+2.377%",
+          "+1.189%",
+          "+1.813%",
+          "-0.869%",
+          "+3.916%"
+        ]
+      ],
+      "notes": [
+        "All 650 public quality outputs and 90 latency texts per type match both references. F16 is excluded from this full block."
+      ]
+    },
+    {
+      "title": "Full cache-range tradeoff",
+      "method": "Each file is assigned by its recorded PCM sample count and actual frontend/subsampling formula. Already cached means T<=171; newly cached means 172<=T<=384.",
+      "headers": [
+        "Type",
+        "Input group",
+        "Count",
+        "Median paired reduction",
+        "Faster / slower",
+        "Round 1",
+        "Round 2",
+        "Round 3"
+      ],
+      "rows": [
+        [
+          "Q4_K",
+          "already cached",
+          "16",
+          "+1.812%",
+          "11 / 5",
+          "-0.299%",
+          "+3.409%",
+          "-3.298%"
+        ],
+        [
+          "Q4_K",
+          "newly cached",
+          "14",
+          "+6.579%",
+          "14 / 0",
+          "+6.689%",
+          "+1.373%",
+          "+6.153%"
+        ],
+        [
+          "Q8_0",
+          "already cached",
+          "16",
+          "+2.844%",
+          "16 / 0",
+          "+2.877%",
+          "-0.156%",
+          "+3.314%"
+        ],
+        [
+          "Q8_0",
+          "newly cached",
+          "14",
+          "+0.608%",
+          "8 / 6",
+          "-1.473%",
+          "-0.869%",
+          "+7.151%"
+        ]
+      ],
+      "notes": [
+        "Q4 improves all 14 newly cached file medians. Q8 has six slower medians among those 14, with direction changes across rounds. Effects on already-cached inputs are not evidence of eliminating a new position product."
+      ]
+    },
+    {
+      "title": "Full paired reduction by duration",
+      "method": "Compute the same paired ratio within each duration stratum. This differs from subtracting aggregate latency percentiles.",
+      "headers": [
+        "Type",
+        "Duration",
+        "Count",
+        "Median paired reduction",
+        "Faster / slower"
+      ],
+      "rows": [
+        [
+          "Q4_K",
+          "6-10s",
+          "10",
+          "+2.175%",
+          "9 / 1"
+        ],
+        [
+          "Q4_K",
+          "10-20s",
+          "10",
+          "+3.599%",
+          "6 / 4"
+        ],
+        [
+          "Q4_K",
+          "20-30s",
+          "10",
+          "+5.146%",
+          "10 / 0"
+        ],
+        [
+          "Q8_0",
+          "6-10s",
+          "10",
+          "+2.929%",
+          "10 / 0"
+        ],
+        [
+          "Q8_0",
+          "10-20s",
+          "10",
+          "+3.102%",
+          "10 / 0"
+        ],
+        [
+          "Q8_0",
+          "20-30s",
+          "10",
+          "-0.612%",
+          "4 / 6"
+        ]
+      ],
+      "notes": [
+        "Q8 20-30s paired reduction is -0.61% and its aggregate p99 increases by 2.37 ms. These limits remain despite the positive overall median."
+      ]
+    },
+    {
+      "title": "Separate short-prefix regression",
+      "method": "Successful short-retry only: six artificial prefixes, two and four seconds, each warmed once per fresh process and measured over three AB/BA/AB rounds.",
+      "headers": [
+        "Type",
+        "Median paired reduction",
+        "2s paired reduction",
+        "4s paired reduction",
+        "Round 1",
+        "Round 2",
+        "Round 3",
+        "Exact texts / CER"
+      ],
+      "rows": [
+        [
+          "Q4_K",
+          "-1.185%",
+          "-2.090%",
+          "-0.280%",
+          "-2.531%",
+          "-3.919%",
+          "+2.635%",
+          "18 / null"
+        ],
+        [
+          "Q8_0",
+          "-0.145%",
+          "-0.230%",
+          "-0.136%",
+          "+6.881%",
+          "-0.152%",
+          "-0.532%",
+          "18 / null"
+        ]
+      ],
+      "notes": [
+        "No natural-short-utterance accuracy claim follows. The failed initial launch remains separate and contributes no timed request."
+      ]
+    },
+    {
+      "title": "Separate first-eligible and ready diagnostic",
+      "method": "One fresh process per type/setting/mode. The no-warmup process uses the same 7.98-second recording (T=100) for its first and repeated requests. Standard warmup ready uses a separate process.",
+      "headers": [
+        "Type",
+        "Cache switch",
+        "No-warmup ready ms",
+        "First eligible request ms",
+        "Repeated request ms",
+        "Standard warmup ready ms",
+        "No-warmup process peak MiB"
+      ],
+      "rows": [
+        [
+          "Q4_K",
+          "0",
+          "606.44",
+          "72.46",
+          "55.48",
+          "214.48",
+          "405.72"
+        ],
+        [
+          "Q4_K",
+          "1",
+          "138.58",
+          "77.21",
+          "53.39",
+          "209.73",
+          "410.31"
+        ],
+        [
+          "Q8_0",
+          "0",
+          "184.15",
+          "71.68",
+          "50.49",
+          "251.18",
+          "697.22"
+        ],
+        [
+          "Q8_0",
+          "1",
+          "185.45",
+          "76.79",
+          "50.89",
+          "254.33",
+          "699.58"
+        ],
+        [
+          "F16",
+          "0",
+          "274.63",
+          "68.97",
+          "50.00",
+          "326.97",
+          "1257.72"
+        ],
+        [
+          "F16",
+          "1",
+          "271.05",
+          "77.28",
+          "50.36",
+          "330.31",
+          "1262.64"
+        ]
+      ],
+      "notes": [
+        "First eligible request increases by 4.75 ms for Q4, 5.11 ms for Q8 and 8.31 ms for F16 in these single pairs. This includes other first-request work and is not an isolated cache-build distribution.",
+        "Neither disk nor system Metal caches are reset. One ready pair, especially Q4 606.44 versus 138.58 ms, is not a robust load-time speedup claim."
+      ]
+    },
+    {
+      "title": "Original nine-input screen",
+      "method": "Independent bounded screen: three inputs in each duration stratum, three rounds and nine quality inputs per type. Not pooled with the repeat or full run.",
+      "headers": [
+        "Type",
+        "Same-binary paired reduction",
+        "Anchor reduction",
+        "Round 1",
+        "Round 2",
+        "Round 3"
+      ],
+      "rows": [
+        [
+          "Q4_K",
+          "+1.552%",
+          "+1.302%",
+          "+0.983%",
+          "+3.359%",
+          "-4.565%"
+        ],
+        [
+          "Q8_0",
+          "+1.786%",
+          "+1.641%",
+          "+2.021%",
+          "-13.545%",
+          "+2.410%"
+        ],
+        [
+          "F16",
+          "+2.986%",
+          "+2.498%",
+          "-6.244%",
+          "+2.102%",
+          "+3.093%"
+        ]
+      ],
+      "notes": [
+        "Each type preserves 27 latency texts and nine public quality outputs. F16 changes the cache path and is not an unchanged control."
+      ]
+    },
+    {
+      "title": "Independent nine-input screen repeat",
+      "method": "The original screen is preserved. This separate three-round repetition probes its variation before the Q4/Q8 full extension.",
+      "headers": [
+        "Type",
+        "Same-binary paired reduction",
+        "Anchor reduction",
+        "Round 1",
+        "Round 2",
+        "Round 3"
+      ],
+      "rows": [
+        [
+          "Q4_K",
+          "+2.604%",
+          "+2.469%",
+          "+1.596%",
+          "+2.601%",
+          "+3.326%"
+        ],
+        [
+          "Q8_0",
+          "+3.736%",
+          "+3.168%",
+          "+4.614%",
+          "+1.453%",
+          "+3.887%"
+        ],
+        [
+          "F16",
+          "+0.691%",
+          "+0.992%",
+          "-0.273%",
+          "+2.413%",
+          "-0.592%"
+        ]
+      ],
+      "notes": [
+        "F16 combined reduction falls from 2.99% to 0.69%; it does not proceed to full or short."
+      ]
+    },
+    {
+      "title": "Strict comparisons and separate zero-cache diagnostics",
+      "method": "Position and output checks use Q4_K/Q8_0/F16 on CPU4 and Metal. The 72-versus-32 gate remains exact; zero-cache comparisons are separate finite rounding diagnostics.",
+      "headers": [
+        "Check",
+        "Strict exact comparisons",
+        "Separate diagnostic differences",
+        "Real paths including return",
+        "Synthetic boundary paths"
+      ],
+      "rows": [
+        [
+          "q4_k-cpu-positions",
+          "430",
+          "0",
+          "0",
+          "0"
+        ],
+        [
+          "q4_k-cpu-outputs",
+          "8",
+          "0",
+          "4",
+          "2"
+        ],
+        [
+          "q4_k-gpu-positions",
+          "430",
+          "144",
+          "0",
+          "0"
+        ],
+        [
+          "q4_k-gpu-outputs",
+          "8",
+          "0",
+          "4",
+          "2"
+        ],
+        [
+          "q8_0-cpu-positions",
+          "430",
+          "0",
+          "0",
+          "0"
+        ],
+        [
+          "q8_0-cpu-outputs",
+          "8",
+          "0",
+          "4",
+          "2"
+        ],
+        [
+          "q8_0-gpu-positions",
+          "430",
+          "144",
+          "0",
+          "0"
+        ],
+        [
+          "q8_0-gpu-outputs",
+          "8",
+          "0",
+          "4",
+          "2"
+        ],
+        [
+          "f16-cpu-positions",
+          "430",
+          "0",
+          "0",
+          "0"
+        ],
+        [
+          "f16-cpu-outputs",
+          "8",
+          "0",
+          "4",
+          "2"
+        ],
+        [
+          "f16-gpu-positions",
+          "430",
+          "144",
+          "0",
+          "0"
+        ],
+        [
+          "f16-gpu-outputs",
+          "8",
+          "0",
+          "4",
+          "2"
+        ]
+      ],
+      "notes": [
+        "All 2628 strict numeric comparisons are exact. The 432 differing zero-cache diagnostics occur at T=1 on Metal; the existing cache already differs from the narrow uncached product there.",
+        "The output check contains three real recordings and a return to the first, plus two synthetic feature-boundary cases. Synthetic features are not accuracy samples. Official encoder checks are listed separately above."
+      ]
+    }
+  ],
+  "supplemental_results": {
+    "short": {
+      "directory": "010/short-retry",
+      "types": {
+        "q4_k": {
+          "sides": {
+            "baseline": {
+              "latency": {
+                "p50_ms": 33.95031249999997,
+                "p90_ms": 39.23408350000002,
+                "p99_ms": 39.47070835000001,
+                "count": 6,
+                "rtfx": 87.70159679807712
+              },
+              "strata": {
+                "2s": {
+                  "p50_ms": 29.752457999999926,
+                  "p90_ms": 29.86169159999994,
+                  "p99_ms": 29.886269159999944,
+                  "count": 3,
+                  "rtfx": 67.59677957675979
+                },
+                "4s": {
+                  "p50_ms": 38.97116700000003,
+                  "p90_ms": 39.3918334,
+                  "p99_ms": 39.48648334000001,
+                  "count": 3,
+                  "rtfx": 103.0221619901244
+                }
+              },
+              "repeated_text_changes": 0,
+              "literal_cer": null,
+              "repository_cer": null,
+              "peak_memory_bytes": 423347256,
+              "load_ms": 142.13545800000003,
+              "first_request_ms": 58.380458999999995
+            },
+            "candidate": {
+              "latency": {
+                "p50_ms": 34.20629199999997,
+                "p90_ms": 40.002209000000065,
+                "p99_ms": 40.35737150000005,
+                "count": 6,
+                "rtfx": 86.61322374130054
+              },
+              "strata": {
+                "2s": {
+                  "p50_ms": 30.014541999999977,
+                  "p90_ms": 30.41394199999994,
+                  "p99_ms": 30.503806999999927,
+                  "count": 3,
+                  "rtfx": 66.72801937336841
+                },
+                "4s": {
+                  "p50_ms": 39.60758400000009,
+                  "p90_ms": 40.23898400000005,
+                  "p99_ms": 40.381049000000054,
+                  "count": 3,
+                  "rtfx": 101.77839941762387
+                }
+              },
+              "repeated_text_changes": 0,
+              "literal_cer": null,
+              "repository_cer": null,
+              "peak_memory_bytes": 428147720,
+              "load_ms": 141.34754200000003,
+              "first_request_ms": 62.85908399999995
+            }
+          },
+          "comparison": {
+            "count": 18,
+            "text_changed": 0,
+            "rounds": [
+              {
+                "round": 0,
+                "count": 6,
+                "text_changed": 0
+              },
+              {
+                "round": 1,
+                "count": 6,
+                "text_changed": 0
+              },
+              {
+                "round": 2,
+                "count": 6,
+                "text_changed": 0
+              }
+            ],
+            "median_latency_ratio": 1.0118517757162886,
+            "latency_reduction_percent": -1.1851775716288593
+          }
+        },
+        "q8_0": {
+          "sides": {
+            "baseline": {
+              "latency": {
+                "p50_ms": 31.295416999999993,
+                "p90_ms": 36.22877099999994,
+                "p99_ms": 36.33870239999993,
+                "count": 6,
+                "rtfx": 95.55173394626166
+              },
+              "strata": {
+                "2s": {
+                  "p50_ms": 26.68516700000001,
+                  "p90_ms": 26.914366999999984,
+                  "p99_ms": 26.96593699999998,
+                  "count": 3,
+                  "rtfx": 74.71708562321484
+                },
+                "4s": {
+                  "p50_ms": 36.10662499999995,
+                  "p90_ms": 36.30205859999993,
+                  "p99_ms": 36.34603115999993,
+                  "count": 3,
+                  "rtfx": 111.03224840053201
+                }
+              },
+              "repeated_text_changes": 0,
+              "literal_cer": null,
+              "repository_cer": null,
+              "peak_memory_bytes": 731612384,
+              "load_ms": 188.86970899999994,
+              "first_request_ms": 59.36637500000008
+            },
+            "candidate": {
+              "latency": {
+                "p50_ms": 31.222896499999987,
+                "p90_ms": 36.28135400000004,
+                "p99_ms": 36.39439760000005,
+                "count": 6,
+                "rtfx": 95.41276622812133
+              },
+              "strata": {
+                "2s": {
+                  "p50_ms": 26.963540999999978,
+                  "p90_ms": 27.019675400000008,
+                  "p99_ms": 27.032305640000015,
+                  "count": 3,
+                  "rtfx": 74.36860312262861
+                },
+                "4s": {
+                  "p50_ms": 36.15575000000004,
+                  "p90_ms": 36.356716400000046,
+                  "p99_ms": 36.40193384000005,
+                  "count": 3,
+                  "rtfx": 111.13705132212706
+                }
+              },
+              "repeated_text_changes": 0,
+              "literal_cer": null,
+              "repository_cer": null,
+              "peak_memory_bytes": 732628192,
+              "load_ms": 187.242375,
+              "first_request_ms": 63.609165999999995
+            }
+          },
+          "comparison": {
+            "count": 18,
+            "text_changed": 0,
+            "rounds": [
+              {
+                "round": 0,
+                "count": 6,
+                "text_changed": 0
+              },
+              {
+                "round": 1,
+                "count": 6,
+                "text_changed": 0
+              },
+              {
+                "round": 2,
+                "count": 6,
+                "text_changed": 0
+              }
+            ],
+            "median_latency_ratio": 1.0014511101930323,
+            "latency_reduction_percent": -0.14511101930323456
+          }
+        }
+      },
+      "scope": "short_prefix_latency_exact_supplement",
+      "literal_cer": null,
+      "repository_cer": null
+    },
+    "startup": {
+      "directory": "010/startup",
+      "scope": "Bounded startup diagnostic, separate from primary latency; one fresh process per condition.",
+      "types": {
+        "q4_k": {
+          "sides": {
+            "0": {
+              "no_warmup_ready_ms": 606.4355419999999,
+              "first_cache_eligible_ms": 72.461416,
+              "warm_same_input_ms": 55.480332999999995,
+              "standard_warmup_ready_ms": 214.48112500000002,
+              "no_warmup_process_peak_memory_bytes": 425428048,
+              "standard_ready_process_peak_memory_bytes": 422347808
+            },
+            "1": {
+              "no_warmup_ready_ms": 138.58212499999996,
+              "first_cache_eligible_ms": 77.213708,
+              "warm_same_input_ms": 53.386916999999976,
+              "standard_warmup_ready_ms": 209.7315,
+              "no_warmup_process_peak_memory_bytes": 430244920,
+              "standard_ready_process_peak_memory_bytes": 425477128
+            }
+          },
+          "cold_and_warm_text_exact": true,
+          "input": {
+            "file": "1321491767934942997.wav",
+            "seconds": 7.98,
+            "T": 100
+          }
+        },
+        "q8_0": {
+          "sides": {
+            "0": {
+              "no_warmup_ready_ms": 184.146666,
+              "first_cache_eligible_ms": 71.68204200000005,
+              "warm_same_input_ms": 50.49287499999999,
+              "standard_warmup_ready_ms": 251.179375,
+              "no_warmup_process_peak_memory_bytes": 731088192,
+              "standard_ready_process_peak_memory_bytes": 729564408
+            },
+            "1": {
+              "no_warmup_ready_ms": 185.44737500000002,
+              "first_cache_eligible_ms": 76.79241600000009,
+              "warm_same_input_ms": 50.88775000000001,
+              "standard_warmup_ready_ms": 254.32516699999996,
+              "no_warmup_process_peak_memory_bytes": 733562104,
+              "standard_ready_process_peak_memory_bytes": 728761640
+            }
+          },
+          "cold_and_warm_text_exact": true,
+          "input": {
+            "file": "1321491767934942997.wav",
+            "seconds": 7.98,
+            "T": 100
+          }
+        },
+        "f16": {
+          "sides": {
+            "0": {
+              "no_warmup_ready_ms": 274.62504099999995,
+              "first_cache_eligible_ms": 68.96924999999999,
+              "warm_same_input_ms": 50.00400000000005,
+              "standard_warmup_ready_ms": 326.96962500000006,
+              "no_warmup_process_peak_memory_bytes": 1318815448,
+              "standard_ready_process_peak_memory_bytes": 1301268160
+            },
+            "1": {
+              "no_warmup_ready_ms": 271.0475419999999,
+              "first_cache_eligible_ms": 77.27995899999995,
+              "warm_same_input_ms": 50.359500000000004,
+              "standard_warmup_ready_ms": 330.30991600000004,
+              "no_warmup_process_peak_memory_bytes": 1323976384,
+              "standard_ready_process_peak_memory_bytes": 1306035880
+            }
+          },
+          "cold_and_warm_text_exact": true,
+          "input": {
+            "file": "1321491767934942997.wav",
+            "seconds": 7.98,
+            "T": 100
+          }
+        }
+      }
+    },
+    "failed_short_launch": {
+      "directory": "short",
+      "status": "failed_before_ready_no_inference",
+      "stderr": "ggml_metal_init: error: failed to create command queue",
+      "cause_scope": "The sandboxed launch could not initialize Metal. The authorized unsandboxed retry uses a separate output directory and the same binary, runner and environment.",
+      "successful_retry_directory": "short-retry"
+    }
+  }
 }
