@@ -1,8 +1,8 @@
 # Haas QKV production evaluation
 
-Status: pending adoption. The checked outputs match, but Q4_K's long-input tail and Q8_0's variation between rounds
-need a separate latency repeat before deciding whether the gain is reproducible. This is a measured, unmerged
-implementation, not an adopted optimization.
+Status: pending adoption. The checked outputs match, and an independent latency repeat reproduces small paired median
+gains in all three rounds. Q4_K's p90 still increases, and Q8_0's long-input gain is negligible. Adoption remains pending
+review of these latency and memory tradeoffs. This is a measured, unmerged implementation.
 
 ## Fixed conditions
 
@@ -53,7 +53,7 @@ utterances; prefix labels are unavailable and CER remains null. The permanent pa
 - Official dumps cover frontend, encoder and `joint.enc`, not full KDA/TDT decoding. Windows Vulkan and other Metal
   devices remain unverified. Stage timing is separate from worker latency; their reductions are not added.
 
-## Retained evidence and next measurement
+## Retained primary evidence
 
 Raw evidence remains under `outputs/haas-mac-campaign/005-production/`, outside Git. `checkpoint-summary.json` has
 SHA-256 `721ab7b045a6e444f58e1199edd5f349690133fb1d214d41bfd0b4423bff062e`; `evidence-manifest.json` has
@@ -61,6 +61,41 @@ SHA-256 `5fa7745e5d82df8fa313c3a95386e61005c637874ce42abd1783516ddde59700`. They
 binary/library identities, official and paired checks, prototype continuity and the separately linked projection check.
 `paired-analysis.json` retains each input, round and duration stratum, including regressions.
 
-A separate supplement will repeat only the same 30 latency inputs for three rounds with the primary worker, Python,
-binaries, model files, environment and thread settings. The original results stay fixed and the 650-input quality run
-does not repeat. This note records the pending decision; that supplement has not started.
+## Independent latency repeat
+
+Driver `09cc038` repeated the same 30 latency inputs on 2026-11-07 with the primary frozen worker, Python 3.9.6,
+binaries, models, PCM and four CPU decoder threads. Each fresh worker warms all 30 inputs; order is AB/BA/AB. There is
+no anchor, quality, stage or prefix run. Each type matches all 90 paired texts and all 180 texts match their original
+primary side and round. The repeat, primary and short results stay separate; no measurements are pooled.
+
+| Type / build | p50 / p90 / p99 latency (ms) | RTFx |
+|---|---|---:|
+| Q4_K baseline | 78.31 / 122.61 / 146.63 | 174.58 |
+| Q4_K candidate | 77.88 / 124.81 / 144.97 | 177.42 |
+| Q8_0 baseline | 75.35 / 119.37 / 140.14 | 183.04 |
+| Q8_0 candidate | 74.65 / 117.62 / 140.23 | 184.54 |
+
+Q4_K gives 1.87% paired reduction, with 26/30 medians improved. Rounds give 2.30%, 2.01%, 1.79%; the 6-10/10-20/20-30 s
+strata give 4.16%, 1.76%, 0.92%. Q8_0 gives 1.32%, with 24/30 medians improved; rounds give 1.02%, 1.32%, 0.76%, and
+strata give 1.73%, 1.18%, 0.06%. Q8_0's paired median improves in every round, but its round-0 candidate p90 is
+131.28 ms versus 120.81 ms. Positive paired medians do not imply improvement throughout the latency distribution.
+
+Q4_K's p90 increases by 2.20 ms. Its four slower input medians, from retained raw results without another model run:
+
+| Input | Audio (s) | Median difference (ms) | Round differences, candidate minus baseline (ms) |
+|---|---:|---:|---|
+| 5233295116612017093 | 19.74 | +0.236 | +6.249 / +0.236 / -5.769 |
+| 17808260654685775088 | 22.62 | +2.995 | -0.422 / +2.995 / +1.154 |
+| 16473122140572748688 | 22.86 | +0.819 | -0.743 / -3.070 / +1.741 |
+| 12382486935508330615 | 26.04 | +1.262 | -0.738 / +1.522 / -0.219 |
+
+Both sides' p90 interpolates ranks 27 and 28, the same 22.62 s and 24.72 s recordings, with weights 0.9 and 0.1.
+Their changes are +2.995 ms and -4.933 ms, producing the +2.202 ms p90 change. The 22.62 s input also regressed in all
+three primary rounds, with a +4.368 ms median difference. In the repeat no input is slower in all three rounds, and
+7/10 long input medians improve. The tail increase is concentrated in this cohort rather than a uniform long-input
+slowdown; its cause remains undetermined. Separate-side median differences need not match paired round differences.
+
+Repeat evidence is under `outputs/haas-mac-campaign/005-production-latency-repeat/`. `run.json` has SHA-256
+`e2dca7428a2529e15dc46ec1f7c42f2a3c7f2bff9895592ecedad36fcf7952d8`; `summary.json` has
+`147ee6c95f558506f305f4e02a8aa442b42ea6121945c88d19a069dbcbb41fa2`. `independent-verification.json` recomputes
+the metrics and checks identities and texts; `q4-tail-analysis.json` retains the four inputs and p90 contributors.
