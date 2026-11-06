@@ -1,17 +1,29 @@
 #include <cmath>
+#include <cstdlib>
+#include <cstring>
+#include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "engine.h"
 #include "error.h"
+#include "fastconformer/frontend-cache.h"
 #include "fastconformer/recognizer.h"
 
 namespace {
 
 class FastConformerEngine : public Engine {
 public:
-    FastConformerEngine(const std::string & path, ggml_backend_t backend, int threads) : recognizer_(path, backend, threads) {}
+    FastConformerEngine(const std::string & path, ggml_backend_t backend, int threads) : recognizer_(path, backend, threads) {
+        if (recognizer_.model().str("fastconformer.decoder.prediction") != "kda") return;
+        const char * name = "SPEECH_HAAS_RAW_MEL_PREFIX";
+        const char * value = std::getenv(name);
+        if (!value || std::strcmp(value, "0") == 0) return;
+        if (std::strcmp(value, "1") != 0) throw Error(Fault::InvalidArgument, std::string(name) + " must be 0 or 1; unset it to disable", name);
+        frontend_cache_ = std::make_unique<fastconformer::FrontendCache>(recognizer_.frontend());
+    }
 
     /**
      * The three stages report their progress in thirds, the decoding by the frames it has passed: the frontend takes
@@ -21,14 +33,25 @@ public:
         // Before the work passes anything to the caller, so that a request whose keywords are refused can be fixed and run.
         const std::optional<fastconformer::Vocabulary> vocabulary = vocabulary_of(values);
         const NemoFrontend & frontend = recognizer_.frontend();
-        const std::vector<float> features = frontend.features(samples);
+        std::optional<fastconformer::FrontendCache::Reading> reading;
+        std::vector<float> features;
+        if (frontend_cache_) {
+            reading = frontend_cache_->prepare(samples);
+            features = std::move(reading->features);
+        } else {
+            features = frontend.features(samples);
+        }
         if (!run.progress(1.0 / 3)) return {};
         const std::vector<float> projected = recognizer_.encode(features, frontend.frames(samples.size()));
         if (!run.progress(2.0 / 3)) return {};
         const std::string & name = values.has(SPEECH_OPT_DECODING) ? values.string(SPEECH_OPT_DECODING) : recognizer_.decodings().front();
         const fastconformer::DecodeOn on = values.boolean(SPEECH_OPT_DECODE_ON_CPU) ? fastconformer::DecodeOn::Cpu : fastconformer::DecodeOn::Device;
         const auto progress = [&](double done) { return run.progress((2 + done) / 3); };
-        if (vocabulary) return with_keywords(*vocabulary, values, samples, projected, name, on, progress, run);
+        if (vocabulary) {
+            Recognized out = with_keywords(*vocabulary, values, samples, projected, name, on, progress, run);
+            if (reading && !run.stopped()) frontend_cache_->publish(std::move(*reading));
+            return out;
+        }
         const fastconformer::Decoding decoding = recognizer_.decoding(projected, name, on, progress);
         if (run.stopped()) return {};
         const fastconformer::Detokenizer & detokenizer = recognizer_.detokenizer();
@@ -45,6 +68,7 @@ public:
             }
         }
         run.progress(1);
+        if (reading && !run.stopped()) frontend_cache_->publish(std::move(*reading));
         return out;
     }
 
@@ -112,6 +136,7 @@ private:
     }
 
     fastconformer::Recognizer recognizer_;
+    std::unique_ptr<fastconformer::FrontendCache> frontend_cache_;
 };
 
 }  // namespace

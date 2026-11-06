@@ -104,6 +104,7 @@ target_link_libraries(irodoritts PUBLIC speechcommon)
 # FastConformer speech recognition (NVIDIA NeMo): the family.
 add_library(fastconformer STATIC
     src/families/fastconformer/layout.cpp
+    src/families/fastconformer/frontend-cache.cpp
     src/families/fastconformer/encoder.cpp
     src/families/fastconformer/transducer.cpp
     src/families/fastconformer/kda.cpp
@@ -439,7 +440,7 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
 endif()
 
 # The checks of FastConformer's stages.
-foreach(stage frontend encoder transducer times sentencepiece)
+foreach(stage frontend frontend-prefix encoder transducer times sentencepiece)
     add_executable(fastconformer-${stage}-check checks/fastconformer/fastconformer-${stage}-check.cpp)
     target_include_directories(fastconformer-${stage}-check PRIVATE checks)
     target_link_libraries(fastconformer-${stage}-check PRIVATE fastconformer)
