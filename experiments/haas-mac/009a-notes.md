@@ -1,10 +1,11 @@
 # Trial 009a: pack KDA Q/K/V rows
 
-This is an unbuilt, unmeasured source checkpoint for [campaign issue 1](https://github.com/uchkw/speech.cpp/issues/1).
+This records the source design prepared for [campaign issue 1](https://github.com/uchkw/speech.cpp/issues/1).
+The later [evaluation](009a-evaluation.md) records its numerical checks and bounded latency-screen rejection.
 The experiment starts from speech.cpp `114c514430c8aa1455c077819f8e72e674a48b75`, whose inference baseline is
 `03555100287c118b41d1b475044e5ab1e07baa8c`, and keeps ggml `e1a9ac12edbb57402618fd6936598603f5ee6266` unchanged.
 It contains none of the runtime changes from trials 003, 004, 008 or the proposed CPU normalization trial 009b.
-No speed or recognition-accuracy result is established by this checkpoint.
+The source checkpoint alone establishes no speed or recognition-accuracy result.
 
 ## Scope and ownership
 
@@ -76,10 +77,10 @@ This is a candidate-off/candidate-on differential check. It does not establish e
 original binary, an official NeMo/FLA stage reference, or every TDT blank/duration/cancellation decision. Those
 boundaries remain explicit even if this check later passes. It also makes no concurrent-model-thread claim.
 
-## Pending execution
+## Execution plan at the source checkpoint
 
-No compiler, inference check, CPU timing, Metal timing or Vulkan run has been performed for this checkpoint.
-Only source inspection, `git diff --check`, and the read-only existing-model header/payload audit are complete.
+At the source checkpoint, no compiler, inference check, CPU timing, Metal timing or Vulkan run had been performed.
+Only source inspection, `git diff --check`, and the read-only existing-model header/payload audit were complete.
 The coordinator schedules the serial execution after earlier trials, using the shared
 `/private/tmp/speech-haas-mac-perf.lock` and builds bounded to `-j4`.
 
