@@ -1,7 +1,10 @@
 #include "transducer.h"
 
+#include <cstdlib>
 #include <string>
 
+#include "error.h"
+#include "ggml-cpu.h"
 #include "kda.h"
 
 namespace fastconformer {
@@ -81,6 +84,40 @@ bool quantized_decoding(const ModelFile & m) {
         if (!ggml_is_quantized(m.stored_type(name))) return false;
     }
     return true;
+}
+
+std::map<std::string, ggml_backend_buffer_type_t> decoding_buffer_types(const ModelFile & m, ggml_backend_t backend) {
+    const char * setting = std::getenv("SPEECH_HAAS_CPU_REPACK");
+    if (!setting || std::string(setting) == "0") return {};
+    if (std::string(setting) != "1") throw Error(Fault::InvalidArgument, "SPEECH_HAAS_CPU_REPACK must be 0 or 1");
+    if (m.str("fastconformer.decoder.prediction") != "kda" || !ggml_cpu_has_neon() ||
+        (!ggml_cpu_has_matmul_int8() && !ggml_cpu_has_dotprod())) return {};
+
+    std::map<std::string, ggml_backend_buffer_type_t> selected;
+    std::vector<std::string> names = make_prediction_layers(m)->matrices();
+    names.insert(names.end(), {"joint.pred.weight", "joint.out.weight"});
+    for (const std::string & name : names) {
+        const ggml_tensor * weight = m.tensor(name);
+        // The ARM Q8_0 kernels interleave four output rows and accept only full quantization blocks.
+        if (weight->type == GGML_TYPE_Q8_0 && ggml_n_dims(weight) == 2 && weight->ne[0] % ggml_blck_size(weight->type) == 0 && weight->ne[1] % 4 == 0) {
+            selected.emplace(name, nullptr);
+        }
+    }
+    if (selected.empty()) return selected;
+
+    ggml_backend_dev_t device = ggml_backend_get_device(backend);
+    const auto extra = reinterpret_cast<ggml_backend_dev_get_extra_bufts_t>(
+        ggml_backend_reg_get_proc_address(ggml_backend_dev_backend_reg(device), "ggml_backend_dev_get_extra_bufts"));
+    ggml_backend_buffer_type_t repack = nullptr;
+    if (extra) {
+        for (auto * types = extra(device); *types; ++types) {
+            if (std::string(ggml_backend_buft_name(*types)) == "CPU_REPACK") repack = *types;
+        }
+    }
+    if (!repack) throw Error(Fault::Device, "SPEECH_HAAS_CPU_REPACK requires a CPU build with GGML_CPU_REPACK enabled");
+
+    for (auto & entry : selected) entry.second = repack;
+    return selected;
 }
 
 PredictionNetwork::PredictionNetwork(const ModelFile & m)

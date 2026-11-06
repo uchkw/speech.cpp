@@ -30,7 +30,7 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 REPORTS = REPO / 'reports/haas-mac'
 LOCK = '/private/tmp/speech-haas-mac-perf.lock'
-EXPERIMENT_ENVIRONMENT = {'GGML_METAL_MM_TILE_N'}
+EXPERIMENT_ENVIRONMENT = {'GGML_METAL_MM_TILE_N', 'SPEECH_HAAS_CPU_REPACK'}
 
 
 def read(path):

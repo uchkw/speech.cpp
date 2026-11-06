@@ -76,9 +76,10 @@ public:
     /**
      * A copy onto `backend` of the loaded tensors of `source` whose names `keep` accepts, read from the backend that
      * holds them and not from the file, which may have changed or gone since `source` read it. It shares the metadata of
-     * `source`.
+     * `source`. Named buffer types select the storage of those tensors; the others use the backend's default.
      */
-    ModelFile(const ModelFile & source, ggml_backend_t backend, const std::function<bool(const std::string & name)> & keep);
+    ModelFile(const ModelFile & source, ggml_backend_t backend, const std::function<bool(const std::string & name)> & keep,
+              const std::map<std::string, ggml_backend_buffer_type_t> & buffer_types = {});
     ModelFile(const ModelFile &) = delete;
     ModelFile & operator=(const ModelFile &) = delete;
 
@@ -165,7 +166,8 @@ private:
     std::string layout_name() const;
     void check_tensors(const Layout & layout) const;
     /** Allocates each tensor on the backend `place` gives its name, or none where it gives null, without its values. */
-    void allocate(const std::function<ggml_backend_t(const std::string & name)> & place);
+    void allocate(const std::function<ggml_backend_t(const std::string & name)> & place,
+                  const std::map<std::string, ggml_backend_buffer_type_t> & buffer_types = {});
     /** Reads the values of the allocated tensors from the file. */
     void load();
 
@@ -174,7 +176,7 @@ private:
     std::shared_ptr<gguf_context> gguf_;
     /** The shapes and types of every tensor of the file, which ggml reads with its metadata. */
     std::shared_ptr<ggml_context> ctx_;
-    /** The copies of the loaded tensors, a context for each backend that holds some, none for a reader of the metadata alone. */
+    /** The copies of the loaded tensors, a context per backend and buffer type, none for a reader of the metadata alone. */
     std::vector<std::unique_ptr<ggml_context, decltype(&ggml_free)>> kept_;
     /**
      * The loaded tensors by name. ggml_get_tensor() compares the name with every tensor of the context before it, and

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -45,6 +46,9 @@ bool decoding_tensor(const std::string & name);
  * prediction and output layer, is quantized in the file `m`: Q8_0 or a K-quant rather than F16 or F32.
  */
 bool quantized_decoding(const ModelFile & m);
+
+/** The CPU_REPACK buffers of Haas's compatible Q8_0 products when SPEECH_HAAS_CPU_REPACK=1. */
+std::map<std::string, ggml_backend_buffer_type_t> decoding_buffer_types(const ModelFile & m, ggml_backend_t backend);
 
 /**
  * NeMo's RNNTDecoder (nemo/collections/asr/modules/rnnt.py) with the blank as the embedding's padding: an

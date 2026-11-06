@@ -37,6 +37,10 @@ that the invocation does not record. The adopted implementation must be rebuilt 
 measured again. An exploratory result without a verified build manifest may be imported as a rejected or conditional
 trial, with its original provenance and evidence hashes; it must not be relabeled as a verified build.
 
+Trial 002a uses `SPEECH_HAAS_CPU_REPACK=1` for the CPU copy's compatible Haas Q8_0 matrix products and `0` for ordinary
+buffers. It preserves the stored weight types and leaves the encoder, embedding lookups and noncompatible matrices
+in their existing buffers. It requires the ARM CPU_REPACK implementation; F16 decoding has no compatible matrices.
+
 Literal CER sums Unicode code-point edits and reference lengths. Repository CER first applies NFKC and removes
 Unicode punctuation, symbols, separators and whitespace. It does not fold case or accept alternative spellings.
 Files, rather than the nonunique FLEURS numeric IDs, are the pairing keys. Exact comparisons cover text and the public

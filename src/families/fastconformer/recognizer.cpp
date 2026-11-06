@@ -22,7 +22,7 @@ const Decoder & Recognizer::Transducer::decoder(const std::string & name) const 
 Recognizer::OnCpu::OnCpu(const ModelFile & device, int threads, const std::vector<std::string> & names)
     : pool(nullptr, ggml_threadpool_free),
       backend(start_device(find_device("cpu"), threads), ggml_backend_free),
-      model(device, backend.get(), decoding_tensor),
+      model(device, backend.get(), decoding_tensor, decoding_buffer_types(device, backend.get())),
       transducer(model, names) {
     ggml_threadpool_params params = ggml_threadpool_params_default(threads);
     pool.reset(ggml_threadpool_new(&params));
