@@ -2,7 +2,8 @@
   "schema_version": 1,
   "measure_id": "001",
   "title": "Specialize GEMM for Haas shapes",
-  "status": "pending",
-  "reason": "Not evaluated.",
-  "checks": []
+  "status": "in_progress",
+  "reason": "The 64-column variant was rejected. GEMM tuning remains open for further independently recorded variants.",
+  "checks": [],
+  "updated_utc": "2026-11-06T17:32:14.776206+00:00"
 }
