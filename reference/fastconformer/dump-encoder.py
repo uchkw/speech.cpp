@@ -14,30 +14,20 @@ import argparse
 import hashlib
 import importlib.metadata
 import inspect
-import io
 import json
 from pathlib import Path
 import platform
 import sys
-import tarfile
 
 import numpy as np
 import soundfile
 import torch
-from nemo.collections.asr.modules import AudioToMelSpectrogramPreprocessor, ConformerEncoder, RNNTJoint
-from omegaconf import OmegaConf
 
-from pins import MODELS, NEMO, verify_checkpoint
+from haas_checkpoint import CLASSES, MODEL, load_checkpoint, restore_stages
+from pins import MODELS, NEMO
 
 
-MODEL = "Haas-ja-v1.0"
 CPU_SEED = 0
-CLASSES = {
-    "preprocessor": AudioToMelSpectrogramPreprocessor,
-    "encoder": ConformerEncoder,
-    "joint": RNNTJoint,
-}
-
 
 def sha256(path):
     """Returns a file's SHA-256 without retaining its contents."""
@@ -60,39 +50,16 @@ def environment():
         "prediction_modules_imported": forbidden,
         "packages": {
             name: importlib.metadata.version(name)
-            for name in ("nemo-toolkit", "torch", "lightning", "numpy", "soundfile")
+            for name in ("nemo-toolkit", "torch", "lightning", "numpy", "soundfile", "sentencepiece", "protobuf")
         },
         "lock_sha256": sha256(Path(__file__).parent / "haas-encoder" / "uv.lock"),
         "script_sha256": sha256(__file__),
+        "loader_sha256": sha256(inspect.getfile(load_checkpoint)),
         "official_modules": {
             name: {"class": cls.__module__ + "." + cls.__name__, "source_sha256": sha256(inspect.getfile(cls))}
             for name, cls in CLASSES.items()
         },
     }
-
-
-def restore_stages(path):
-    """Restores only the official frontend, encoder and joint from the pinned archive on the CPU."""
-    verify_checkpoint(path, MODELS[MODEL])
-    print(json.dumps({"event": "checkpoint_verified", "sha256": MODELS[MODEL]["sha256"]}), flush=True)
-    with tarfile.open(path, "r:*") as archive:
-        members = {member.name.removeprefix("./"): member for member in archive.getmembers()}
-        config_bytes = archive.extractfile(members["model_config.yaml"]).read()
-        config = OmegaConf.load(io.StringIO(config_bytes.decode("utf-8")))
-        with archive.extractfile(members["model_weights.ckpt"]) as source:
-            state = torch.load(source, map_location="cpu", weights_only=True)
-    stages = {}
-    for name, cls in CLASSES.items():
-        if config[name]._target_ != "nemo.collections.asr.modules." + cls.__name__:
-            raise ValueError(f"{name} is not the official {cls.__name__}: {config[name]._target_}")
-        module = cls.from_config_dict(config[name]).cpu().float().eval()
-        prefix = name + "."
-        weights = {key[len(prefix):]: value for key, value in state.items() if key.startswith(prefix)}
-        module.load_state_dict(weights, strict=True)
-        stages[name] = module
-        print(json.dumps({"event": "stage_loaded", "stage": name, "tensors": len(weights)}), flush=True)
-    checkpoint_dtypes = sorted({str(value.dtype) for value in state.values() if isinstance(value, torch.Tensor)})
-    return config, stages, hashlib.sha256(config_bytes).hexdigest(), checkpoint_dtypes
 
 
 def dump_audio(path, output, config, stages, provenance, threads):
@@ -180,8 +147,11 @@ def main():
     torch.set_num_threads(args.threads)
     torch.random.default_generator.manual_seed(CPU_SEED)
     with torch.inference_mode():
-        config, stages, config_sha, checkpoint_dtypes = restore_stages(args.checkpoint)
-        provenance.update(config_sha256=config_sha, checkpoint_dtypes=checkpoint_dtypes)
+        checkpoint = load_checkpoint(args.checkpoint)
+        config = checkpoint.config
+        stages = restore_stages(checkpoint)
+        provenance.update(config_sha256=checkpoint.config_sha256, checkpoint_dtypes=checkpoint.dtypes)
+        del checkpoint
         for path in args.audio:
             dump_audio(path, args.out_dir, config, stages, provenance, args.threads)
 
