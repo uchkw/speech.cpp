@@ -1,5 +1,8 @@
 #include "recognizer.h"
 
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <stdexcept>
 
 #include "backend.h"
@@ -7,6 +10,31 @@
 #include "layout.h"
 
 namespace fastconformer {
+
+namespace {
+
+bool experiment_requested(const char * name) {
+    const char * value = std::getenv(name);
+    if (!value || std::strcmp(value, "0") == 0) return false;
+    if (std::strcmp(value, "1") == 0) return true;
+    throw Error(Fault::InvalidArgument, std::string(name) + " must be 0 or 1");
+}
+
+}  // namespace
+
+struct Recognizer::EncoderGraph {
+    Graph graph;
+    ggml_tensor * input;
+    ggml_tensor * output;
+    int64_t frames;
+
+    EncoderGraph(const Encoder & encoder, const Joint & joint, const std::vector<float> & features, int mels, int64_t frames)
+        : frames(frames) {
+        input = graph.input(features, mels, frames);
+        output = joint.project_encoder(graph.ctx(), encoder.build(graph, input));
+        graph.output(output);
+    }
+};
 
 Recognizer::Transducer::Transducer(const ModelFile & m, const std::vector<std::string> & names) : prediction(m), joint(m), names(names) {
     for (const std::string & name : names) decoders.push_back(make_decoder(m, prediction, joint, name));
@@ -42,21 +70,58 @@ Recognizer::Recognizer(const std::string & path, ggml_backend_t backend, int thr
       detokenizer_(model_),
       separators_(model_.str_array("fastconformer.segment.separators")),
       breaks_(model_.str_array("fastconformer.segment.breaks")),
+      cache_encoder_graph_(experiment_requested("SPEECH_HAAS_ENCODER_GRAPH_CACHE") && model_.str("general.name") == "Haas-ja-v1.0" &&
+                           model_.str("fastconformer.decoder.prediction") == "kda"),
+      trace_encoder_graph_cache_(experiment_requested("SPEECH_HAAS_ENCODER_GRAPH_CACHE_TRACE")),
       allocr_(ggml_gallocr_new(ggml_backend_get_default_buffer_type(backend))) {
     if (!allocr_) throw Error(Fault::OutOfMemory, "cannot create a graph allocator");
     if (WordsModel::offers(model_)) words_ = std::make_unique<WordsModel>(model_);
 }
 
 Recognizer::~Recognizer() {
+    if (trace_encoder_graph_cache_) {
+        const auto info = encoder_graph_cache_info();
+        std::fprintf(stderr, "haas_encoder_graph_cache enabled=%d builds=%zu hits=%zu frames=%lld feature_bytes=%zu compute_bytes=%zu\n",
+                     (int) info.enabled, info.builds, info.hits, (long long) info.frames, info.feature_bytes, info.compute_bytes);
+    }
+    encoder_graph_.reset();
     ggml_gallocr_free(allocr_);
 }
 
+EncoderGraphCacheInfo Recognizer::encoder_graph_cache_info() const {
+    return {cache_encoder_graph_, encoder_graph_builds_, encoder_graph_hits_, encoder_graph_ ? encoder_graph_->frames : -1,
+            encoder_graph_ ? ggml_nbytes(encoder_graph_->input) : 0,
+            ggml_gallocr_get_buffer_size(allocr_, 0)};
+}
+
 std::vector<float> Recognizer::encode(const std::vector<float> & features, int64_t frames) {
+    if (cache_encoder_graph_) {
+        const bool hit = encoder_graph_ && encoder_graph_->frames == frames;
+        try {
+            if (hit) {
+                encoder_graph_->graph.set(encoder_graph_->input, features);
+                encoder_graph_->graph.compute_again(backend_);
+            } else {
+                encoder_graph_.reset();
+                encoder_graph_ = std::make_unique<EncoderGraph>(encoder_, device_.joint, features, frontend_.mels(), frames);
+                encoder_graph_->graph.compute(backend_, allocr_);
+            }
+            auto result = Graph::read(encoder_graph_->output);
+            if (hit) ++encoder_graph_hits_;
+            else ++encoder_graph_builds_;
+            return result;
+        } catch (...) {
+            encoder_graph_.reset();
+            throw;
+        }
+    }
     Graph g;
     ggml_tensor * out = device_.joint.project_encoder(g.ctx(), encoder_.build(g, features, frames));
     g.output(out);
     g.compute(backend_, allocr_);
-    return Graph::read(out);
+    auto result = Graph::read(out);
+    ++encoder_graph_builds_;
+    return result;
 }
 
 Transcript Recognizer::recognize(const std::vector<float> & samples, const std::string & name, DecodeOn on) {

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -29,6 +30,14 @@ struct Transcript {
  */
 enum class DecodeOn { Cpu, Device };
 
+/** Completed encoder calls, the retained graph and the recognizer's compute buffer; bytes exclude weights and positions. */
+struct EncoderGraphCacheInfo {
+    bool enabled;
+    size_t builds, hits;
+    int64_t frames;
+    size_t feature_bytes, compute_bytes;
+};
+
 /**
  * A FastConformer checkpoint with a TDT or an RNN-T decoder, from audio to text on one backend, and, for a model on
  * another device than the CPU, the tensors its decodings read on the CPU too.
@@ -54,6 +63,8 @@ public:
 
     /** The encoder's output for `features` ([frames, mels] row-major) projected for the joint, [T, hidden] row-major. */
     std::vector<float> encode(const std::vector<float> & features, int64_t frames);
+    /** The exact-shape prototype's counters and retained allocation, without changing its graph or output marks. */
+    EncoderGraphCacheInfo encoder_graph_cache_info() const;
 
     /**
      * The tokens of encode()'s output with the frames they were emitted on, by the decoding of decodings() named
@@ -156,7 +167,12 @@ private:
     Detokenizer detokenizer_;
     std::unique_ptr<WordsModel> words_;
     std::vector<std::string> separators_, breaks_;
+    bool cache_encoder_graph_, trace_encoder_graph_cache_;
     ggml_gallocr_t allocr_;
+    /** One graph over allocr_, destroyed before another graph reallocates it, or the model and position cache are freed. */
+    struct EncoderGraph;
+    std::unique_ptr<EncoderGraph> encoder_graph_;
+    size_t encoder_graph_builds_ = 0, encoder_graph_hits_ = 0;
 };
 
 }  // namespace fastconformer

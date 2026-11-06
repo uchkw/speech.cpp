@@ -96,7 +96,7 @@ ggml_tensor * Encoder::layer_norm(ggml_context * ctx, ggml_tensor * x, const std
     return ggml_add(ctx, ggml_mul(ctx, ggml_norm(ctx, x, eps_), m_.tensor(name + ".weight")), m_.tensor(name + ".bias"));
 }
 
-ggml_tensor * Encoder::subsample(Graph & g, const std::vector<float> & features, int64_t frames) const {
+ggml_tensor * Encoder::subsample(Graph & g, ggml_tensor * features) const {
     ggml_context * ctx = g.ctx();
     // ConvSubsampling "dw_striding" (nemo/collections/asr/parts/submodules/subsampling.py): a 3x3 convolution of
     // stride 2, then (depthwise 3x3 of stride 2, pointwise) for each further halving, each followed by a ReLU. The
@@ -104,7 +104,7 @@ ggml_tensor * Encoder::subsample(Graph & g, const std::vector<float> & features,
     // positions], channel-fastest: ggml_conv_2d_direct() took 18.9 ms of a 112.6 ms encoder on 25.5 s on Metal, and the
     // copies between it and the pointwise convolutions' layout 7 ms more (Apple M5, Haas-ja-v1.0 in Q8_0, 2026-10-31).
     ggml_tensor * w0 = m_.tensor("sub.conv.0.weight");
-    ggml_tensor * cols = ggml_im2col(ctx, w0, g.input(features, mels_, frames), 2, 2, 1, 1, 1, 1, true, GGML_TYPE_F32);
+    ggml_tensor * cols = ggml_im2col(ctx, w0, features, 2, 2, 1, 1, 1, 1, true, GGML_TYPE_F32);
     const int64_t c = w0->ne[3];
     ggml_tensor * x = mul_mat(ctx, ggml_reshape_2d(ctx, w0, w0->ne[0] * w0->ne[1], c), ggml_reshape_2d(ctx, cols, cols->ne[0], cols->ne[1] * cols->ne[2]));
     x = ggml_reshape_3d(ctx, ggml_relu(ctx, ggml_add(ctx, x, m_.tensor("sub.conv.0.bias"))), c, cols->ne[1], cols->ne[2]);
@@ -313,8 +313,12 @@ ggml_tensor * Encoder::convolution(Graph & g, ggml_tensor * x, const std::string
 }
 
 ggml_tensor * Encoder::build(Graph & g, const std::vector<float> & features, int64_t frames, EncoderStages * stages) const {
+    return build(g, g.input(features, mels_, frames), stages);
+}
+
+ggml_tensor * Encoder::build(Graph & g, ggml_tensor * features, EncoderStages * stages) const {
     ggml_context * ctx = g.ctx();
-    ggml_tensor * x = subsample(g, features, frames);
+    ggml_tensor * x = subsample(g, features);
     if (stages) stages->subsampled = x;
     const int64_t t = x->ne[1];
     if (xscale_ != 1.0f) x = ggml_scale(ctx, x, xscale_);

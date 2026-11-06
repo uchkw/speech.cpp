@@ -38,6 +38,8 @@ public:
 
     /** The encoder's output for `features` ([frames, mels] row-major), [d_model, subsampled_frames(frames)]. */
     ggml_tensor * build(Graph & g, const std::vector<float> & features, int64_t frames, EncoderStages * stages = nullptr) const;
+    /** The same encoder from a graph's F32 feature input [mels, frames], which its owner can update between runs. */
+    ggml_tensor * build(Graph & g, ggml_tensor * features, EncoderStages * stages = nullptr) const;
 
     /** The frames after subsampling: calc_length() of the three stride-2 convolutions. */
     int64_t subsampled_frames(int64_t frames) const;
@@ -48,7 +50,7 @@ public:
 private:
     ggml_tensor * linear(ggml_context * ctx, ggml_tensor * x, const std::string & name, bool bias) const;
     ggml_tensor * layer_norm(ggml_context * ctx, ggml_tensor * x, const std::string & name) const;
-    ggml_tensor * subsample(Graph & g, const std::vector<float> & features, int64_t frames) const;
+    ggml_tensor * subsample(Graph & g, ggml_tensor * features) const;
     ggml_tensor * feed_forward(ggml_context * ctx, ggml_tensor * x, const std::string & name) const;
     /** The inputs every layer's attention shares: the positional encodings and, for local attention, its mask. */
     struct AttentionInputs {
