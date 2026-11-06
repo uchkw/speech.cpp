@@ -2,10 +2,13 @@
 
 This is an unbuilt, unmeasured source checkpoint for [campaign issue 1](https://github.com/uchkw/speech.cpp/issues/1).
 It starts from speech.cpp `114c514430c8aa1455c077819f8e72e674a48b75` and ggml
-`e1a9ac12edbb57402618fd6936598603f5ee6266`. The ggml case-first commit is
-`57af121df58bf5de8e8fa4987f507d3dd6a53d8f`; it contains no kernel changes and is also the original-kernel comparison
-source. The kernel commit is `d219664b7accaedc8adc2c6c22ccc1742a42459f`. Both repository origins are the `uchkw` forks.
-Neither repository has been pushed.
+`e1a9ac12edbb57402618fd6936598603f5ee6266`. The initial ggml case-first commit is
+`57af121df58bf5de8e8fa4987f507d3dd6a53d8f`, followed by kernel commit
+`d219664b7accaedc8adc2c6c22ccc1742a42459f`. Additional mapped-buffer controls are in case-first commit
+`c1f0bfedf63fc4c577d99fc9cdc8da36dc47cce9`, followed by the single-buffer gate in
+`232e507d0c35312b77a57720a4c7095b3c77ff5e`, the current candidate pin. The original-kernel comparison must add the
+test-only `c1f0bfed` change to `57af121d` so its fixture includes the same mapped-buffer controls. Both repository
+origins are the `uchkw` forks. Neither repository has been pushed.
 
 ## Operation and scope
 
@@ -36,9 +39,16 @@ The new raw pattern is excluded from allocation-dependency insertion. Disabled r
 graphs retain the prior allocation dependencies. The optimizer may group then unpack the new sequence; a late FULL
 rejection still executes both ordinary operations.
 
-Same-shape, same-stride output aliases with the exact starting address of either original operand are allowed.
-Every element reads its two inputs before storing that element. Partial overlap is rejected. The matcher also
-rejects a sigmoid destination overlapping the other factor, because the separate sigmoid would overwrite the
+The FULL matcher requires the gate, factor, sigmoid result and product to share one underlying MTLBuffer. It uses
+the existing identity helper for three comparisons; common overlap logic and the structural matcher are unchanged.
+Distinct Metal wrappers can map overlapping host memory, which the common same-buffer range check does not see.
+Such wrappers are therefore outside this experiment even when their tensor ranges do not overlap. This limitation
+comes from source review, not an executed reproduction. The normal Haas graph arena remains the intended target;
+24 normal-graph fusions still require execution evidence.
+
+Within that buffer, same-shape, same-stride output aliases with the exact starting address of either original
+operand are allowed. Every element reads its two inputs before storing that element. Partial overlap is rejected.
+The matcher also rejects a sigmoid destination overlapping the other factor, because the separate sigmoid would overwrite the
 factor before MUL. A partial overlap of the sigmoid result with its own gate is rejected as well. A legitimate
 `a == gate` graph has its own case. No allocator lifetime extension is used to force fusion.
 
@@ -51,6 +61,14 @@ exact output aliases, a partial gate overlap, a sigmoid overwriting the other fa
 multiple consumers, F16, neighboring widths, strided inputs, broadcasting, a batch dimension and SiLU controls.
 The existing CPU-reference NMSE bounds of the unary/multiply checks are retained: F32 `1e-7`, F16 `5e-5`.
 They are not the acceptance bound for the original/off/on Metal comparison, which requires identical bytes.
+
+The direct Metal tool adds twelve controls, separate from those 64 CPU-reference cases, for 76 total comparisons
+(38 expected fusion cases and 38 controls). A page-aligned host arena has two distinct Metal mappings. In each MUL
+operand order, four controls bind only the gate, factor, sigmoid result or product to the second wrapper, with
+otherwise disjoint tensor ranges. Two more controls bind the sigmoid to the factor's exact host address or the
+product 16 bytes into the gate, through the other wrapper. They assert the wrapper and host-address arrangements,
+require zero fusions and contribute their output bytes to original/off/on comparisons. Both wrappers outlive execution and are released
+before the host arena. These controls exercise Metal mapping APIs and are not Vulkan or CPU-reference coverage.
 
 `test-metal-conformer-glu` uses the same input buffers for its fusion-disabled and fusion-enabled executions. It
 calls the real optimizer and requires zero new allocation dependencies for these minimal graphs. Before each run
@@ -86,8 +104,10 @@ No build, CPU reference, Metal dispatch, performance run or Vulkan check has occ
 `git diff --check` are the only completed implementation checks. Serialize every later build and execution with
 `/private/tmp/speech-haas-mac-perf.lock`, and bound builds to `-j4`.
 
-After the coordinator opens the slot, build the original case-first ggml and the candidate separately with Metal and
-tests enabled. Run `test-backend-ops -o CONFORMER_GLU -b MTL0` on both, with candidate env `0` and `1`. Related
+After the coordinator opens the slot, prepare the original comparison source with both test-only commits above,
+then build it and the candidate separately with Metal and tests enabled. The intermediate `c1f0bfed` source retains
+the pre-gate kernel and can test whether the new controls detect its missing gate; that failure is not yet observed.
+Run `test-backend-ops -o CONFORMER_GLU -b MTL0` on both, with candidate env `0` and `1`. Related
 regressions include `SIGMOID_MUL`, `SILU_MUL`, `SIGMOID`, `MUL`, `SWIGLU` and existing unary/multiply layout controls.
 Keep CPU F32 reference results apart from Metal strict-byte results. Then run, under the shared lock:
 
