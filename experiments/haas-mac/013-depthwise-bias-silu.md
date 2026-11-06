@@ -134,8 +134,9 @@ All builds and GPU work wait for the coordinator's turn allocation and then hold
 ## Normal encoder check and graph-debug launcher (source only)
 
 `experiments/haas-mac/013-encoder-check.cpp` is the normal encoder check that step 3 above waits for, in the
-style of the family's stage checks. It takes `<model.gguf> [output.bin]`, refuses a file that is not Haas's
-24-layer KDA FastConformer in Q4_K, Q8_0 or F16, and builds the graph exactly as `Recognizer::encode` does:
+style of the family's stage checks. It takes `<model.gguf> <output.bin>`, the output path required with no
+default name, refuses a file that is not Haas's 24-layer KDA FastConformer in Q4_K, Q8_0 or F16, and builds
+the graph exactly as `Recognizer::encode` does:
 `fastconformer::Encoder::build` followed by `Joint::project_encoder`, the final projected tensor the only
 output, no `EncoderStages`, no retained intermediate, no manual aliasing and no kernel or allocation change. One
 ordinary `ggml_gallocr`, freed before the backend, serves the fixed subsampled lengths 1, 31, 32, 33, 171, 172,
@@ -143,10 +144,14 @@ ordinary `ggml_gallocr`, freed before the backend, serves the fixed subsampled l
 subsampling factor and are verified with `Encoder::subsampled_frames()`; the features themselves are one
 fixed-seed xorshift stream of finite values, a pure function of the frame count, so a repeated length re-enters
 the same bytes and the check requires both repeats (33 and 1) to come out byte-identical under the same
-allocator. The device is the ordinary `auto` start with the CPU threads at 4. Each case's dimensions, finiteness
-and nonzero count are checked and printed, and every projected output, with per-case frame and length metadata,
-is written to the output file (default `013-encoder-check.bin`) for the byte-for-byte original/off/on
-comparison. The check initializes no fusion statistics, calls no command-buffer setter and keeps the default
+allocator. The device is Metal itself: the check selects the device whose name is `MTL0` (ggml-metal names the
+Metal device `MTL0`, not `Metal`), requires the registry behind that device to be exactly `MTL` before it loads
+the model or computes, and fails loudly rather than falling back to the CPU or another GPU when `MTL0` is
+absent. The CPU threads stay at 4. Each case's dimensions,
+finiteness and nonzero count are checked and printed, and every projected output, with per-case frame and
+length metadata, is written to the output file given as the required output argument, never a default name,
+for the byte-for-byte original/off/on comparison in which each caller passes its own distinct explicit path.
+The check initializes no fusion statistics, calls no command-buffer setter and keeps the default
 command-buffer partitioning; it refuses a process that sets `GGML_METAL_FUSION_DEBUG` or
 `GGML_METAL_FUSION_DISABLE`, and it prints the `GGML_METAL_DW_SILU` it runs with. The same helper source is
 compiled against the original and the candidate static libraries of each clean build (`fastconformer` and

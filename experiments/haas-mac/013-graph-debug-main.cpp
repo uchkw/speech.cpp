@@ -5,7 +5,7 @@
 // alone: 013-encoder-check.cpp compiled with SPEECH_013_ENCODER_CHECK_NO_MAIN and linked with this file, whose
 // own trace never enters the primary worker screen.
 //
-// usage: 013-graph-debug <model.gguf> [output.bin]
+// usage: 013-graph-debug <model.gguf> <output.bin>
 
 #include <cstdio>
 

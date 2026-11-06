@@ -15,7 +15,7 @@
 // frames, intended subsampled length and actual length, a u64 nonzero count and a u64 element count, followed
 // by the projected output's elements as float32 in ggml order, hidden fastest.
 //
-// usage: 013-encoder-check <model.gguf> [output.bin]
+// usage: 013-encoder-check <model.gguf> <output.bin>
 
 #include <cmath>
 #include <cstdint>
@@ -85,8 +85,8 @@ void write_u64(FILE * f, uint64_t v) {
     which renames this file's main away. */
 int speech_013_encoder_check_main(int argc, char ** argv) {
     const std::vector<std::string> args = utf8_args(argc, argv);
-    if (args.size() < 2 || args.size() > 3) {
-        std::fprintf(stderr, "usage: %s <model.gguf> [output.bin]\n",
+    if (args.size() != 3) {
+        std::fprintf(stderr, "usage: %s <model.gguf> <output.bin>\n",
                      args.empty() ? "013-encoder-check" : args[0].c_str());
         return 2;
     }
@@ -120,15 +120,26 @@ int speech_013_encoder_check_main(int argc, char ** argv) {
                 return 2;
             }
         }
-        ggml_backend_t backend = start_device(find_device("auto"), 4);
-        std::printf("backend: %s, cpu threads: 4\n", ggml_backend_name(backend));
+        // This check observes what Metal fuses alone, so it takes the device whose name is MTL0 (ggml-metal
+        // names the Metal device MTL0 via its "MTL%d" naming, not "Metal") and requires the MTL registry
+        // behind it; when MTL0 is absent it fails loudly instead of falling back to the CPU or another GPU,
+        // which would make the comparison say nothing.
+        const ggml_backend_dev_t device = find_device("MTL0");
+        const char * registry = ggml_backend_reg_name(ggml_backend_dev_backend_reg(device));
+        if (std::strcmp(registry, "MTL") != 0) {
+            throw Error(Fault::Device, std::string("the device ") + ggml_backend_dev_name(device) +
+                                           " comes from the \"" + registry + "\" registry, not Metal's \"MTL\"",
+                        "device");
+        }
+        ggml_backend_t backend = start_device(device, 4);
+        std::printf("backend: %s, registry: %s, cpu threads: 4\n", ggml_backend_name(backend), registry);
         bool ok = true;
         {
             const ModelFile model(args[1], backend, layout);
             const Encoder encoder(model, backend);
             const Joint joint(model);
             const int64_t mels = model.u32("fastconformer.frontend.n_mels");
-            const std::string output = args.size() > 2 ? args[2] : "013-encoder-check.bin";
+            const std::string output = args[2];
             std::unique_ptr<FILE, decltype(&std::fclose)> file(ggml_fopen(output.c_str(), "wb"), &std::fclose);
             if (!file) throw Error(Fault::Io, "cannot open the output file " + output);
             if (std::fwrite("sp013enc", 1, 8, file.get()) != 8) {
