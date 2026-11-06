@@ -8,6 +8,27 @@ evaluation recorded at a time. It preserves the speech C API, explicit model sel
 | speech.cpp | https://github.com/uchkw/speech.cpp | https://github.com/nyosegawa/speech.cpp |
 | ggml | https://github.com/uchkw/ggml, branch `speech.cpp` | https://github.com/nyosegawa/ggml, branch `speech.cpp` |
 
+## Build and update from source
+
+This fork has no published binary releases. Build the fork checkout and its pinned ggml submodule; upstream binaries
+do not contain this fork's changes. Do not use the upstream installers or binary update commands for this checkout.
+On macOS with a C++17 compiler and CMake 3.20 or later:
+
+```sh
+git clone --recurse-submodules https://github.com/uchkw/speech.cpp.git
+cd speech.cpp
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release -j4
+./build/speech --help
+```
+
+To update a clean checkout, run `git pull --ff-only` and `git submodule update --init --recursive`, then configure and
+build again. CI builds and packages the platform artifacts, but its release-installer job is explicitly skipped
+because this fork has no release channel. This is unperformed installation/update validation, not a passing check.
+Model catalog entries and Hugging Face sources remain shared with upstream.
+
+## Maintain the experiments
+
 The campaign is tracked in [issue 1](https://github.com/uchkw/speech.cpp/issues/1). Small JSON summaries and standalone
 HTML reports live in `reports/haas-mac/`; their reproducible runner and renderer live in `experiments/haas-mac/`.
 Large inputs, raw results and builds stay in ignored `outputs/` directories. Open an HTML report locally to view it.
