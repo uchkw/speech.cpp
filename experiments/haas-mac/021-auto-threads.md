@@ -85,8 +85,11 @@ The default screen has nine conditions, with three rounds on nine duration-strat
 | candidate-1/2/4/8/16 | Candidate, 1 | 1/2/4/8/16 | The explicit count |
 
 The machine default is an explicit preparation input and must first be observed through an ordinary API load; a
-different count causes the worker to stop before warmup. Conditions rotate their execution order each round. Every
-fresh worker warms the same nine inputs. All other experiment switches remain absent; inherited `SPEECH_` or `GGML_`
+different count causes the worker to stop before warmup. Round zero uses the table's order, round one reverses the
+entire order, and round two rotates the original order by half its length. The plan saves each model type's actual
+condition order for every round. This reverses the relative order of explicit counts and spreads their positions;
+three rounds do not balance all nine conditions over every position, so the screen cannot exclude all order effects.
+Every fresh worker warms the same nine inputs. All other experiment switches remain absent; inherited `SPEECH_` or `GGML_`
 overrides not recorded in the specification are refused. Builds must have verified source, the fixed ggml and matching
 build flags. The coordinator also verifies that their runtime source is the base and this trial, without a combined
 optimization. No timing is performed during preparation:
@@ -124,3 +127,7 @@ checkpoint has no model/GPU execution, full quality result, Vulkan pass, perform
 three selected-quality jobs with the pinned worker, expected counts and matching specification hashes. It invokes
 neither the plan's `run` command nor any binary, library, model, build or GPU. These checks validate preparation only;
 the C API load check and every numerical and performance check remain unexecuted.
+`021-thread-sweep-check.py` checks the deterministic order without a model, including the reversed positions of
+explicit one and sixteen, every condition exactly once per round, and an optional prepared plan's saved job order.
+Offline preparation from `581233f` reproduces the fixed ascending relative order in its second round. The revised
+preparation passes this order check against its saved plan and job specifications; no worker is executed in either case.

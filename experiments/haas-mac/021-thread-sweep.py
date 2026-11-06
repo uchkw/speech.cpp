@@ -46,6 +46,12 @@ def conditions(machine_default):
             for name, build, flag, count, expected in rows}
 
 
+def condition_order(names, round_index):
+    ordered = list(reversed(names)) if round_index % 2 else list(names)
+    shift = ((round_index // 2) * (len(ordered) // 2)) % len(ordered)
+    return ordered[shift:] + ordered[:shift]
+
+
 def prepare(args):
     if args.machine_default < 1:
         raise ValueError('machine-default must be positive and verified by the ordinary C API load check.')
@@ -85,11 +91,11 @@ def prepare(args):
     screen = compare.screen_inputs(data['subset'])
     phase, rounds = ('quality', 1) if args.quality else ('latency', policy['rounds'])
     records = data['corpus'] if args.quality else screen
-    jobs = []
+    jobs, execution_order = [], []
     for kind in kinds:
         for round_index in range(rounds):
-            names = list(variants)
-            names = names[round_index % len(names):] + names[:round_index % len(names)]
+            names = condition_order(variants, round_index)
+            execution_order.append({'type': kind, 'round': round_index, 'conditions': names})
             for name in names:
                 condition = variants[name]
                 compare.execution_environment(condition['environment'])
@@ -109,7 +115,7 @@ def prepare(args):
           'source_environment': data['source_environment'], 'input_hash': data['input_hash'],
           'assets_sha256': sha(args.assets), 'baseline_manifest_sha256': sha(args.baseline),
           'candidate_manifest_sha256': sha(args.candidate), 'runner_commit': RUNNER_COMMIT,
-          'runner_sha256': snapshots, 'driver_sha256': sha(__file__), 'jobs': jobs,
+          'runner_sha256': snapshots, 'driver_sha256': sha(__file__), 'jobs': jobs, 'execution_order': execution_order,
           'comparisons': {'default_user': 'baseline-auto', 'tuned_campaign': 'baseline-4'},
           'aggregation': policy['aggregation'],
           'scope': 'Screen timing uses nine inputs and three rounds. Full quality is a separate selected-condition run. '
