@@ -439,14 +439,13 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
 endif()
 
 # The checks of FastConformer's stages.
-foreach(stage frontend encoder joint-encoder transducer times sentencepiece)
+foreach(stage frontend encoder sentencepiece)
     add_executable(fastconformer-${stage}-check checks/fastconformer/fastconformer-${stage}-check.cpp)
     target_include_directories(fastconformer-${stage}-check PRIVATE checks)
     target_link_libraries(fastconformer-${stage}-check PRIVATE fastconformer)
 endforeach()
-# Haas-ASR's custom vocabulary, on the cases of reference/fastconformer/vocabulary_cases.py, and the recognition with
-# it, on the dumps of dump.py --words, which both read with the JSON reader of `speech`.
-foreach(stage vocabulary words)
+# The dump scope and Haas-ASR's custom vocabulary use the JSON reader of `speech`.
+foreach(stage joint-encoder transducer times vocabulary words)
     add_executable(fastconformer-${stage}-check checks/fastconformer/fastconformer-${stage}-check.cpp tools/common/json-reader.cpp)
     target_include_directories(fastconformer-${stage}-check PRIVATE checks tools/common)
     target_link_libraries(fastconformer-${stage}-check PRIVATE fastconformer)

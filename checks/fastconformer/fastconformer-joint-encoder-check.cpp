@@ -9,7 +9,7 @@
 #include "args.h"
 #include "backend.h"
 #include "compare.h"
-#include "reference-dumps.h"
+#include "dump-scope.h"
 #include "fastconformer/layout.h"
 #include "fastconformer/transducer.h"
 #include "ggml-cpu.h"
@@ -38,7 +38,7 @@ int main(int argc, char ** argv) {
             const double threshold_db = float32 ? 90 : 40;
             std::printf("encoder projection threshold: %.0f dB\n", threshold_db);
             ggml_gallocr_t allocr = ggml_gallocr_new(ggml_backend_get_default_buffer_type(backend));
-            for (const auto & d : reference_dumps(args[2], model)) {
+            for (const auto & d : scoped_dumps(args[2], model, DumpScope::Encoder)) {
                 const Npy encoded = read_npy((d / "encoded.npy").u8string());
                 const Npy want = read_npy((d / "joint_encoded.npy").u8string());
                 if (encoded.shape.size() != 2 || want.shape.size() != 2 || encoded.shape[0] != want.shape[0] ||

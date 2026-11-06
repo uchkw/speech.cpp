@@ -20,7 +20,7 @@
 
 #include "args.h"
 #include "backend.h"
-#include "reference-dumps.h"
+#include "dump-scope.h"
 #include "fastconformer/layout.h"
 #include "fastconformer/recognizer.h"
 #include "fastconformer/times.h"
@@ -255,7 +255,7 @@ int main(int argc, char ** argv) {
         {
             Recognizer recognizer(args[1], backend, default_threads());
             ggml_gallocr_t allocr = ggml_gallocr_new(ggml_backend_get_default_buffer_type(backend));
-            for (const auto & d : reference_dumps(args[2], recognizer.model())) {
+            for (const auto & d : scoped_dumps(args[2], recognizer.model(), DumpScope::Full)) {
                 const Npy encoded = read_npy((d / "encoded.npy").u8string());
                 const Npy audio = read_npy((d / "audio.npy").u8string());
                 Graph e;
