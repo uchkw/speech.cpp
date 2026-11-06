@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "measure_id": "002",
+  "title": "Prepack or selectively dequantize weights at load time",
+  "status": "pending",
+  "reason": "Not evaluated.",
+  "checks": []
+}

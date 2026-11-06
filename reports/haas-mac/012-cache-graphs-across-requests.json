@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "measure_id": "012",
+  "title": "Cache graphs across requests",
+  "status": "pending",
+  "reason": "Not evaluated.",
+  "checks": []
+}

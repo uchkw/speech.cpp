@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "measure_id": "016",
+  "title": "Store projections directly in head layout",
+  "status": "pending",
+  "reason": "Not evaluated.",
+  "checks": []
+}

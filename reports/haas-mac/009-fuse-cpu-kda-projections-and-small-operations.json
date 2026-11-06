@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "measure_id": "009",
+  "title": "Fuse CPU KDA projections and small operations",
+  "status": "pending",
+  "reason": "Not evaluated.",
+  "checks": []
+}

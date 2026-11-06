@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "measure_id": "003",
+  "title": "Keep KDA state resident",
+  "status": "pending",
+  "reason": "Not evaluated.",
+  "checks": []
+}

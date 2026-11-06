@@ -1,0 +1,26 @@
+{
+  "name": "Haas on Apple Silicon",
+  "repository": "https://github.com/uchkw/speech.cpp",
+  "tracking_issue": "https://github.com/uchkw/speech.cpp/issues/1",
+  "purpose": "Reduce warm latency for one Japanese voice input of a few seconds to 30 seconds while preserving recognition quality.",
+  "threads": 4,
+  "rounds": 3,
+  "decode_on_cpu": true,
+  "quality_policy": "exact",
+  "latency_count": 30,
+  "quality_count": 650,
+  "latency_definition": "Time from before sending the first PCM16 chunk through receipt of the terminal result. File reading, model loading and warmup are excluded. Each measured input is warmed once per fresh worker.",
+  "aggregation": "Median over rounds for each input, then linearly interpolated p50, p90 and p99 over those 30 medians. RTFx divides total audio duration by summed request time.",
+  "literal_cer": "Total Unicode code-point Levenshtein edits divided by total reference code points, including punctuation, symbols and whitespace.",
+  "repository_cer": "NFKC followed by removing Unicode punctuation, symbols, separators and whitespace; no case folding or alternate-spelling substitutions. Edits and reference lengths are summed before division.",
+  "quality_comparison": "The same 650 files on both builds; text and public token/segment text and times are compared exactly. A changed CER is not evidence of exact output equality.",
+  "latency_timestamps": false,
+  "quality_timestamps": true,
+  "unobserved_fields": "The worker does not expose raw TDT token IDs, frame indices or duration decisions. These are not claimed to match by this harness.",
+  "limitations": [
+    "The current corpus is FLEURS Japanese test, with inputs from 6.36 to 28.2 seconds.",
+    "The p99 of 30 input medians is not a precise estimate of production tail latency.",
+    "The repository CER is not the published metric accepting alternative spellings of words.",
+    "Fresh-process load and first-request times do not reset filesystem or system Metal caches."
+  ]
+}

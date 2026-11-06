@@ -1,0 +1,77 @@
+{
+  "scope": "Harness validation only, not an optimization measurement.",
+  "created_utc": "2026-11-06T17:27:42.761134+00:00",
+  "source_commit": "03555100287c118b41d1b475044e5ab1e07baa8c",
+  "ggml_commit": "e1a9ac12edbb57402618fd6936598603f5ee6266",
+  "speech_sha256": "c400031dc96465154223123448176a5d551f38c7b330bdd70dfdb5596bdef421",
+  "source_verified": true,
+  "aa": {
+    "type": "q4_k",
+    "latency_inputs": 3,
+    "rounds": 3,
+    "quality_inputs": 3,
+    "cpu_threads": 4,
+    "comparison": {
+      "text_changed": 0,
+      "public_tokens_changed": 0,
+      "segments_changed": 0,
+      "literal_better": 0,
+      "literal_worse": 0,
+      "literal_equal": 3,
+      "repository_better": 0,
+      "repository_worse": 0,
+      "repository_equal": 3,
+      "count": 3,
+      "median_latency_ratio": 1.001794411353656,
+      "latency_reduction_percent": -0.17944113536561002
+    },
+    "evidence": "aa-smoke/summary.json"
+  },
+  "stage_tool": {
+    "source_sha256": "b322e7d1012ab244cba14a45507ed669d992c87bc03698d4c4dd5b3712e184f8",
+    "binary_sha256": "530a183f331283b0243ad577bb75f6401dc9729c7c508db9eb6beb177ba2cb43",
+    "status": "passed",
+    "invalid_threads_refused": true,
+    "cases": [
+      {
+        "device": "gpu",
+        "threads": 4,
+        "runs": 3,
+        "text_nonempty": true
+      },
+      {
+        "device": "cpu",
+        "threads": 2,
+        "runs": 1,
+        "text_nonempty": true
+      }
+    ],
+    "official_reference": "not_run",
+    "evidence": "stage-tool-check/check.json"
+  },
+  "checks": [
+    {
+      "name": "Reproduce previous 650-input literal and repository CER for all four final types",
+      "status": "passed"
+    },
+    {
+      "name": "Arithmetic, file pairing, refusal gates, explicit environment and HTML local links",
+      "status": "passed"
+    },
+    {
+      "name": "Python source compilation and git diff whitespace",
+      "status": "passed"
+    },
+    {
+      "name": "Browser visual inspection",
+      "status": "unavailable",
+      "reason": "Browser policy blocked local file URLs. No browser workaround was attempted."
+    }
+  ],
+  "paths_relative_to": "External haas-mac-campaign artifact directory.",
+  "limitations": [
+    "The A/A smoke run is too small to characterize production tail latency.",
+    "Stage audio is derived from the local PCM corpus, not official reference tensors.",
+    "No model behavior, worker protocol or app default changes."
+  ]
+}
