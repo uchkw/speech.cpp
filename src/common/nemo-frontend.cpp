@@ -18,7 +18,7 @@ std::vector<double> read_tensor(const ModelFile & m, const std::string & name) {
 
 }  // namespace
 
-NemoFrontend::NemoFrontend(const ModelFile & m, const std::string & prefix, bool per_feature)
+NemoFrontend::NemoFrontend(const ModelFile & m, const std::string & prefix, bool per_feature, bool vdsp)
     : sample_rate_((int) m.u32("speech.sample_rate")),
       n_fft_((int) m.u32(prefix + "frontend.n_fft")),
       hop_((int) m.u32(prefix + "frontend.hop_length")),
@@ -27,6 +27,7 @@ NemoFrontend::NemoFrontend(const ModelFile & m, const std::string & prefix, bool
       preemphasis_(m.f32(prefix + "frontend.preemphasis")),
       log_guard_(m.f32(prefix + "frontend.log_guard")),
       fft_(n_fft_) {
+    if (vdsp) vdsp_fft_ = std::make_unique<VdspRealFft>(n_fft_);
     if (per_feature) std_guard_ = m.f32(prefix + "frontend.std_guard");
     const std::vector<double> w = read_tensor(m, "frontend.window");
     const int64_t window = (int64_t) w.size();
@@ -61,6 +62,7 @@ void NemoFrontend::log_mel(const float * x, int64_t begin, int64_t total, int64_
     std::vector<double> windowed(n_fft_);
     std::vector<std::complex<double>> spectrum(bins);
     std::vector<double> power(bins);
+    std::vector<double> scratch(vdsp_fft_ ? n_fft_ : 0);
     for (int64_t f = 0; f < count; f++) {
         // center=True with pad_mode="constant": the signal has n_fft / 2 zeros before it.
         const int64_t start = (frame + f) * hop_ - n_fft_ / 2;
@@ -68,7 +70,8 @@ void NemoFrontend::log_mel(const float * x, int64_t begin, int64_t total, int64_
             const int64_t i = start + k;
             windowed[k] = i >= 0 && i < total ? x[i - begin] * window_[k] : 0.0;
         }
-        fft_.transform(windowed.data(), spectrum.data());
+        if (vdsp_fft_) vdsp_fft_->transform(windowed.data(), spectrum.data(), scratch.data());
+        else fft_.transform(windowed.data(), spectrum.data());
         for (int k = 0; k < bins; k++) power[k] = std::norm(spectrum[k]);
         for (int m = 0; m < mels_; m++) {
             double sum = 0;

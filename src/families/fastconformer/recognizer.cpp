@@ -4,6 +4,7 @@
 
 #include "backend.h"
 #include "error.h"
+#include "frontend.h"
 #include "layout.h"
 
 namespace fastconformer {
@@ -35,7 +36,7 @@ Recognizer::Recognizer(const std::string & path, ggml_backend_t backend, int thr
       on_cpu_(ggml_backend_dev_type(ggml_backend_get_device(backend)) == GGML_BACKEND_DEVICE_TYPE_CPU),
       threads_(threads),
       model_(path, backend, layout),
-      frontend_(model_, "fastconformer.", true),
+      frontend_(make_frontend(model_)),
       encoder_(model_, backend),
       decoding_names_(fastconformer::decodings(model_)),
       device_(model_, decoding_names_),

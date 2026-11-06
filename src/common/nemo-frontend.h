@@ -1,11 +1,13 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "fft.h"
+#include "fft-vdsp.h"
 #include "model-file.h"
 
 /**
@@ -24,9 +26,9 @@ public:
     /**
      * The frontend whose settings and tensors are those of a family's file: <prefix>frontend.n_fft, .hop_length, .n_mels,
      * .preemphasis and .log_guard, with .std_guard where `per_feature` normalizes, and the tensors frontend.window and
-     * frontend.filterbank.
+     * frontend.filterbank. The explicit `vdsp` choice replaces only the Fourier transform on macOS.
      */
-    NemoFrontend(const ModelFile & m, const std::string & prefix, bool per_feature);
+    NemoFrontend(const ModelFile & m, const std::string & prefix, bool per_feature, bool vdsp = false);
 
     /** The features of mono samples at sample_rate(), [frames, mels] row-major (ggml [mels, frames]). */
     std::vector<float> features(const std::vector<float> & samples) const;
@@ -75,4 +77,5 @@ private:
     /** The bins [first, second) where each mel filter is not zero. */
     std::vector<std::pair<int, int>> bands_;
     RealFft fft_;
+    std::unique_ptr<VdspRealFft> vdsp_fft_;
 };

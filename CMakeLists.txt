@@ -46,6 +46,7 @@ add_library(speechcommon STATIC
     src/common/graph.cpp
     src/common/resample.cpp
     src/common/fft.cpp
+    src/common/fft-vdsp.cpp
     src/common/nemo-frontend.cpp
     src/common/nemo-transformer.cpp
     src/common/sortformer-network.cpp
@@ -63,6 +64,10 @@ add_library(speechcommon STATIC
 )
 target_include_directories(speechcommon PUBLIC src/common)
 target_link_libraries(speechcommon PUBLIC ggml::ggml)
+if (APPLE)
+    find_library(SPEECH_ACCELERATE_FRAMEWORK Accelerate REQUIRED)
+    target_link_libraries(speechcommon PUBLIC ${SPEECH_ACCELERATE_FRAMEWORK})
+endif()
 # A file of a newer layout is refused naming the release that reads it and this one.
 target_compile_definitions(speechcommon PRIVATE SPEECH_VERSION="${PROJECT_VERSION}")
 if (WIN32)
@@ -104,6 +109,7 @@ target_link_libraries(irodoritts PUBLIC speechcommon)
 # FastConformer speech recognition (NVIDIA NeMo): the family.
 add_library(fastconformer STATIC
     src/families/fastconformer/layout.cpp
+    src/families/fastconformer/frontend.cpp
     src/families/fastconformer/encoder.cpp
     src/families/fastconformer/transducer.cpp
     src/families/fastconformer/kda.cpp
@@ -439,7 +445,7 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
 endif()
 
 # The checks of FastConformer's stages.
-foreach(stage frontend encoder transducer times sentencepiece)
+foreach(stage frontend frontend-vdsp encoder transducer times sentencepiece)
     add_executable(fastconformer-${stage}-check checks/fastconformer/fastconformer-${stage}-check.cpp)
     target_include_directories(fastconformer-${stage}-check PRIVATE checks)
     target_link_libraries(fastconformer-${stage}-check PRIVATE fastconformer)
@@ -536,3 +542,6 @@ target_link_libraries(drama3-prompt-check PRIVATE drama3)
 
 add_executable(fft-check checks/common/fft-check.cpp)
 target_link_libraries(fft-check PRIVATE speechcommon)
+
+add_executable(fft-vdsp-check checks/common/fft-vdsp-check.cpp)
+target_link_libraries(fft-vdsp-check PRIVATE speechcommon)

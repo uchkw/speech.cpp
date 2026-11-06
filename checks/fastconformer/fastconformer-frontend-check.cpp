@@ -11,6 +11,7 @@
 #include "compare.h"
 #include "reference-dumps.h"
 #include "fastconformer/layout.h"
+#include "fastconformer/frontend.h"
 #include "ggml-cpu.h"
 #include "nemo-frontend.h"
 #include "npy.h"
@@ -30,7 +31,7 @@ int main(int argc, char ** argv) {
         bool ok = true;
         {
             const ModelFile model(args[1], backend, layout);
-            const NemoFrontend frontend(model, "fastconformer.", true);
+            const NemoFrontend frontend = make_frontend(model);
             for (const auto & d : reference_dumps(args[2], model)) {
                 const Npy audio = read_npy((d / "audio.npy").u8string());
                 const Npy want = read_npy((d / "features.npy").u8string());
