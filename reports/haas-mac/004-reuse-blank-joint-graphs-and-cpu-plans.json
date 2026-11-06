@@ -2,8 +2,8 @@
   "schema_version": 1,
   "measure_id": "004",
   "title": "Reuse blank-joint graphs and CPU plans",
-  "status": "in_progress",
-  "reason": "Blank-joint graph reuse was rejected after the nine-input screen and alternating stage diagnostic. CPU-plan reuse is being evaluated as an independent trial.",
+  "status": "conditional",
+  "reason": "No candidate is adopted from the independent blank-joint graph reuse and CPU-plan reuse trials on M2 Ultra. Neither bounded screen establishes a stable warm request gain. More localized tuning and a combination of the two changes remain untested.",
   "checks": [],
-  "updated_utc": "2026-11-06T19:29:54.542150+00:00"
+  "updated_utc": "2026-11-06T19:33:49.941023+00:00"
 }
