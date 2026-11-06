@@ -14,8 +14,9 @@ not an adopted speed-up. The tracking issue is https://github.com/uchkw/speech.c
 - Initial local shared-range guard: `3276f819ec23280abde8471d8658608862997e35`.
 - Convolution-output/bias alias cases: `fe22ef139dc9068a9d57f6762ecdcb1b563cee90`.
 - Guard retaining stores that update the following bias: `0da62efa8cdd5b0c6ed6d7efb15c59bfddde9bef`.
-- Candidate with complete direct-output dumps: `caa80793e8777a07f3b9edbf3c0dfc83157cd412`.
-- Original-kernel comparison with identical current tests: `dca853f78be3f668c6bfcea26f79fce0ef6b6042`.
+- Complete direct-output dumps: `caa80793e8777a07f3b9edbf3c0dfc83157cd412`.
+- Candidate with backing storage created before its output view: `2b5ce8e9215177354519b42e84b0853de9196ed0`.
+- Original-kernel comparison with identical current tests: `6e18078cfe8257378826cf16b07b378e6d530a57`.
 - Parent branch: `codex/exp-haas-013`; ggml branch: `codex/haas-mac-013-dw-silu`.
 - Original comparison branch: `codex/haas-mac-013-original-checks`, in
   `outputs/worktrees/haas-mac-013-original-ggml`.
@@ -102,6 +103,8 @@ candidate-off and candidate-on runs. The same-binary comparison uses `memcmp` di
 that wrong-destination and skipped-last-store defects cannot pass through stale output. None has run yet.
 
 Bias views in the fixtures are expanded before the convolution graph, keeping them outside the five-node pattern.
+The strided activation's backing tensor is created before its view because the context allocator initializes
+tensors in creation order. This test-only source correction preserves the graph and expectations and is unexecuted.
 The real model uses an already loaded bias tensor. The direct check counts a fusion only when the compute encoder
 accepts it, but its independent allocations do not establish that the normal model allocator accepts the same fusion.
 
