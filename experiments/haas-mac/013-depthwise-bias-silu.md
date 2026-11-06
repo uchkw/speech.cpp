@@ -7,8 +7,12 @@ not an adopted speed-up. The tracking issue is https://github.com/uchkw/speech.c
 
 - Parent base: `114c514430c8aa1455c077819f8e72e674a48b75`.
 - ggml runtime base: `e1a9ac12edbb57402618fd6936598603f5ee6266`.
-- Cases first and original-kernel comparison: `97f3dcaf262818bfb52c4a0516fa76c2cb3c6b1c`.
-- Experimental Metal implementation: `76f792b977196da0e4db64680a372e129ca06dba`.
+- Initial cases-first checkpoint: `97f3dcaf262818bfb52c4a0516fa76c2cb3c6b1c`.
+- Initial Metal implementation: `76f792b977196da0e4db64680a372e129ca06dba`.
+- Cross-wrapper cases and sentinel bounds: `decd45fde77b20469595f55d2cf3562cd48da04b`,
+  `a024ed705a677918a6145d21d10234e72590a912`.
+- Candidate with local shared-range guard: `3276f819ec23280abde8471d8658608862997e35`.
+- Original-kernel comparison with identical current tests: `8dfeb608ab45d7e087b9133864fbbe1ef6dcbad8`.
 - Parent branch: `codex/exp-haas-013`; ggml branch: `codex/haas-mac-013-dw-silu`.
 - Original comparison branch: `codex/haas-mac-013-original-checks`, in
   `outputs/worktrees/haas-mac-013-original-ggml`.
@@ -47,25 +51,33 @@ been measured for this trial.
 The custom matcher applies `ggml_can_fuse_subgraph_ext()` to all five raw nodes, including both views. A protected
 intermediate or any use outside the subgraph rejects fusion. Full validation additionally rejects any final-output
 overlap with input, kernel or bias, even an exact alias. The existing general memory checks remain in force.
+The DW-specific guard also checks host byte-range overlap when both Metal buffers are shared. Shared or mapped
+buffers retain real host pointers; two wrappers can cover the same host range with distinct Metal buffer identities.
+Private buffers use synthetic addresses, so private/private and mixed shared/private pairs do not enter this host
+comparison. The common overlap helper is unchanged, and disjoint weight and activation buffers remain eligible.
 The new entry is excluded from allocator dependency insertion. Structural packing may still be followed by three
 ordinary dispatches when the final allocation aliases an input. This preserves the existing allocator lifetime
 policy; it can also reduce the number of real fusions and must be observed on the normal encoder graph.
 
 ## Checks prepared before implementation
 
-`test-dw-silu-cases.h` is shared by the CPU-reference and direct Metal checks. It declares 50 cases:
+`test-dw-silu-cases.h` is shared by the CPU-reference and direct Metal checks. It declares 57 cases:
 
-- 23 eligible cases: C=1024 with T=1,2,3,4,5,8,9,17,31,32,33,171,375; C=31,32,33,255,256,257 with T=33;
-  and offset, downstream consumer, signed weights and activations above the finite half range.
-- 27 rejection controls: F16 weights at T=1,33,171; ReLU; protected convolution, permutation, reshape or sum;
+- 24 eligible cases: C=1024 with T=1,2,3,4,5,8,9,17,31,32,33,171,375; C=31,32,33,255,256,257 with T=33;
+  offset, downstream consumer, signed weights, activations above the finite half range and a disjoint mapped output.
+- 33 rejection controls: F16 weights at T=1,33,171; ReLU; protected convolution, permutation, reshape or sum;
   additional consumers of convolution views or sum; protected in-place activation; exact and partial input aliases;
   kernel and bias aliases; another reshape, full bias matrix, batch, stride, dilation, kernel size, missing reshape,
-  strided bias/output/input and C=1.
+  strided bias/output/input and C=1; and six cross-wrapper exact/partial aliases of input, kernel or bias.
 
 `test-backend-ops -o CONV_DW_BIAS_SILU` contains 49 cases with the existing error bound. The padded channel-row
 input is direct-Metal-only: the current CPU CWHN implementation indexes packed rows without using the input's
 row strides. This exclusion is based on source inspection, not a newly executed CPU result. The strided bias and
-output controls use row strides supported by the ordinary implementations.
+output controls use row strides supported by the ordinary implementations. The seven mapped-buffer cases are also
+direct-Metal-only because CPU graph copies do not preserve physical aliasing across buffer wrappers. They map one
+page-aligned host arena twice, allocate inputs through one wrapper and the final activation through the other, and
+assert the distinct wrapper contexts. Partial bias aliases use a narrow bias range so every restored bias is above
+every expected activation; a missing store cannot accidentally equal the preceding result.
 
 `test-metal-dw-silu [expect-fusion: 0|1]` compares the same graph and buffers with generic fusion disabled and
 enabled. Before each execution it restores all inputs and poisons output bytes not overlapping active inputs.
