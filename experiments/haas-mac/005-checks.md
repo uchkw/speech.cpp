@@ -48,7 +48,10 @@ check. It checks:
   every encoder layer, the encoder output and its joint projection.
 - The graph with only its ordinary final output against the graph retaining
   intermediate outputs, on each side independently. Retaining intermediates
-  can change allocation or fusion and is not the ordinary request path.
+  can change allocation or fusion and is not the ordinary request path. The
+  check retains each projection itself, then separates the packed Q/K/V rows
+  on the host without adding graph operations. Comparisons follow data-flow
+  order and report the first differing retained tensor.
 - For supplied benchmark audio, emitted token IDs, frames, durations, text and
   graph counts from the ordinary final projections. It does not observe every
   blank-duration decision.
@@ -90,5 +93,43 @@ explicitly:
 Each audio directory contains `audio.npy`, mono float32 samples at 16 kHz.
 Q4_K, Q8_0 and F16 each need their own check. Official Haas CPU F32/Metal dumps
 and Windows Vulkan checks remain required for acceptance and are not supplied
-by these paired comparisons. No build, execution or measurement result is
-claimed by the preparation of these sources.
+by these paired comparisons.
+
+## Validation on November 7, 2026
+
+The runtime remains the clean build of `d3796ef`, with the pinned ggml unchanged.
+The corrected check links those same retained libraries; its source, compile
+command and executable hashes are recorded separately in the campaign artifacts.
+Q4_K, Q8_0 and F16 each pass all 12 inputs on CPU and Metal with exact bits,
+including the ordinary final output against the instrumented output on each
+side. All nine real-audio/type pairs have identical emitted IDs, frames,
+durations, text and graph counts on each backend. The CPU uses the actual
+quantized or F16 weights with F32 activations and KDA states; these are not
+official F32-weight reference checks.
+
+The original strict Metal failure is preserved. Its candidate check alone
+added 72 `CONT` nodes to read the head views. On Q4_K with one encoded frame,
+this increased the candidate graph from 1695 to 1767 nodes. Metal assigns the
+first 10 percent of the nodes to the first command buffer: its boundary moved
+from 169 to 176. The trace shows `blk.2.ff1_norm`'s `NORM` at index 175 in the
+first buffer and its `MUL` and `ADD` at 176 and 177 in the second. It dispatches
+`kernel_norm_f32_4` and separate arithmetic instead of the three-operation
+fusion. The first retained tensor that differs in data-flow order is layer
+2's Q projection; layers 0 and 1 remain exact.
+
+Collecting all original failures found the ordinary final projections exact
+for all 36 input/type pairs, while the asymmetric candidate instrumentation
+differed on 32 pairs. Disabling fusion made every original comparison exact.
+Fusion debug mode also made the one-frame case exact, but that mode forces
+single-command-buffer encoding and is not evidence of the ordinary path's
+fusion pattern. The boundary trace therefore uses graph debug alone.
+
+Retaining the packed product and separating its rows on the host restores the
+1695-node instrumented graph and the three-operation fusion. It changes no
+runtime tensor, projection dimensions, head stride or precision. All raw Q/K/V
+projections and attention results are exact with this check, so neither the
+larger projection nor its strided heads causes an observed numerical change
+over the checked workload. No tolerance is relaxed and the failed original
+logs are not relabeled as passes. The original checks, both fusion diagnostics,
+the boundary traces and the corrected CPU/Metal results have separate paths
+under external campaign artifacts `005/`. Performance has not yet been measured.

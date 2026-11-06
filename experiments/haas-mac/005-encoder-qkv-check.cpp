@@ -200,16 +200,13 @@ Snapshot evaluate(const fastconformer::Encoder & encoder, const fastconformer::J
     graph.output(projected);
     const auto matrices = products(graph, matrix_names(model));
     std::map<std::string, ggml_tensor *> retained{{"subsampled", stages.subsampled}, {"encoded", encoded}, {"projected", projected}};
-    const int64_t heads = model.size("fastconformer.encoder.num_heads");
     for (size_t layer = 0; layer < stages.layers.size(); ++layer) {
         const std::string index = std::to_string(layer), prefix = "blk." + index + ".attn";
         retained["layer_" + index] = stages.layers[layer];
         retained["attention_" + index] = matrices.at(prefix + "_out.weight")->src[1];
         if (packed) {
-            const auto views = head_views(graph, matrices.at(prefix + "_qkv.weight"), heads);
-            for (size_t part = 0; part < views.size(); ++part) {
-                retained["qkv_" + index + "_" + std::to_string(part)] = ggml_cont(graph.ctx(), views[part]);
-            }
+            // Retain the projection itself, as on the ordinary side. Extra graph copies can change Metal fusion.
+            retained["packed_qkv_" + index] = matrices.at(prefix + "_qkv.weight");
         } else {
             int part = 0;
             for (const char * suffix : {"q", "k", "v"}) {
@@ -219,7 +216,22 @@ Snapshot evaluate(const fastconformer::Encoder & encoder, const fastconformer::J
     }
     for (const auto & item : retained) graph.output(item.second);
     graph.compute(backend, allocator);
-    for (const auto & item : retained) result[item.first] = Graph::read(item.second);
+    const size_t width = (size_t) model.size("fastconformer.encoder.d_model");
+    for (const auto & item : retained) {
+        const auto values = Graph::read(item.second);
+        if (item.first.rfind("packed_qkv_", 0) != 0) {
+            result[item.first] = values;
+            continue;
+        }
+        const std::string index = item.first.substr(11);
+        for (size_t part = 0; part < 3; ++part) {
+            auto & head = result["qkv_" + index + "_" + std::to_string(part)];
+            head.resize(values.size() / 3);
+            for (size_t frame = 0; frame < head.size() / width; ++frame) {
+                std::copy_n(values.begin() + (frame * 3 + part) * width, width, head.begin() + frame * width);
+            }
+        }
+    }
     return result;
 }
 
@@ -263,10 +275,25 @@ int main(int argc, char ** argv) {
         require(bool(allocator), "cannot allocate the paired encoder graphs");
         bool ok = true;
         size_t inputs = 0;
+        std::vector<std::string> dataflow{"subsampled"};
+        for (int layer = 0; layer < model.count("fastconformer.encoder.num_layers"); ++layer) {
+            const std::string index = std::to_string(layer);
+            for (int part = 0; part < 3; ++part) dataflow.push_back("qkv_" + index + "_" + std::to_string(part));
+            dataflow.push_back("attention_" + index);
+            dataflow.push_back("layer_" + index);
+        }
+        for (const char * name : {"encoded", "projected", "actual_projected"}) dataflow.push_back(name);
         auto compare_input = [&](const std::string & input, const std::vector<float> & features, int64_t frames, bool decode) {
             const auto left = evaluate(recognizer.encoder(), recognizer.joint(), model, backend.get(), allocator.get(), features, frames, false);
             const auto right = evaluate(candidate, recognizer.joint(), model, backend.get(), allocator.get(), features, frames, true);
-            for (const auto & item : left) ok = difference(input, item.first, right.at(item.first), item.second) && ok;
+            std::string first_difference;
+            for (const auto & name : dataflow) {
+                const bool exact = difference(input, name, right.at(name), left.at(name));
+                if (!exact && first_difference.empty()) first_difference = name;
+                ok = exact && ok;
+            }
+            std::printf("{\"input\":%s,\"first_dataflow_difference\":%s}\n", json_string(input).c_str(),
+                        first_difference.empty() ? "null" : json_string(first_difference).c_str());
             ok = difference(input, "baseline_actual_vs_instrumented", left.at("actual_projected"), left.at("projected")) && ok;
             ok = difference(input, "candidate_actual_vs_instrumented", right.at("actual_projected"), right.at("projected")) && ok;
             if (decode) {
