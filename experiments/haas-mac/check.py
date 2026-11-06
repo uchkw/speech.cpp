@@ -202,7 +202,8 @@ def main():
                 'GGML_METAL_HEAD_STORE', 'SPEECH_HAAS_TDT_BUFFER_REUSE', 'SPEECH_HAAS_FRONTEND_PARALLEL',
                 'SPEECH_HAAS_FRONTEND_VDSP', 'SPEECH_HAAS_AUTO_THREADS', 'SPEECH_HAAS_KDA_CONSTANTS',
                 'GGML_CPU_NORM_MUL_ADD_FUSION', 'SPEECH_HAAS_WORKER_UNSYNC', 'SPEECH_HAAS_WORKER_UNTIE',
-                'SPEECH_HAAS_TDT_DEVICE_ARGMAX']:
+                'SPEECH_HAAS_TDT_DEVICE_ARGMAX', 'SPEECH_HAAS_REL_FA', 'SPEECH_HAAS_KEYWORD_CACHE',
+                'SPEECH_HAAS_RAW_MEL_PREFIX']:
         for value in ['0', '1']:
             assert compare.environment([f'{key}={value}'])[key] == value
         refused(lambda: compare.environment([f'{key}=2']), 'An invalid binary switch was accepted.', expected='0 or 1')
