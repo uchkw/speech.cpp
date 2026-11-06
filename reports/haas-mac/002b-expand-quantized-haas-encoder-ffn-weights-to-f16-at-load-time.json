@@ -1192,7 +1192,7 @@
     "worker_diagnostic_build_manifest_sha256": "7ba43f61e0d44f7b568f4617939b9caf247330b97d05a41c3b0ecb415b16ea67",
     "evidence_manifest_sha256": "e12e7d0025f83467981c2013bedac2a059bd98c6f23104f75724cb2fbc08c3f4",
     "source_checkpoint_summary_sha256": "e83cc8896aa5a2c21f1a252046a0efe8db9c17b7486c3dfc2fe872568d3dbd94",
-    "preparation_script_sha256": "500f5416de9ee3f3f5d0e8fc7ccc0adaf2c5ca3cf9579373af3c78190544328e",
+    "preparation_script_sha256": "821d54b915a70ac5ed866144b55b5a2f13ce1782e63892f07803e51985c8b9f0",
     "worker_probe": {
       "directory": "002b-worker-probe",
       "run_manifest_sha256": "a2a93e7fe4f691fbb6dbbcd6a70f814f6df1c264ab6fefabc351582182d9729f",
@@ -1478,7 +1478,10 @@
           "worker_exit"
         ]
       },
-      "contained_end": "finish_before"
+      "contained_end": "finish_before",
+      "tool_source_commit": "c35354fced5944db6d901f8cc26cb7052453a1cc",
+      "driver_source": "experiments/haas-mac/002b-worker-probe.py",
+      "interval_map_source": "experiments/haas-mac/002b-worker-probe-intervals.json"
     }
   },
   "checks": [
