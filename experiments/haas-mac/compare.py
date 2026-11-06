@@ -30,7 +30,7 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 REPORTS = REPO / 'reports/haas-mac'
 LOCK = '/private/tmp/speech-haas-mac-perf.lock'
-EXPERIMENT_ENVIRONMENT = {'GGML_METAL_MM_TILE_N', 'SPEECH_HAAS_CPU_REPACK'}
+EXPERIMENT_ENVIRONMENT = {'GGML_METAL_MM_TILE_N', 'SPEECH_HAAS_CPU_REPACK', 'SPEECH_HAAS_FFN_F16'}
 
 
 def read(path):
@@ -63,8 +63,8 @@ def environment(values):
         key, separator, setting = value.partition('=')
         if not separator or key not in EXPERIMENT_ENVIRONMENT:
             raise ValueError('Only explicitly allowed experiment environment variables can be recorded.')
-        if key == 'SPEECH_HAAS_CPU_REPACK' and setting not in {'0', '1'}:
-            raise ValueError('SPEECH_HAAS_CPU_REPACK must be explicitly set to 0 or 1.')
+        if key in {'SPEECH_HAAS_CPU_REPACK', 'SPEECH_HAAS_FFN_F16'} and setting not in {'0', '1'}:
+            raise ValueError(f'{key} must be explicitly set to 0 or 1.')
         result[key] = setting
     for key in EXPERIMENT_ENVIRONMENT:
         if key in os.environ and key not in result:
