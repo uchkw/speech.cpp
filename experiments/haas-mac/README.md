@@ -63,6 +63,8 @@ Only named campaign variables are allowed. The source-verified runner refuses an
 that the invocation does not record. The CPU prepacking prototype uses `SPEECH_HAAS_CPU_REPACK=0` and `=1` on its two
 sides; the selective FFN dequantization prototype uses `SPEECH_HAAS_FFN_F16=0` and `=1`, and the TDT resident-state
 prototype uses `SPEECH_HAAS_TDT_RESIDENT_STATE=0` and `=1`. These switches require explicit binary values.
+The independent joint-graph, CPU-plan and encoder-QKV prototypes use `SPEECH_HAAS_TDT_JOINT_REUSE`,
+`SPEECH_HAAS_TDT_CPU_PLAN` and `SPEECH_HAAS_ENCODER_QKV`, respectively, each explicitly set to `0` or `1`.
 Build manifests retain their configure/build commands; public reports preserve their flags without source or
 build directory paths. The adopted implementation must be rebuilt without experiment switches and
 measured again. An exploratory result without a verified build manifest may be imported as a rejected or conditional
