@@ -20,7 +20,7 @@
 #include "args.h"
 #include "backend.h"
 #include "compare.h"
-#include "reference-dumps.h"
+#include "dump-scope.h"
 #include "fastconformer/layout.h"
 #include "fastconformer/recognizer.h"
 #include "npy.h"
@@ -99,7 +99,7 @@ int main(int argc, char ** argv) {
             if (!recognizer.on_cpu()) places.push_back(DecodeOn::Device);
             auto place_name = [](DecodeOn on) { return on == DecodeOn::Cpu ? "cpu" : "device"; };
             ggml_gallocr_t allocr = ggml_gallocr_new(ggml_backend_get_default_buffer_type(backend));
-            for (const auto & d : reference_dumps(args[2], recognizer.model())) {
+            for (const auto & d : scoped_dumps(args[2], recognizer.model(), DumpScope::Full)) {
                 const Npy encoded = read_npy((d / "encoded.npy").u8string());
                 const Npy pred_labels = read_npy((d / "pred_labels.npy").u8string());
                 const Npy pred_output = read_npy((d / "pred_output.npy").u8string());

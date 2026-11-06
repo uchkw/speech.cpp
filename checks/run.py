@@ -7,6 +7,7 @@ keys: its architecture names its family, and of the files with the same general.
 newest speech.layout runs. Each family's checks run in the order data flows, for each model and each device; a check
 that takes no device runs once per model, on the first device's turn, and a check that forces the attention runs on a
 GPU once with each attention. A check whose dumps or inputs are missing is skipped and says what it looked for.
+An explicitly requested FastConformer stage with no compatible dump scope fails instead of reporting an empty success.
 
 A check that exits with 2 refused its arguments, as a check refuses weights it cannot judge; that is reported apart and
 does not fail the run. Any other exit but 0 fails it. Each check's whole output goes to a log of its own in --logs.
@@ -373,8 +374,38 @@ def nemotron_transcribe(model, devices, ctx):
     return runs
 
 
+def fastconformer_scopes(root):
+    """The producer-declared scopes of the cases, without hiding a case whose stage inputs are missing."""
+    scopes = set()
+    for directory, _, files in os.walk(root, followlinks=True):
+        if "features.npy" not in files:
+            continue
+        path = os.path.join(directory, "meta.json")
+        with open(path, encoding="utf-8") as source:
+            meta = json.load(source)
+        if not isinstance(meta, dict):
+            raise SystemExit(f"{path}: no recognized FastConformer dump producer metadata")
+        if "reference_scope" in meta:
+            if meta["reference_scope"] != "frontend-encoder-joint.enc":
+                raise SystemExit(f"{path}: unknown FastConformer reference_scope")
+            scopes.add("frontend-encoder-joint.enc")
+        # dump.py writes these fields for every complete dump; encoder-only dumps declare their scope instead.
+        elif type(meta.get("prediction_steps")) is int and type(meta.get("joint_evaluations")) is int and isinstance(meta.get("text"), str):
+            scopes.add("full")
+        else:
+            raise SystemExit(f"{path}: no recognized FastConformer dump producer metadata")
+    return scopes
+
+
 def fastconformer(model, devices, ctx):
     out = os.path.join(ctx.reference, "fastconformer", "out")
+    root = os.path.join(out, model.name)
+    scopes = fastconformer_scopes(root)
+    scoped_stages = (("joint-encoder", "frontend-encoder-joint.enc"), ("transducer", "full"), ("times", "full"))
+    for stage, scope in scoped_stages:
+        check = f"fastconformer-{stage}-check"
+        if check in (ctx.only or []) and scope not in scopes:
+            raise SystemExit(f"requested stage {check}: no compatible {scope} FastConformer dumps under {root}")
     runs = []
     # Haas-ASR's custom vocabulary takes no model.
     if model is ctx.first.get("fastconformer"):
@@ -390,10 +421,16 @@ def fastconformer(model, devices, ctx):
     cases = os.path.join(out, model.name, "sentencepiece")
     runs += reading([os.path.join(cases, "cases.tsv")], [Run("fastconformer-sentencepiece-check", [cases], None, model.label())])
     # The recognition with a custom vocabulary, for a model whose dumps hold dump.py --words's.
-    root = os.path.join(out, model.name)
     words = any(os.path.isdir(os.path.join(root, d, "words")) for d in os.listdir(root)) if os.path.isdir(root) else False
     for device in devices:
-        runs += [runs_on(device, f"fastconformer-{stage}-check", model, [out]) for stage in ("encoder", "transducer", "times")]
+        runs.append(runs_on(device, "fastconformer-encoder-check", model, [out]))
+        for stage, scope in scoped_stages:
+            check = f"fastconformer-{stage}-check"
+            run = runs_on(device, check, model, [out])
+            if scope not in scopes:
+                reason = f"no compatible {scope} FastConformer dumps under {root}"
+                run.skip = reason
+            runs.append(run)
         if words:
             runs.append(runs_on(device, "fastconformer-words-check", model, [out]))
     return runs
