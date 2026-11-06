@@ -209,6 +209,25 @@
           "repository_equal": 9,
           "count": 9,
           "median_latency_ratio": 1.0006945565151641,
+          "latency_rounds": [
+            {
+              "round": 0,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 1,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 2,
+              "count": 9,
+              "text_changed": 0
+            }
+          ],
+          "latency_text_changed": 0,
+          "latency_text_comparisons": 27,
           "latency_reduction_percent": -0.06945565151641464
         }
       }
@@ -365,6 +384,25 @@
           "repository_equal": 9,
           "count": 9,
           "median_latency_ratio": 1.0860952188955617,
+          "latency_rounds": [
+            {
+              "round": 0,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 1,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 2,
+              "count": 9,
+              "text_changed": 0
+            }
+          ],
+          "latency_text_changed": 0,
+          "latency_text_comparisons": 27,
           "latency_reduction_percent": -8.60952188955617
         }
       }
@@ -521,6 +559,25 @@
           "repository_equal": 9,
           "count": 9,
           "median_latency_ratio": 1.1371556931063036,
+          "latency_rounds": [
+            {
+              "round": 0,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 1,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 2,
+              "count": 9,
+              "text_changed": 0
+            }
+          ],
+          "latency_text_changed": 0,
+          "latency_text_comparisons": 27,
           "latency_reduction_percent": -13.715569310630361
         }
       }
@@ -628,7 +685,7 @@
     "run_manifest_sha256": "128388870f5312d1535b370b9b6304533583e5a730a5f4ef5ed81440222df43d",
     "source_trial_sha256": "a382d9b5c401cfb40e48dac174eacfe0fa4f7b9fee9320b560a07d2683cfbf21",
     "evidence_manifest_sha256": "1f495f7abafdb96fcd86b7339eb78b8f1472cc16b509052e1d8e0be0960f8c90",
-    "preparation_script_sha256": "3eb0cdee5abba291d44044a5665194cf9c3d11d064e8960ee9925bfded4ba33a",
+    "preparation_script_sha256": "e524797633f135ac0c078e20f753f4bd40d56440f56164ac37a15d4ac849072d",
     "source_paths": [
       "product-timing.jsonl",
       "product-summary.json",
@@ -721,5 +778,5 @@
       "scope": "mac"
     }
   ],
-  "updated_utc": "2026-11-06T17:34:20.368600+00:00"
+  "updated_utc": "2026-11-06T17:52:39.305753+00:00"
 }

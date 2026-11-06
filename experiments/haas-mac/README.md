@@ -30,10 +30,18 @@ it cannot support acceptance. A fixed anchor is rerun when it differs from the i
 paired measurements, not compounded percentages. The stage tool uses three PCM-derived `audio.npy` inputs with
 explicit threads; these files are benchmark audio, not tensors from the official implementation.
 
+`--screen` selects the shortest, middle and longest of the existing inputs in each duration stratum: nine inputs over
+three rounds, plus nine separate quality requests. It is useful for rejecting an unpromising variant before the full
+run, and cannot support acceptance. `--smoke` and `--screen` are mutually exclusive. Without `--anchor`, the report
+contains no cumulative gain. An explicitly supplied anchor with the same binary and environment as the baseline is
+recorded as an alias of that measured side, without duplicate requests.
+
 For a switchable prototype, pass the same build manifest on both sides and record each environment explicitly:
 `--baseline-env GGML_METAL_MM_TILE_N=32 --candidate-env GGML_METAL_MM_TILE_N=64`.
 Only named campaign variables are allowed. The source-verified runner refuses an inherited experiment variable
-that the invocation does not record. The adopted implementation must be rebuilt without experiment switches and
+that the invocation does not record. The CPU prepacking prototype uses `SPEECH_HAAS_CPU_REPACK=0` and `=1` on its two
+sides. Build manifests retain their configure/build commands; public reports preserve their flags without source or
+build directory paths. The adopted implementation must be rebuilt without experiment switches and
 measured again. An exploratory result without a verified build manifest may be imported as a rejected or conditional
 trial, with its original provenance and evidence hashes; it must not be relabeled as a verified build.
 
@@ -41,7 +49,8 @@ Literal CER sums Unicode code-point edits and reference lengths. Repository CER 
 Unicode punctuation, symbols, separators and whitespace. It does not fold case or accept alternative spellings.
 Files, rather than the nonunique FLEURS numeric IDs, are the pairing keys. Exact comparisons cover text and the public
 token and segment text/times returned by the worker. Raw TDT token IDs, frame indices and duration decisions are not
-exposed and are not claimed to match.
+exposed and are not claimed to match. Text from every latency round, with timestamps disabled, is also compared and
+recorded. Exact acceptance rejects a changed latency text even when the separate timestamp-enabled quality run agrees.
 
 Write a compact `checks.json` with a `checks` array. Each entry has `name`, `status`, `required`, `scope` and a relative
 `evidence` path. Status is one of `passed`, `failed`, `refused`, `skipped` or `unavailable`. Record the reviewed verdict:

@@ -30,7 +30,7 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 REPORTS = REPO / 'reports/haas-mac'
 LOCK = '/private/tmp/speech-haas-mac-perf.lock'
-EXPERIMENT_ENVIRONMENT = {'GGML_METAL_MM_TILE_N'}
+EXPERIMENT_ENVIRONMENT = {'GGML_METAL_MM_TILE_N', 'SPEECH_HAAS_CPU_REPACK'}
 
 
 def read(path):
@@ -63,11 +63,19 @@ def environment(values):
         key, separator, setting = value.partition('=')
         if not separator or key not in EXPERIMENT_ENVIRONMENT:
             raise ValueError('Only explicitly allowed experiment environment variables can be recorded.')
+        if key == 'SPEECH_HAAS_CPU_REPACK' and setting not in {'0', '1'}:
+            raise ValueError('SPEECH_HAAS_CPU_REPACK must be explicitly set to 0 or 1.')
         result[key] = setting
     for key in EXPERIMENT_ENVIRONMENT:
         if key in os.environ and key not in result:
             raise ValueError(f'{key} is inherited but not explicitly recorded; pass its value for each side.')
     return result
+
+
+def portable_build_flags(commands):
+    configure, compile_command = commands
+    return {'configure': [arg for arg in configure if arg.startswith('-D')],
+            'build': compile_command[3:]}
 
 
 def build(args):
@@ -91,6 +99,7 @@ def build(args):
     manifest = {'source_commit': commit, 'source_tree': git(source, 'rev-parse', 'HEAD^{tree}'),
                 'source_path': str(source), 'source_verified': True, 'ggml_commit': ggml,
                 'created_utc': datetime.now(timezone.utc).isoformat(), 'commands': [configure, compile_command],
+                'build_flags': portable_build_flags([configure, compile_command]),
                 'cmake_cache_sha256': sha(out / 'CMakeCache.txt'), 'build_log_sha256': sha(out / 'build.log'),
                 'stage_threads_argument': '<runs> <threads>' in (source / 'measure/fastconformer-timing.cpp').read_text()}
     for key, name in [('speech', 'speech'), ('stage_tool', 'fastconformer-timing')]:
@@ -198,13 +207,39 @@ def paired(a, b):
     return {**counts, 'count': len(left), 'median_latency_ratio': statistics.median(ratios)}, changed
 
 
+def latency_outputs(left, right):
+    a, b = {r['round']: r for r in left}, {r['round']: r for r in right}
+    if len(a) != len(left) or len(b) != len(right) or set(a) != set(b):
+        raise ValueError('Latency output comparisons require the same distinct rounds on both sides.')
+    rounds, changes = [], []
+    for index in sorted(a):
+        counts, changed = paired(a[index]['records'], b[index]['records'])
+        rounds.append({'round': index, 'count': counts['count'], 'text_changed': counts['text_changed']})
+        changes.extend({'round': index, **row} for row in changed if row['text_changed'])
+    return {'latency_rounds': rounds, 'latency_text_changed': sum(r['text_changed'] for r in rounds),
+            'latency_text_comparisons': sum(r['count'] for r in rounds)}, changes
+
+
+def screen_inputs(subset):
+    result = []
+    for stratum in ['6-10s', '10-20s', '20-30s']:
+        group = sorted((r for r in subset if r['stratum'] == stratum), key=lambda r: (r['seconds'], r['file']))
+        if len(group) < 3:
+            raise ValueError('The screen requires at least three inputs in each duration stratum.')
+        result.extend(group[index] for index in [0, (len(group) - 1) // 2, len(group) - 1])
+    return result
+
+
 def summarize(directory):
     manifest = read(directory / 'run.json')
     profiles = {}
     for kind in manifest['types']:
-        sides, quality_rows, medians = {}, {}, {}
+        sides, quality_rows, medians, latency_runs = {}, {}, {}, {}
         for side in manifest['builds']:
             runs = [read(p) for p in sorted((directory / kind / side).glob('latency-*/result.json'))]
+            if len(runs) != manifest['conditions']['rounds'] or {r['round'] for r in runs} != set(range(manifest['conditions']['rounds'])):
+                raise ValueError('The latency evidence does not contain every recorded round.')
+            latency_runs[side] = runs
             quality = read(directory / kind / side / 'quality-0/result.json')
             by_file = defaultdict(list)
             for run in runs:
@@ -227,17 +262,24 @@ def summarize(directory):
                            'first_request_ms': statistics.median(r['first_request']['seconds'] for r in runs) * 1000,
                            'repeated_text_changes': sum(len({r['text'] for r in items}) > 1 for items in by_file.values())}
         comparisons = {}
-        for label, side in [('relative', 'baseline'), ('cumulative', 'anchor' if 'anchor' in sides else 'baseline')]:
+        references = [('relative', 'baseline')]
+        if manifest.get('fixed_anchor'):
+            references.append(('cumulative', manifest['fixed_anchor']['measured_side']))
+        for label, side in references:
             counts, changes = paired(quality_rows[side], quality_rows['candidate'])
             timing, _ = paired(medians[side], medians['candidate'])
+            outputs, latency_changes = latency_outputs(latency_runs[side], latency_runs['candidate'])
+            counts.update(outputs)
             counts['median_latency_ratio'] = timing['median_latency_ratio']
             counts['latency_reduction_percent'] = (1 - timing['median_latency_ratio']) * 100
             write(directory / kind / f'{label}-changes.json', changes)
+            write(directory / kind / f'{label}-latency-changes.json', latency_changes)
             comparisons[label] = counts
         profiles[kind] = {'sides': sides, 'comparisons': comparisons}
     result = {'measure_id': manifest['measure_id'], 'status': 'conditional', 'reason': 'Measurements await review and required checks.',
               'scope': manifest['scope'], 'conditions': manifest['conditions'], 'types': profiles,
               'builds': manifest['builds'], 'execution_environments': manifest['execution_environments'], 'models': manifest['models'],
+              'fixed_anchor': manifest.get('fixed_anchor'),
               'assets_sha256': manifest['assets_sha256'], 'input_hash': manifest['input_hash'],
               'evidence': {'directory': str(directory), 'run_manifest_sha256': sha(directory / 'run.json')}, 'checks': []}
     write(directory / 'summary.json', result)
@@ -248,16 +290,24 @@ def run_comparison(args):
     data, policy = read(args.assets), read(HERE / 'campaign.json')
     builds = {'baseline': read(args.baseline), 'candidate': read(args.candidate)}
     environments = {'baseline': environment(args.baseline_env), 'candidate': environment(args.candidate_env)}
+    fixed_anchor = None
+    manifests_to_verify = list(builds.values())
     if args.anchor:
         anchor = read(args.anchor)
+        manifests_to_verify.append(anchor)
         anchor_environment = environment(args.anchor_env)
+        anchor_side = 'baseline'
         if anchor['speech']['sha256'] != builds['baseline']['speech']['sha256'] or anchor_environment != environments['baseline']:
             builds['anchor'] = anchor
             environments['anchor'] = anchor_environment
-    for b in builds.values():
+            anchor_side = 'anchor'
+        fixed_anchor = {'measured_side': anchor_side, 'source_commit': anchor['source_commit'],
+                        'speech_sha256': anchor['speech']['sha256'], 'environment': anchor_environment,
+                        'build_manifest_sha256': sha(args.anchor)}
+    for b in manifests_to_verify:
         if not b.get('source_verified') or any(sha(b[k]['path']) != b[k]['sha256'] for k in ['speech', 'stage_tool']):
             raise ValueError('Every binary must match a verified build manifest.')
-        if not args.smoke and not b['stage_threads_argument']:
+        if not (args.smoke or args.screen) and not b['stage_threads_argument']:
             raise ValueError('Full comparisons require the stage tool with explicit threads.')
     for stage in data['stages']:
         if sha(Path(stage['directory']) / 'audio.npy') != stage['npy_sha256']:
@@ -266,10 +316,13 @@ def run_comparison(args):
     if len(set(kinds)) != len(kinds) or any(kind not in {m['type'] for m in data['models']} for kind in kinds):
         raise ValueError('Choose distinct model types present in the assets manifest.')
     directory.mkdir(parents=True, exist_ok=False)
-    subset = data['subset'] if not args.smoke else [data['subset'][i] for i in [0, 14, 29]]
-    corpus = data['corpus'] if not args.smoke else subset
-    manifest = {'measure_id': args.measure, 'scope': 'smoke' if args.smoke else 'full', 'types': kinds,
-                'builds': builds, 'execution_environments': environments,
+    scope = 'smoke' if args.smoke else 'screen' if args.screen else 'full'
+    subset = screen_inputs(data['subset']) if args.screen else data['subset']
+    if args.smoke:
+        subset = [data['subset'][i] for i in [0, 14, 29]]
+    corpus = data['corpus'] if scope == 'full' else subset
+    manifest = {'measure_id': args.measure, 'scope': scope, 'types': kinds,
+                'builds': builds, 'execution_environments': environments, 'fixed_anchor': fixed_anchor,
                 'models': {m['type']: {k: m[k] for k in ['type', 'sha256', 'size', 'revision'] if k in m} for m in data['models'] if m['type'] in args.types.split(',')},
                 'assets_sha256': sha(args.assets), 'input_hash': data['input_hash'],
                 'conditions': {**policy, 'quality_policy': args.quality_policy, 'latency_count': len(subset), 'quality_count': len(corpus),
@@ -326,6 +379,8 @@ def record(args):
     else:
         raise ValueError('Choose an existing measure, or a new trial such as 001a with --title.')
     result = read(Path(args.run) / 'summary.json') if args.run else {}
+    if result and result.get('measure_id') != args.measure:
+        raise ValueError('The result measure_id must match the requested report measure before writing.')
     if entry.get('evidence') and result.get('evidence') and entry['evidence']['run_manifest_sha256'] != result['evidence']['run_manifest_sha256']:
         raise ValueError('Do not overwrite a measured trial; give the next run a new trial id.')
     checks = read(args.checks)['checks'] if args.checks else []
@@ -338,8 +393,13 @@ def record(args):
             raise ValueError('Acceptance requires a full run and every required check passed; refusals and skips are not passes.')
         for profile in result['types'].values():
             count = profile['comparisons']['relative']
-            if result['conditions']['quality_policy'] == 'exact' and any(count[k] for k in ['text_changed', 'public_tokens_changed', 'segments_changed']):
-                raise ValueError('Exact-output policy does not allow changed text, public tokens or times.')
+            if result['conditions']['quality_policy'] == 'exact':
+                if not count.get('latency_rounds'):
+                    raise ValueError('Exact-output policy requires text comparisons for every latency round.')
+                if any(count[k] for k in ['text_changed', 'public_tokens_changed', 'segments_changed', 'latency_text_changed']):
+                    raise ValueError('Exact-output policy does not allow changed latency text, quality text, public tokens or times.')
+                if any(profile['sides'][side].get('repeated_text_changes', 0) for side in ['baseline', 'candidate']):
+                    raise ValueError('Exact-output policy does not allow text changes between latency rounds.')
             old, new = profile['sides']['baseline']['quality'], profile['sides']['candidate']['quality']
             if any(new[k] > old[k] for k in ['literal_cer', 'repository_cer']):
                 raise ValueError('Acceptance does not allow a CER regression; use conditional and state the tradeoff.')
@@ -349,7 +409,9 @@ def record(args):
         artifact_root = Path(args.artifact_root).resolve()
         for b in result['builds'].values():
             b.pop('source_path', None)
-            b.pop('commands', None)
+            commands = b.pop('commands', None)
+            if commands:
+                b['build_flags'] = portable_build_flags(commands)
             for key in ['speech', 'stage_tool']:
                 b[key]['artifact_path'] = os.path.relpath(b[key].pop('path'), artifact_root)
         result['evidence']['directory'] = os.path.relpath(result['evidence']['directory'], artifact_root)
@@ -372,7 +434,9 @@ def main():
     p = commands.add_parser('run')
     for name in ['measure', 'baseline', 'candidate', 'assets', 'types', 'out']:
         p.add_argument('--' + name, required=True)
-    p.add_argument('--anchor'); p.add_argument('--smoke', action='store_true')
+    p.add_argument('--anchor')
+    modes = p.add_mutually_exclusive_group()
+    modes.add_argument('--smoke', action='store_true'); modes.add_argument('--screen', action='store_true')
     for side in ['baseline', 'candidate', 'anchor']:
         p.add_argument('--' + side + '-env', action='append', default=[])
     p.add_argument('--quality-policy', choices=['exact', 'cer'], default='exact')

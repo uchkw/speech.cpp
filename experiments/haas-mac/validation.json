@@ -23,9 +23,29 @@
       "repository_equal": 3,
       "count": 3,
       "median_latency_ratio": 1.001794411353656,
+      "latency_rounds": [
+        {
+          "round": 0,
+          "count": 3,
+          "text_changed": 0
+        },
+        {
+          "round": 1,
+          "count": 3,
+          "text_changed": 0
+        },
+        {
+          "round": 2,
+          "count": 3,
+          "text_changed": 0
+        }
+      ],
+      "latency_text_changed": 0,
+      "latency_text_comparisons": 9,
       "latency_reduction_percent": -0.17944113536561002
     },
-    "evidence": "aa-smoke/summary.json"
+    "evidence": "aa-smoke/summary.json",
+    "reanalysis": "Saved latency rounds were compared again; inference was not repeated. No fixed anchor was specified, so no cumulative result is recorded."
   },
   "stage_tool": {
     "source_sha256": "b322e7d1012ab244cba14a45507ed669d992c87bc03698d4c4dd5b3712e184f8",
@@ -66,6 +86,16 @@
       "name": "Browser visual inspection",
       "status": "unavailable",
       "reason": "Browser policy blocked local file URLs. No browser workaround was attempted."
+    },
+    {
+      "name": "Four review regressions and balanced screen/environment selection",
+      "status": "passed",
+      "evidence": "experiments/haas-mac/check.py"
+    },
+    {
+      "name": "Browser visual inspection of index, measure 001 and trial 001a",
+      "status": "passed",
+      "reason": "The coordinator reported checking graphs, tables and links over loopback HTTP on 2026-11-07; this is separate from the initial unavailable local-file preview."
     }
   ],
   "paths_relative_to": "External haas-mac-campaign artifact directory.",

@@ -95,12 +95,19 @@ def report_html(entry, filename, campaign, trials=()):
         changes = profile.get('comparisons', {})
         if changes:
             rows = [[text(label), number(v['latency_reduction_percent']) + '%', str(v['text_changed']),
+                     f"{v['latency_text_changed']} / {v['latency_text_comparisons']}" if 'latency_rounds' in v else 'Not recorded',
                      str(v['public_tokens_changed']), str(v['segments_changed']),
                      f"{v['literal_better']} / {v['literal_worse']}", f"{v['repository_better']} / {v['repository_worse']}"]
                     for label, v in changes.items()]
-            body += table(['Reference', 'Latency reduction', 'Texts changed', 'Tokens/times changed', 'Segments changed',
-                           'Literal better / worse', 'Repository better / worse'], rows, conditions.get('comparison_reference', 'Candidate against the previous accepted build and the fixed anchor'))
-            body += '<p class="muted">Positive latency reduction is faster. Relative and cumulative gains are direct paired comparisons, not added percentages. A matching CER does not mean matching transcripts.</p>'
+            reference = 'Candidate against the previous build' + (' and the explicitly specified fixed anchor' if 'cumulative' in changes else '; cumulative gain is not measured')
+            body += table(['Reference', 'Latency reduction', 'Quality texts changed', 'Latency texts changed / requests', 'Tokens/times changed', 'Segments changed',
+                           'Literal better / worse', 'Repository better / worse'], rows, conditions.get('comparison_reference', reference))
+            body += '<p class="muted">Positive latency reduction is faster. A cumulative gain appears only for an explicitly specified anchor. Gains are direct paired comparisons, not added percentages. A matching CER does not mean matching transcripts.</p>'
+            round_rows = [[text(label), str(r['round']), str(r['count']), str(r['text_changed'])]
+                          for label, values in changes.items() for r in values.get('latency_rounds', [])]
+            if round_rows:
+                body += '<details><summary>Text equality for every latency round (timestamps disabled)</summary>'
+                body += table(['Reference', 'Round', 'Requests compared', 'Texts changed'], round_rows) + '</details>'
         rows = [[text(side), text(stratum), number(v['p50_ms']), number(v['p90_ms']), number(v['p99_ms']), str(v['count'])]
                 for side, values in sides.items() for stratum, v in values.get('strata', {}).items()]
         if rows:
@@ -121,8 +128,9 @@ def report_html(entry, filename, campaign, trials=()):
                       'Ratios above one are slower; Q4_K is an unchanged-path control')
     if entry.get('builds'):
         rows = [[text(side), source_link(build, campaign['repository']), f'<code>{text(build.get("ggml_commit", "unverified"))}</code>',
-                 f'<code>{text(build["speech"]["sha256"])}</code>', f'<code>{text(json.dumps(entry.get("execution_environments", {}).get(side, {})))}</code>'] for side, build in entry['builds'].items()]
-        body += '<h2>Build identity</h2>' + table(['Build', 'Source commit', 'ggml commit', 'Binary SHA-256', 'Explicit environment'], rows)
+                 f'<code>{text(build["speech"]["sha256"])}</code>', f'<code>{text(json.dumps(entry.get("execution_environments", {}).get(side, {})))}</code>',
+                 f'<code>{text(json.dumps(build["build_flags"]))}</code>' if 'build_flags' in build else 'Not recorded'] for side, build in entry['builds'].items()]
+        body += '<h2>Build identity</h2>' + table(['Build', 'Source commit', 'ggml commit', 'Binary SHA-256', 'Explicit environment', 'Build flags'], rows)
     body += '<h2>Checks</h2>'
     checks = entry.get('checks', [])
     if checks:
@@ -133,7 +141,7 @@ def report_html(entry, filename, campaign, trials=()):
     body += '<h2>Conditions and limitations</h2><p>' + text(conditions['latency_definition']) + '</p><p>' + text(conditions['aggregation']) + '</p>'
     body += '<p><strong>Literal CER:</strong> ' + text(campaign['literal_cer']) + '</p><p><strong>Repository CER:</strong> ' + text(campaign['repository_cer']) + '</p>'
     body += '<ul>' + ''.join(f'<li>{text(item)}</li>' for item in conditions['limitations']) + '</ul>'
-    details = {k: entry[k] for k in ['scope', 'conditions', 'models', 'builds', 'implementation_checkpoint', 'product_summary', 'input_hash', 'assets_sha256', 'evidence'] if k in entry}
+    details = {k: entry[k] for k in ['scope', 'conditions', 'models', 'builds', 'fixed_anchor', 'implementation_checkpoint', 'product_summary', 'input_hash', 'assets_sha256', 'evidence'] if k in entry}
     body += '<details><summary>Reproduction metadata and local evidence paths</summary><p>Large logs, models and audio are not included in the versioned report.</p><pre>' + text(json.dumps(details, ensure_ascii=False, indent=2)) + '</pre></details>'
     return document(title, body)
 
@@ -162,7 +170,8 @@ def main():
         for kind, p in entry.get('types', {}).items():
             comparisons = p.get('comparisons', {})
             if comparisons:
-                gains.append(f"{text(kind)}: {number(comparisons['relative']['latency_reduction_percent'])}% / {number(comparisons['cumulative']['latency_reduction_percent'])}%")
+                cumulative = number(comparisons['cumulative']['latency_reduction_percent']) + '%' if 'cumulative' in comparisons else 'not measured'
+                gains.append(f"{text(kind)}: {number(comparisons['relative']['latency_reduction_percent'])}% / {cumulative}")
         target = path.name if entry['status'] == 'pending' and entry['measure_id'] not in trials else path.with_suffix('.html').name
         reason = entry['reason'] if entry['measure_id'] not in trials else f"{len(trials[entry['measure_id']])} recorded variant(s). The measure is {entry['status'].replace('_', ' ')}."
         rows.append([text(entry['measure_id']), f'<a href="{text(target)}">{text(entry["title"])}</a>',
