@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "measure_id": "011",
+  "title": "Combine pointwise projection and GLU",
+  "status": "pending",
+  "reason": "Not evaluated.",
+  "checks": []
+}

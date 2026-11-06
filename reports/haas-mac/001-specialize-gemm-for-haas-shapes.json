@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "measure_id": "001",
+  "title": "Specialize GEMM for Haas shapes",
+  "status": "conditional",
+  "reason": "No candidate is adopted from the fixed 64-column and fixed 16-column variants tested on M2 Ultra. This closes that bounded screen; localized shape selection and other GEMM designs remain untested. The campaign proceeds to load-time prepacking.",
+  "checks": [],
+  "updated_utc": "2026-11-06T17:55:14.418608+00:00"
+}
