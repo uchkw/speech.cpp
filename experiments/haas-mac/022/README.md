@@ -47,6 +47,11 @@ synthetic `main` has no trained profile. Actual profile compilation is separatel
 Each build saves configure/build commands, the CMake cache hash, compile commands, link commands, generated shader
 hashes and binary hashes/sizes. It checks the actual ThinLTO scope in generated compile and final link commands and
 the shared library's exported C API. The IPO option alone is not accepted as evidence that IPO took effect.
+`comparison-conditions.json` preserves normalized configure, build, actual compile and target link commands. Pairing
+requires exact equality after removing only source/build paths and the intended ThinLTO/profile-use flags. Native,
+optimization level, all other compiler/linker flags and per-source FP controls remain in the comparison. Compiler IPO
+probe links are kept outside this target comparison. The conditions file is hashed and must agree with the manifest's
+raw configure/build commands and its reported build flags.
 `build.json` is compatible with the campaign runner. Instrumented builds use `instrumented-build.json`, carry
 `performance_evaluation_eligible=false`, and are never passed to the performance runner.
 

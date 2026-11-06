@@ -144,15 +144,38 @@ def configure_arguments(source, out, pinned, mode, variant, profile_path):
     return args
 
 
+def comparable_words(words, source, out):
+    omitted = {'-flto=thin', '-fno-profile-instr-use', '-Werror=profile-instr-out-of-date'}
+    return [word.replace(str(out), '<BUILD>').replace(str(source), '<SOURCE>') for word in words
+            if word not in omitted and not word.startswith('-fprofile-instr-use=')]
+
+
+def comparable_commands(commands, source, out):
+    configure = []
+    for word in commands[0]:
+        if word.startswith(('-DGGML_LTO=', '-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=')):
+            continue
+        key, separator, value = word.partition('=')
+        if separator and key in ('-DCMAKE_C_FLAGS', '-DCMAKE_CXX_FLAGS'):
+            word = key + '=' + shlex.join(comparable_words(shlex.split(value), source, out))
+        configure.append(word)
+    return {'configure': comparable_words(configure, source, out),
+            'build': comparable_words(commands[1], source, out)}
+
+
 def audit_commands(source, out, mode, variant):
     source, out = source.resolve(), out.resolve()
     rows = read(out / 'compile_commands.json')
     counts = {'ggml': 0, 'host': 0, 'feature_detector_no_lto': 0, 'diagnostic_sources_without_profile_use': 0}
+    compile_conditions = []
     for row in rows:
         file = Path(row['file']).resolve()
+        words = row.get('arguments') or shlex.split(row['command'])
+        compile_conditions.append({'file': comparable_words([str(file)], source, out)[0],
+                                   'directory': comparable_words([str(Path(row['directory']).resolve())], source, out)[0],
+                                   'arguments': comparable_words(words, source, out)})
         if file.suffix.lower() not in ('.c', '.cpp', '.cc', '.cxx', '.m', '.mm'):
             continue
-        words = row.get('arguments') or shlex.split(row['command'])
         if any(flag in words for flag in FP_FLAGS):
             raise ValueError('A compile command enables an unapproved floating-point optimization.')
         if ('-fprofile-instr-generate' in words) != (variant == '022c-train'):
@@ -177,6 +200,9 @@ def audit_commands(source, out, mode, variant):
         raise ValueError('The compile audit did not cover both ggml and parent targets.')
     links = {}
     for path in sorted(out.rglob('link.txt')):
+        parts = path.relative_to(out).parts
+        if any(part == 'CMakeFiles' and not parts[i + 1].endswith('.dir') for i, part in enumerate(parts[:-1])):
+            continue
         text = path.read_text()
         if any(flag in shlex.split(text) for flag in FP_FLAGS):
             raise ValueError('A link command enables an unapproved floating-point optimization.')
@@ -186,7 +212,8 @@ def audit_commands(source, out, mode, variant):
         text = links['CMakeFiles/' + name + '.dir/link.txt']
         if ('-flto=thin' in shlex.split(text)) != (mode == 'host'):
             raise ValueError('The final host link does not match the intended IPO scope: ' + name)
-    return counts
+    return counts, {'compile': sorted(compile_conditions, key=lambda item: json.dumps(item, sort_keys=True)),
+                    'link': {name: comparable_words(shlex.split(text), source, out) for name, text in links.items()}}
 
 
 def build(args):
@@ -222,13 +249,16 @@ def build(args):
             subprocess.run(cmd, stdout=log, stderr=subprocess.STDOUT, env=env, check=True)
     if identity != source_identity(source):
         raise ValueError('The source changed during the build.')
-    audit = audit_commands(source, out, mode, args.variant)
+    audit, actual_conditions = audit_commands(source, out, mode, args.variant)
+    conditions = {**comparable_commands([configure, compile_command], source, out), **actual_conditions}
+    write(out / 'comparison-conditions.json', conditions)
     shaders = {str(p.relative_to(out)): sha(p) for p in sorted(out.rglob('ggml-metal-embed-*.metal'))}
     if not shaders:
         raise ValueError('The build has no embedded shader source artifacts to compare.')
     manifest = {**identity, 'created_utc': datetime.now(timezone.utc).isoformat(), 'variant': args.variant, 'lto': mode,
                 'instrumented': args.variant == '022c-train', 'performance_evaluation_eligible': args.variant != '022c-train',
                 'toolchain_sha256': sha(args.toolchain), 'toolchain': pinned, 'driver_sha256': sha(__file__),
+                'build_path': str(out), 'comparison_conditions': artifact(out / 'comparison-conditions.json'),
                 'commands': [configure, compile_command], 'build_flags': {'configure': [a for a in configure if a.startswith('-D')],
                                                                       'build': compile_command[3:]},
                 'cmake_cache_sha256': sha(out / 'CMakeCache.txt'), 'build_log_sha256': sha(out / 'build.log'),
@@ -252,9 +282,23 @@ def build(args):
 
 
 def verify_pair(baseline, candidate):
+    conditions = []
     for item in (baseline, candidate):
         if item['instrumented'] or not item['performance_evaluation_eligible'] or not item['source_verified']:
             raise ValueError('Instrumented or unverified builds cannot be performance candidates.')
+        configure, compile_command = item['commands']
+        if item['build_flags'] != {'configure': [arg for arg in configure if arg.startswith('-D')], 'build': compile_command[3:]}:
+            raise ValueError('The build flags disagree with the recorded commands.')
+        reference = item['comparison_conditions']
+        if sha(reference['path']) != reference['sha256']:
+            raise ValueError('The generated comparison conditions changed after the build.')
+        recorded = read(reference['path'])
+        expected = comparable_commands(item['commands'], Path(item['source_path']), Path(item['build_path']))
+        if any(recorded[key] != expected[key] for key in ('configure', 'build')):
+            raise ValueError('The normalized conditions disagree with the build commands.')
+        conditions.append(recorded)
+    if conditions[0] != conditions[1]:
+        raise ValueError('Configure, compile or link conditions differ beyond the intended LTO/PGO and path changes.')
     for key in ('source_commit', 'ggml_commit', 'toolchain_sha256', 'embedded_shader_sha256', 'shared_exports', 'mach_o_build_versions'):
         if baseline[key] != candidate[key]:
             raise ValueError('The comparison changes an uncontrolled condition: ' + key)

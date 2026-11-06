@@ -46,14 +46,44 @@ def pairs():
             'embedded_shader_sha256': {'shader': 'same'}, 'shared_exports': ['_speech_model_load'],
             'mach_o_build_versions': {'speech': 'same'}, 'source_verified': True,
             'instrumented': False, 'performance_evaluation_eligible': True, 'variant': 'baseline', 'lto': 'none'}
-    build.verify_pair(base, {**base, 'variant': '022a', 'lto': 'ggml'})
-    build.verify_pair(base, {**base, 'variant': '022b', 'lto': 'host'})
-    build.verify_pair({**base, 'variant': '022b', 'lto': 'host'}, {**base, 'variant': '022c', 'lto': 'host'})
-    rejects(lambda: build.verify_pair(base, {**base, 'variant': '022c', 'lto': 'host'}))
-    rejects(lambda: build.verify_pair(base, {**base, 'variant': '022a', 'instrumented': True}))
-    rejects(lambda: build.verify_pair(base, {**base, 'variant': '022a', 'performance_evaluation_eligible': False}))
-    for key in ('source_commit', 'ggml_commit', 'toolchain_sha256', 'embedded_shader_sha256', 'shared_exports', 'mach_o_build_versions'):
-        rejects(lambda key=key: build.verify_pair(base, {**base, 'variant': '022a', key: 'different'}))
+    with tempfile.TemporaryDirectory(prefix='haas-022-pairs-') as directory:
+        root = Path(directory).resolve(); source = root / 'source'
+        counter = 0
+
+        def make(variant, mode, configure_extra=None, compile_extra=None, link_extra=None):
+            nonlocal counter
+            out = root / str(counter); counter += 1; out.mkdir()
+            configure = ['cmake', '-S', str(source), '-B', str(out), '-DGGML_NATIVE=ON',
+                         '-DCMAKE_C_FLAGS_RELEASE=-O3 -DNDEBUG',
+                         '-DGGML_LTO=' + ('ON' if mode == 'ggml' else 'OFF'),
+                         '-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=' + ('ON' if mode == 'host' else 'OFF')]
+            if configure_extra:
+                configure.append(configure_extra)
+            commands = [configure, ['cmake', '--build', str(out), '--target', 'speech-cli', '-j4']]
+            conditions = {**build.comparable_commands(commands, source, out),
+                          'compile': [['clang++', '-O3', '-mcpu=native'] + ([compile_extra] if compile_extra else [])],
+                          'link': {'speech': ['clang++'] + ([link_extra] if link_extra else [])}}
+            path = out / 'conditions.json'; build.write(path, conditions)
+            return {**base, 'variant': variant, 'lto': mode, 'source_path': str(source), 'build_path': str(out),
+                    'commands': commands, 'build_flags': {'configure': [x for x in configure if x.startswith('-D')],
+                                                         'build': commands[1][3:]},
+                    'comparison_conditions': build.artifact(path)}
+
+        control = make('baseline', 'none')
+        partial = make('022a', 'ggml'); whole = make('022b', 'host'); profiled = make('022c', 'host')
+        build.verify_pair(control, partial); build.verify_pair(control, whole); build.verify_pair(whole, profiled)
+        rejects(lambda: build.verify_pair(control, profiled))
+        rejects(lambda: build.verify_pair(control, {**partial, 'instrumented': True}))
+        rejects(lambda: build.verify_pair(control, {**partial, 'performance_evaluation_eligible': False}))
+        for key in ('source_commit', 'ggml_commit', 'toolchain_sha256', 'embedded_shader_sha256', 'shared_exports', 'mach_o_build_versions'):
+            rejects(lambda key=key: build.verify_pair(control, {**partial, key: 'different'}))
+        for extra in ('-DCMAKE_C_FLAGS_RELEASE=-O2 -DNDEBUG', '-DGGML_NATIVE=OFF', '-DCMAKE_CXX_FLAGS=-funroll-loops'):
+            rejects(lambda extra=extra: build.verify_pair(control, make('022a', 'ggml', configure_extra=extra)))
+        for extra in ('-O2', '-mcpu=apple-m1', '-funroll-loops'):
+            rejects(lambda extra=extra: build.verify_pair(control, make('022a', 'ggml', compile_extra=extra)))
+        rejects(lambda: build.verify_pair(control, make('022a', 'ggml', link_extra='-Wl,-dead_strip')))
+        inconsistent = copy.deepcopy(partial); inconsistent['build_flags']['configure'][0] = '-DGGML_NATIVE=OFF'
+        rejects(lambda: build.verify_pair(control, inconsistent))
 
 
 def compiler_audits():
@@ -79,15 +109,19 @@ def compiler_audits():
                     words.remove('-fno-profile-instr-use')
                 if defect == 'production' and name.startswith('src/'):
                     words.append('-fno-profile-instr-use')
-                rows.append({'file': str(source / name), 'arguments': words})
+                rows.append({'file': str(source / name), 'directory': str(out), 'arguments': words})
             build.write(out / 'compile_commands.json', rows)
             for target in ('speech-cli', 'speech', 'fastconformer-timing'):
                 path = out / 'CMakeFiles' / (target + '.dir'); path.mkdir(parents=True)
                 (path / 'link.txt').write_text('clang++' + (' -flto=thin' if mode == 'host' and defect != 'link' else ''))
             return build.audit_commands(source, out, mode, variant)
+    results = {}
     for variant, mode in [('baseline', 'none'), ('022a', 'ggml'), ('022b', 'host'),
                           ('022c-train', 'host'), ('022c', 'host')]:
-        assert run(variant, mode)['host'] == 2
+        results[variant] = run(variant, mode)
+        assert results[variant][0]['host'] == 2
+    for variant in ('022a', '022b', '022c'):
+        assert results[variant][1] == results['baseline'][1]
     rejects(lambda: run('baseline', 'none', 'fp'))
     rejects(lambda: run('baseline', 'none', 'profile-leak'))
     rejects(lambda: run('022c', 'host', 'diagnostic'))
