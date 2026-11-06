@@ -84,10 +84,28 @@ std::string error_object(const std::string & code, const std::string & option, c
 
 void Inbox::read(std::istream & in) {
     std::string line;
-    while (std::getline(in, line)) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        take_line(line);
+    while (true) {
+        TransportTrace::Line timing;
+        if (trace_.enabled) timing.read_begin = trace_.stamp();
+        if (!std::getline(in, line)) break;
+        if (trace_.enabled) {
+            timing.read_end = trace_.stamp();
+            timing.ordinal = trace_.lines.size() + 1;
+            timing.bytes = line.size();
+        }
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (trace_.enabled) {
+                timing.locked = trace_.stamp();
+                tracing_line_ = &timing;
+            }
+            take_line(line);
+            if (trace_.enabled) timing.dispatch_end = trace_.stamp();
+            tracing_line_ = nullptr;
+        }
+        if (trace_.enabled) trace_.lines.push_back(timing);
     }
+    if (trace_.enabled) trace_.eof = trace_.stamp();
     std::lock_guard<std::mutex> lock(mutex_);
     closed_ = true;
     ready_.notify_all();
@@ -99,6 +117,13 @@ bool Inbox::take(Job & job) {
     if (queue_.empty()) return false;
     job = std::move(queue_.front());
     queue_.pop_front();
+    if (trace_.enabled) {
+        TransportTrace::Job timing;
+        timing.serial = job.serial;
+        timing.recognition = job.kind == Job::Kind::Transcribe;
+        timing.taken = trace_.stamp();
+        trace_.jobs.push_back(timing);
+    }
     return true;
 }
 
@@ -151,11 +176,13 @@ Inbox::Pending & Inbox::open(const std::string & id, Pending::State state) {
     Pending & p = pending_[id];
     p.serial = ++serial_;
     p.state = state;
+    if (tracing_line_) tracing_line_->serial = p.serial;
     return p;
 }
 
 void Inbox::queue(Job job) {
     queue_.push_back(std::move(job));
+    if (tracing_line_) tracing_line_->queued = trace_.stamp();
     ready_.notify_one();
 }
 
@@ -191,12 +218,15 @@ bool Inbox::read_rate(const JsonValue & message, std::vector<RequestOption> & op
 void Inbox::take_line(const std::string & line) {
     const std::string invalid = speech_status_name(SPEECH_ERROR_INVALID_ARGUMENT);
     JsonValue message;
+    if (tracing_line_) tracing_line_->parse_begin = trace_.stamp();
     try {
         message = parse_json(line);
     } catch (const std::invalid_argument & e) {
+        if (tracing_line_) tracing_line_->parse_end = trace_.stamp();
         reply_error(nullptr, invalid, "", std::string("the line is not JSON: ") + e.what() + "; send one JSON object per line");
         return;
     }
+    if (tracing_line_) tracing_line_->parse_end = trace_.stamp();
     if (message.kind != JsonValue::Kind::Object) {
         reply_error(nullptr, invalid, "", "the line is " + kind_name(message) + ", not a JSON object; send one JSON object per line");
         return;
@@ -211,12 +241,19 @@ void Inbox::take_line(const std::string & line) {
         return;
     }
     const std::string id = id_value->text;
+    if (tracing_line_) {
+        const auto pending = pending_.find(id);
+        if (pending != pending_.end()) tracing_line_->serial = pending->second.serial;
+    }
     const JsonValue * type = message.member("type");
     if (!type || type->kind != JsonValue::Kind::String) {
         refuse(id, invalid, "type", std::string("the message has no \"type\" that is a string; give one of ") + kTypes);
         return;
     }
     const std::string & t = type->text;
+    if (tracing_line_) {
+        tracing_line_->kind = t == "chunk" ? "chunk" : t == "transcribe" ? "transcribe" : t == "cancel" ? "cancel" : "other";
+    }
     if (t == "cancel") {
         for (const auto & member : message.members) {
             if (member.first == "type" || member.first == "id") continue;
@@ -324,6 +361,7 @@ void Inbox::chunk(const std::string & id, const JsonValue & message) {
         return;
     }
     Pending & p = in_flight(id) ? pending_[id] : open(id, Pending::State::Collecting);
+    if (tracing_line_) tracing_line_->serial = p.serial;
     std::vector<RequestOption> none;
     std::string option, problem;
     if (!read_options(message, {"type", "id", "seq", "pcm"}, false, none, option, problem)) {
@@ -335,6 +373,7 @@ void Inbox::chunk(const std::string & id, const JsonValue & message) {
         fail_collecting(id, "seq", problem);
         return;
     }
+    if (tracing_line_) tracing_line_->seq = seq;
     if ((uint64_t) seq != p.next_seq) {
         fail_collecting(id, "seq", "the chunk's \"seq\" is " + std::to_string(seq) + " where " + std::to_string(p.next_seq) +
                                        " comes next; send a request's chunks in order from 0");
@@ -346,20 +385,25 @@ void Inbox::chunk(const std::string & id, const JsonValue & message) {
         return;
     }
     std::string bytes;
+    if (tracing_line_) tracing_line_->decode_begin = trace_.stamp();
     try {
         bytes = base64_decode(*pcm);
     } catch (const std::invalid_argument & e) {
+        if (tracing_line_) tracing_line_->decode_end = trace_.stamp();
         fail_collecting(id, "pcm", std::string("the chunk's \"pcm\" is not base64: ") + e.what());
         return;
     }
+    if (tracing_line_) tracing_line_->decode_end = trace_.stamp();
     if (bytes.size() % 2 != 0) {
         fail_collecting(id, "pcm", "the chunk's \"pcm\" holds an odd number of bytes; it is 16-bit samples");
         return;
     }
+    if (tracing_line_) tracing_line_->append_begin = trace_.stamp();
     const size_t at = p.pcm.size();
     p.pcm.resize(at + bytes.size() / 2);
     for (size_t i = 0; i < bytes.size() / 2; i++) p.pcm[at + i] = (int16_t) (uint16_t) ((uint8_t) bytes[2 * i] | (uint8_t) bytes[2 * i + 1] << 8);
     p.next_seq++;
+    if (tracing_line_) tracing_line_->append_end = trace_.stamp();
 }
 
 void Inbox::end_chunks(Job::Kind kind, const std::string & id, const JsonValue & message) {
@@ -381,6 +425,7 @@ void Inbox::end_chunks(Job::Kind kind, const std::string & id, const JsonValue &
         return;
     }
     Pending & p = in_flight(id) ? pending_[id] : open(id, Pending::State::Collecting);
+    if (tracing_line_) tracing_line_->serial = p.serial;
     Job job;
     job.kind = kind;
     job.id = id;

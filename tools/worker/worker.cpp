@@ -2,6 +2,8 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <iostream>
 #include <optional>
 #include <string>
@@ -36,6 +38,14 @@ using Clock = std::chrono::steady_clock;
 
 /** The protocol of the running worker, which a failure that ends it reports `fatal` through. */
 Protocol * current = nullptr;
+
+/** Reads an opt-in worker experiment before the input thread starts. */
+bool worker_experiment(const char * name) {
+    const char * value = std::getenv(name);
+    if (!value || std::strcmp(value, "0") == 0) return false;
+    if (std::strcmp(value, "1") == 0) return true;
+    throw Failure(speech_status_name(SPEECH_ERROR_INVALID_ARGUMENT), name, std::string(name) + " must be 0 or 1; unset it to disable");
+}
 
 /** The failure an exception is: the library's, or a defect, which the worker reports as internal. */
 Failure failure_of(const std::exception & e) {
@@ -115,7 +125,9 @@ void synthesize(Inbox & inbox, Protocol & protocol, speech_model * model, const 
     inbox.finish(job, terminal);
 }
 
-void recognize(Inbox & inbox, Protocol & protocol, speech_model * model, const speech_model_info * info, const Job & job) {
+void recognize(Inbox & inbox, Protocol & protocol, speech_model * model, const speech_model_info * info, const Job & job, TransportTrace & trace) {
+    TransportTrace::Job * timing = trace.enabled ? &trace.jobs.back() : nullptr;
+    if (timing) timing->entered = trace.stamp();
     const Request request = new_request(model);
     speech_request * r = request.get();
     Cancellation cancellation;
@@ -127,7 +139,10 @@ void recognize(Inbox & inbox, Protocol & protocol, speech_model * model, const s
         check(speech_request_set_audio(r, samples.data(), samples.size(), job.sample_rate));
         apply_options(r, job.options);
         check(speech_request_set_progress(r, on_progress, &running));
-        if (check(cancellation.run(r, [&] { return speech_transcribe(r); })) == SPEECH_CANCELLED) {
+        if (timing) timing->api_begin = trace.stamp();
+        const speech_status status = cancellation.run(r, [&] { return speech_transcribe(r); });
+        if (timing) timing->api_end = trace.stamp();
+        if (check(status) == SPEECH_CANCELLED) {
             terminal = cancelled_line(job.id);
         } else {
             const bool timestamps = timestamps_in_effect(info, job.options), speakers = in_effect(info, job.options, SPEECH_OPT_SPEAKERS);
@@ -136,7 +151,9 @@ void recognize(Inbox & inbox, Protocol & protocol, speech_model * model, const s
     } catch (const std::exception & e) {
         terminal = error_line(job.id, e);
     }
+    if (timing) timing->terminal_ready = trace.stamp();
     inbox.finish(job, terminal);
+    if (timing) timing->finish_returned = trace.stamp();
 }
 
 /** Enhances the job's audio as one request of the library, passing the enhanced audio in chunks as it comes. */
@@ -195,9 +212,15 @@ std::string answer_at_once(const speech_model * model, const speech_model_info *
 
 int run_worker(const CommandLine & line, FILE * out) {
     // The reader thread reads stdin until it closes, which can outlive this function when a failure ends the worker,
-    // so the protocol and the inbox it uses are never freed.
+    // so the protocol, trace and inbox it uses are never freed.
     Protocol & protocol = *new Protocol(out);
     current = &protocol;
+    const bool unsync = worker_experiment("SPEECH_HAAS_WORKER_UNSYNC");
+    const bool untie = worker_experiment("SPEECH_HAAS_WORKER_UNTIE");
+    TransportTrace & trace = *new TransportTrace(worker_experiment("SPEECH_HAAS_WORKER_TRANSPORT_TRACE"));
+    // The protocol uses its own FILE descriptor, and this command reads stdin only through std::cin.
+    if (unsync) std::ios::sync_with_stdio(false);
+    if (untie) std::cin.tie(nullptr);
     const std::string path = model_file(line.args[0]);
     const Loading loading = line.loading(true);
     // The protocol has the messages of synthesis, recognition and enhancement alone.
@@ -229,19 +252,20 @@ int run_worker(const CommandLine & line, FILE * out) {
 
     const speech_model * loaded = model.get();
     Inbox & inbox = *new Inbox(protocol, speech_model_info_task(m), speech_model_info_name(m),
-                               [loaded, m, defaults_json](const Job & job) { return answer_at_once(loaded, m, defaults_json, job); });
+                               [loaded, m, defaults_json](const Job & job) { return answer_at_once(loaded, m, defaults_json, job); }, trace);
     std::thread reader([&inbox] { inbox.read(std::cin); });
     reader.detach();
     for (Job job; inbox.take(job);) {
         job.options = with_defaults(defaults, job.options);
         switch (job.kind) {
             case Job::Kind::Synthesize: synthesize(inbox, protocol, model.get(), job); break;
-            case Job::Kind::Transcribe: recognize(inbox, protocol, model.get(), m, job); break;
+            case Job::Kind::Transcribe: recognize(inbox, protocol, model.get(), m, job, trace); break;
             case Job::Kind::Enhance: enhance(inbox, protocol, model.get(), job); break;
             default: add_voice(inbox, model.get(), job); break;
         }
     }
     inbox.close_collecting();
+    trace.dump();
     return 0;
 }
 

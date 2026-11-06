@@ -16,6 +16,7 @@
 #include "failure.h"
 #include "request-options.h"
 #include "speech.h"
+#include "transport-trace.h"
 
 // The worker's side of reading its protocol: each line on stdin checked as a message of its type, the requests in
 // flight until their terminal message, the audio of a recognition or enhancement request gathered from its chunks,
@@ -59,8 +60,8 @@ public:
      * `at_once` gives the terminal message of an info or a count_tokens, which only read the model's information and
      * so are answered as they arrive rather than in turn behind a running request.
      */
-    Inbox(Protocol & protocol, speech_task task, std::string model_name, std::function<std::string(const Job &)> at_once)
-        : protocol_(protocol), task_(task), model_name_(std::move(model_name)), at_once_(std::move(at_once)) {}
+    Inbox(Protocol & protocol, speech_task task, std::string model_name, std::function<std::string(const Job &)> at_once, TransportTrace & trace)
+        : protocol_(protocol), task_(task), model_name_(std::move(model_name)), at_once_(std::move(at_once)), trace_(trace) {}
 
     /** Reads stdin's lines until it closes, answering at once those it refuses, and queues the rest. */
     void read(std::istream & in);
@@ -97,6 +98,9 @@ private:
     speech_task task_;
     std::string model_name_;
     std::function<std::string(const Job &)> at_once_;
+    TransportTrace & trace_;
+    /** The reader's current line, used only while that reader holds mutex_. */
+    TransportTrace::Line * tracing_line_ = nullptr;
     std::mutex mutex_;
     std::condition_variable ready_;
     std::deque<Job> queue_;
