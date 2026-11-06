@@ -22,6 +22,8 @@ namespace fastconformer {
 class TdtDecoder : public Decoder {
 public:
     TdtDecoder(const ModelFile & m, const PredictionNetwork & prediction, const Joint & joint);
+    /** Selects host state or a request-owned state tensor explicitly. */
+    TdtDecoder(const ModelFile & m, const PredictionNetwork & prediction, const Joint & joint, bool resident_state);
 
     Decoding decode(const std::vector<float> & projected, ggml_backend_t backend, const DecodingProgress & progress) const override;
     Decoding decode(const std::vector<float> & projected, ggml_backend_t backend, const DecodingProgress & progress,
@@ -37,6 +39,7 @@ private:
     int blank_;
     std::vector<int32_t> durations_;
     uint32_t max_symbols_;
+    bool resident_state_;
 };
 
 }  // namespace fastconformer

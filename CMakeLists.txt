@@ -444,6 +444,9 @@ foreach(stage frontend encoder transducer times sentencepiece)
     target_include_directories(fastconformer-${stage}-check PRIVATE checks)
     target_link_libraries(fastconformer-${stage}-check PRIVATE fastconformer)
 endforeach()
+add_executable(fastconformer-state-check checks/fastconformer/fastconformer-state-check.cpp)
+target_include_directories(fastconformer-state-check PRIVATE checks)
+target_link_libraries(fastconformer-state-check PRIVATE fastconformer)
 # Haas-ASR's custom vocabulary, on the cases of reference/fastconformer/vocabulary_cases.py, and the recognition with
 # it, on the dumps of dump.py --words, which both read with the JSON reader of `speech`.
 foreach(stage vocabulary words)

@@ -1,5 +1,7 @@
 #include "tdt.h"
 
+#include <cstdlib>
+#include <cstring>
 #include <memory>
 #include <stdexcept>
 
@@ -12,6 +14,13 @@ namespace {
 
 using Allocator = std::unique_ptr<ggml_gallocr, decltype(&ggml_gallocr_free)>;
 
+bool resident_state_requested() {
+    const char * value = std::getenv("SPEECH_HAAS_TDT_RESIDENT_STATE");
+    if (!value || std::strcmp(value, "0") == 0) return false;
+    if (std::strcmp(value, "1") == 0) return true;
+    throw std::runtime_error("SPEECH_HAAS_TDT_RESIDENT_STATE must be 0 or 1");
+}
+
 Allocator new_allocator(ggml_backend_t backend) {
     Allocator a(ggml_gallocr_new(ggml_backend_get_default_buffer_type(backend)), &ggml_gallocr_free);
     if (!a) throw Error(Fault::OutOfMemory, "cannot create a graph allocator");
@@ -21,11 +30,19 @@ Allocator new_allocator(ggml_backend_t backend) {
 }  // namespace
 
 TdtDecoder::TdtDecoder(const ModelFile & m, const PredictionNetwork & prediction, const Joint & joint)
+    : TdtDecoder(m, prediction, joint, resident_state_requested()) {}
+
+TdtDecoder::TdtDecoder(const ModelFile & m, const PredictionNetwork & prediction, const Joint & joint, bool resident_state)
     : prediction_(prediction),
       joint_(joint),
       blank_((int) m.u32("fastconformer.decoder.blank_id")),
       durations_(m.i32_array("fastconformer.decoder.tdt.durations")),
-      max_symbols_(m.u32("fastconformer.decoder.tdt.max_symbols")) {}
+      max_symbols_(m.u32("fastconformer.decoder.tdt.max_symbols")),
+      resident_state_(resident_state) {
+    if (resident_state_ && m.str("fastconformer.decoder.prediction") != "kda") {
+        throw std::runtime_error("SPEECH_HAAS_TDT_RESIDENT_STATE requires a KDA prediction network");
+    }
+}
 
 Decoding TdtDecoder::decode(const std::vector<float> & projected, ggml_backend_t backend, const DecodingProgress & progress) const {
     return run(projected, backend, progress, nullptr);
@@ -46,7 +63,9 @@ Decoding TdtDecoder::run(const std::vector<float> & projected, ggml_backend_t ba
     };
     // The step's graph and the joint's alone keep an allocator each, so that neither is planned again when the
     // other runs.
-    DecoderStep step(prediction_, joint_, backend, 1);
+    std::unique_ptr<DecoderState> resident;
+    if (resident_state_) resident = std::make_unique<DecoderState>(prediction_, backend);
+    DecoderStep step(prediction_, joint_, backend, 1, resident.get());
     const Allocator joint_allocator = new_allocator(backend);
 
     // The tree's bonus of each token from its state, which the tokens emitted so far reached, and the state each leads to.
@@ -68,7 +87,7 @@ Decoding TdtDecoder::run(const std::vector<float> & projected, ggml_backend_t ba
     };
 
     Decoding d;
-    PredictionState state = prediction_.initial_state();
+    PredictionState state = resident ? PredictionState{} : prediction_.initial_state();
     int32_t label = blank_;
     int64_t t = 0, last_token_frame = -1;
     uint32_t tokens_on_frame = 0;
@@ -76,9 +95,10 @@ Decoding TdtDecoder::run(const std::vector<float> & projected, ggml_backend_t ba
         if (progress && !progress((double) t / (double) frames)) break;
         // The prediction network takes the last label, and the joint is evaluated at the current frame with its
         // output, in one graph.
-        step.compute(label, state, frame(t));
+        if (resident) step.compute(label, frame(t));
+        else step.compute(label, state, frame(t));
         d.graphs++;
-        state = step.state();
+        if (!resident) state = step.state();
         const std::vector<float> prediction = step.prediction();
         std::vector<float> out;
         step.logits(out);
