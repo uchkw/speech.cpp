@@ -2,7 +2,8 @@
   "schema_version": 1,
   "measure_id": "006",
   "title": "Fuse GEMM epilogues",
-  "status": "pending",
-  "reason": "Not evaluated.",
-  "checks": []
+  "status": "conditional",
+  "reason": "The Haas FFN-up SiLU epilogue variant is not adopted after its bounded M2 Ultra screen. Encoder times decrease on the sampled inputs; the screen does not establish a stable whole-request latency gain. Other GEMM epilogue designs remain untested.",
+  "checks": [],
+  "updated_utc": "2026-11-06T20:46:00.011370+00:00"
 }
