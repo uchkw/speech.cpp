@@ -77,6 +77,8 @@ def report_html(entry, filename, campaign, trials=()):
     conditions = {**campaign, **entry.get('conditions', {})}
     if entry.get('types'):
         body += f'<p><strong>Measured scope:</strong> {text(conditions["latency_count"])} inputs × {text(conditions["rounds"])} latency rounds per side; {text(conditions["quality_count"])} quality inputs per side. CPU decoding with {text(conditions["threads"])} threads.</p>'
+        if conditions.get('thread_setting_note'):
+            body += '<p class="muted">' + text(conditions['thread_setting_note']) + '</p>'
     if trials:
         body += '<h2>Recorded variants</h2><p>A rejected variant does not close the whole measure.</p>'
         body += table(['Trial', 'Verdict', 'Reason'], [[f'<a href="{text(p.with_suffix(".html").name)}">{text(e["measure_id"])} · {text(e["title"])}</a>', badge(e['status']), text(e['reason'])] for p, e in trials])
@@ -126,6 +128,10 @@ def report_html(entry, filename, campaign, trials=()):
         body += table(['Type', 'Median candidate / baseline latency ratio'],
                       [[text(kind), number(ratio, 4)] for kind, ratio in product['median_shape_latency_ratio'].items()],
                       'Ratios above one are slower; Q4_K is an unchanged-path control')
+    for diagnostic in entry.get('diagnostics', []):
+        body += '<h2>' + text(diagnostic['title']) + '</h2><p>' + text(diagnostic['method']) + '</p>'
+        body += table(diagnostic['headers'], [[text(value) for value in row] for row in diagnostic['rows']])
+        body += '<ul>' + ''.join('<li>' + text(note) + '</li>' for note in diagnostic.get('notes', [])) + '</ul>'
     if entry.get('builds'):
         rows = [[text(side), source_link(build, campaign['repository']), f'<code>{text(build.get("ggml_commit", "unverified"))}</code>',
                  f'<code>{text(build["speech"]["sha256"])}</code>', f'<code>{text(json.dumps(entry.get("execution_environments", {}).get(side, {})))}</code>',
@@ -141,7 +147,7 @@ def report_html(entry, filename, campaign, trials=()):
     body += '<h2>Conditions and limitations</h2><p>' + text(conditions['latency_definition']) + '</p><p>' + text(conditions['aggregation']) + '</p>'
     body += '<p><strong>Literal CER:</strong> ' + text(campaign['literal_cer']) + '</p><p><strong>Repository CER:</strong> ' + text(campaign['repository_cer']) + '</p>'
     body += '<ul>' + ''.join(f'<li>{text(item)}</li>' for item in conditions['limitations']) + '</ul>'
-    details = {k: entry[k] for k in ['scope', 'conditions', 'models', 'builds', 'fixed_anchor', 'implementation_checkpoint', 'product_summary', 'input_hash', 'assets_sha256', 'evidence'] if k in entry}
+    details = {k: entry[k] for k in ['scope', 'conditions', 'models', 'builds', 'fixed_anchor', 'implementation_checkpoint', 'product_summary', 'diagnostics', 'input_hash', 'assets_sha256', 'evidence'] if k in entry}
     body += '<details><summary>Reproduction metadata and local evidence paths</summary><p>Large logs, models and audio are not included in the versioned report.</p><pre>' + text(json.dumps(details, ensure_ascii=False, indent=2)) + '</pre></details>'
     return document(title, body)
 

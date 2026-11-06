@@ -142,6 +142,11 @@ def main():
     campaign = compare.read(compare.HERE / 'campaign.json')
     html = render.report_html({'measure_id': '999', 'title': '<script>bad()</script>', 'status': 'pending', 'reason': '<b>not markup</b>'}, '999.json', campaign)
     assert '<script>' not in html and '&lt;script&gt;' in html
+    diagnostic = {'title': 'Instrumented diagnostic', 'method': 'Separate three-input measurement.',
+                  'headers': ['Interval', 'Milliseconds'], 'rows': [['<untrusted>', 0.25]], 'notes': ['Not the primary full run.']}
+    html = render.report_html({'measure_id': '999', 'title': 'Fixture', 'status': 'conditional', 'reason': 'Fixture',
+                               'diagnostics': [diagnostic]}, '999.json', campaign)
+    assert 'Instrumented diagnostic' in html and '&lt;untrusted&gt;' in html and '<untrusted>' not in html
     for path in compare.REPORTS.glob('*.html'):
         page = path.read_text(); links = Links(); links.feed(page)
         assert '<html lang="en">' in page and '<meta name="viewport"' in page

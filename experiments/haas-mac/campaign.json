@@ -22,5 +22,6 @@
     "The p99 of a small duration-stratified sample is not a precise estimate of production tail latency.",
     "The repository CER is not the published metric accepting alternative spellings of words.",
     "Fresh-process load and first-request times do not reset filesystem or system Metal caches."
-  ]
+  ],
+  "thread_setting_note": "Four CPU threads are an explicit tuned campaign setting, not the runtime default. Unspecified threads (threads=0) use performance cores: 16 on this M2 Ultra. Code gains compare the tuned anchor and do not include the preliminary thread-tuning gain; measure 021 evaluates automatic versus four threads separately."
 }

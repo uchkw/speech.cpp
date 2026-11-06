@@ -25,6 +25,9 @@ The output directories must be new. No command downloads assets, installs packag
 
 The default comparison uses four CPU decoder threads, 30 duration-stratified inputs over three alternating rounds,
 and a separate 650-input quality run with timestamps. Every latency input is warmed once in each fresh worker.
+Four threads are an explicit tuned campaign setting, not the runtime default. Unspecified threads (`threads=0`)
+use the machine's performance cores, which are 16 on this M2 Ultra. These code comparisons use the tuned anchor;
+measure 021 compares automatic threads with four separately, without counting the preliminary thread tuning again.
 Load to ready and the first request are recorded separately. `--smoke` uses three inputs and is only a harness check;
 it cannot support acceptance. A fixed anchor is rerun when it differs from the immediate baseline. Gains are direct
 paired measurements, not compounded percentages. The stage tool uses three PCM-derived `audio.npy` inputs with

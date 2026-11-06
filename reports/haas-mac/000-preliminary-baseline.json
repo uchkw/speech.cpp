@@ -266,7 +266,8 @@
     "quality_count": 650,
     "quality_runs_per_type": 1,
     "quality_timestamps": false,
-    "quality_output_fields": "Text only; public token and segment timing equality was not collected in this preliminary comparison."
+    "quality_output_fields": "Text only; public token and segment timing equality was not collected in this preliminary comparison.",
+    "thread_setting_note": "Four CPU threads are an explicit tuned campaign setting, not the runtime default. Unspecified threads (threads=0) use performance cores: 16 on this M2 Ultra. Code gains compare the tuned anchor and do not include the preliminary thread-tuning gain; measure 021 evaluates automatic versus four threads separately."
   },
   "checks": [
     {
