@@ -1,7 +1,8 @@
 # Trial 006a: Haas FFN-up SiLU epilogue
 
-This is an experimental source and direct-check checkpoint for [issue 1](https://github.com/uchkw/speech.cpp/issues/1).
-It does not establish correctness or a speed-up and is not part of the adopted runtime.
+This rejected experimental prototype belongs to [issue 1](https://github.com/uchkw/speech.cpp/issues/1).
+Its local checks pass within the scopes below, but the screen does not establish a stable warm request latency gain.
+It is not part of the adopted runtime. This result does not reject other epilogue or GEMM optimizations.
 
 ## Source and boundary
 
@@ -84,19 +85,67 @@ and binaries remain in `outputs/haas-mac-campaign/006a/`; they are not replaced 
 The test-only correction classifies those three existing cases as controls and records each product's output flag.
 It changes no runtime or numeric threshold and is applied identically to the original-kernel comparison branch.
 
-## Evaluation pending
+## Completed checks
 
-CPU-reference checks and model measurements remain pending the corrected direct check. Build with four jobs and
-hold the shared performance lock for every build or GPU run.
-Retain the original case-only and candidate binaries, source commits, environments and SHA-256 hashes separately.
+The corrected original, candidate-disabled and candidate-enabled direct checks each pass 89 cases and two poison
+guards. All input and output hashes match across all three conditions. All outputs are finite, all added allocation
+dependencies are zero, and only the 48 eligible cases fuse in the enabled condition. The 41 controls do not fuse.
+Each in-place control confirms that the product is marked as an output.
 
-After the backend checks pass, compare the same candidate binary with switch 0 and 1 on Q4_K, Q8_0 and F16,
-using explicit CPU decoder threads=4, warm alternating rounds and the common nine-input screen. Record encoder
-stage latency separately from the worker's complete request. A promising result needs the full 30-input latency
-and 650-input quality comparison with the fixed anchor, followed by the separate six-prefix supplement where
-useful. Use `/usr/bin/python3` and the common runner's recorded timer. Do not treat timing within round variation
-as a gain. A no-switch production patch requires its own original-runtime comparison before adoption.
+The first CPU-reference run stops at the transpose control in the original CPU implementation: its matrix product
+asserts that the activation's element stride equals its type size and does not support that transposed operand.
+This is not a numerical failure of the new kernel. The original abort log remains. With the explicit filter
+`-p 'variant=(?!transpose)'`, all 86 supported cases pass against the CPU reference in all three conditions:
+48 eligible cases and 38 controls. The names of the three excluded transpose cases are recorded; they still pass
+the original/disabled/enabled Metal differential comparison. The numeric bound remains unchanged.
 
-Official-reference stage tensors, Windows Vulkan and M5 execution remain unavailable or untested. Mac differential
-checks do not replace those requirements. The experiment's result, including a rejection, must be preserved before
-another epilogue variant is tried.
+The candidate also passes all 168 existing `MUL_MAT_ADD` cases against the CPU and the allocator topology check
+on both CPU and Metal. The original sandbox Metal-initialization failure and the successful same-binary execution
+outside that sandbox are kept separately.
+
+Ordinary encoder graphs on all three types and the three stage inputs show 48 additional two-operation fusions and
+48 fewer unary dispatches, with all other operation and fusion counts unchanged. Projected output bytes match
+between disabled and enabled runs. This trace uses `GGML_METAL_GRAPH_DEBUG=1` alone, does not initialize fusion
+statistics, and preserves the normal command-buffer policy. It is separate from latency measurement. The initial
+parser looked for labels emitted only by fusion debug and therefore reported zero; its result remains beside the
+corrected analysis of the existing graph-debug dispatch records. No runtime rerun or numeric-bound change is used
+to correct that parser.
+
+## Screen result
+
+Measured on 2026-11-07 JST, Apple M2 Ultra with 76 GPU cores and 192 GB memory, Metal encoder and CPU decoder with
+four threads. Builds use Release, native code and four build jobs. Every build or GPU run holds the shared performance
+lock. The frozen runner is campaign commit `1dbc333010f5a544651cdef4637fc9b3ce39bf2e`, executed through
+`/usr/bin/python3` (3.9.6). Its manifest records the resolved Python executable. The measured parent is
+`e0b0bf2c0e25003013d3c26f01d0823e4f7f0d0e`, with ggml `84e511117191c4999aca6981da6d1f7fb57116fc`.
+
+The same speech binary, SHA-256 `28f59b31b6599e63ad8b2deb12560b451e72c852d538527010fbc0d16ffc4aea`, runs with
+the switch explicitly set to 0 or 1 in separate processes. The fixed anchor uses the original ggml kernel. The screen
+contains nine duration-stratified inputs, three alternating rounds and nine timestamped quality requests per type.
+Every process warms the input set before its measured requests.
+
+| Type | Paired median request reduction | p50 ms, off to on | p90 ms, off to on | p99 ms, off to on | Encoder reduction on three inputs |
+|---|---:|---:|---:|---:|---:|
+| Q4_K | 0.53% | 80.07 to 77.79 | 125.78 to 125.98 | 146.05 to 146.80 | 1.05%, 0.75%, 1.18% |
+| Q8_0 | 0.30% | 75.20 to 74.49 | 120.65 to 122.10 | 141.03 to 142.07 | 1.43%, 0.94%, 1.24% |
+| F16 | 0.10% | 73.38 to 73.54 | 120.68 to 119.37 | 140.58 to 140.45 | 0.80%, 0.92%, 1.00% |
+
+The three-round range of the nine-request time sum divided by its median is 0.62%/1.21% for Q4_K,
+1.52%/1.43% for Q8_0 and 1.35%/0.50% for F16, disabled/enabled respectively. The fixed anchor's variation is
+0.83%, 1.12% and 1.79%. The request differences are within this spread. Encoder reductions are about 0.18 to 0.59 ms;
+they do not establish a stable reduction of the complete request. Nine-input p99 estimates do not describe a
+production tail distribution. Load, first request and peak memory are recorded without claiming a gain.
+
+For each type, all nine quality texts, public token text/times and segments match, and all 27 ordinary latency texts
+match, both relative to the disabled path and to the fixed anchor. These public results do not expose raw TDT token
+IDs or blank-duration decisions. The full 30-input/650-input comparison and short-prefix supplement are not run:
+the screen is sufficient to reject this prototype for the current warm single-request workload.
+
+Evidence is in `outputs/haas-mac-campaign/006a/`: `trial.json`, `checks.json`, `screen/summary.json`,
+`corrected-checks/direct-comparison.json`, `corrected-checks/backend-reference-summary.json`, and
+`encoder-trace/graph-dispatch-analysis.json`. Original failures, corrected runs, source snapshots and each build's
+binaries and manifest are retained separately. `evidence-manifest.json` identifies the frozen evidence files.
+
+Official-reference stage checks, Windows Vulkan and M5 execution are not performed for this prototype. Mac
+differential checks do not replace them. A future no-switch production patch would require a new comparison with
+the original runtime and the remaining quality and platform checks.
