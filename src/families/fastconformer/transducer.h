@@ -13,6 +13,14 @@ namespace fastconformer {
 /** The state of the prediction network's layers after a label, [PredictionLayers::state_size()] in their layout. */
 using PredictionState = std::vector<float>;
 
+/** The completed preparation, with read-only tensors that remain valid while their prediction network lives. */
+struct PredictionConstants {
+    size_t preparations = 0;
+    size_t allocation_bytes = 0;
+    ggml_backend_t backend = nullptr;
+    std::vector<const ggml_tensor *> values;
+};
+
 /**
  * The layers of a prediction network after its embedding, by fastconformer.decoder.prediction: one step takes the
  * embedding of the last label and the state the labels before it left, and gives the output and the next state.
@@ -29,10 +37,17 @@ public:
 
     /** The matrices a step multiplies by. */
     virtual std::vector<std::string> matrices() const = 0;
+
+    /** The completed preparation, without creating a cache or computing on a backend. */
+    virtual PredictionConstants constants() const { return {}; }
 };
 
-/** The layers of fastconformer.decoder.prediction in the file `m`. */
-std::unique_ptr<PredictionLayers> make_prediction_layers(const ModelFile & m);
+/**
+ * The layers of fastconformer.decoder.prediction in the file `m`. Constructors only read metadata; an enabled
+ * constant cache is prepared on `backend` when the first step is built, after its CPU pool has been installed.
+ */
+std::unique_ptr<PredictionLayers> make_prediction_layers(const ModelFile & m, ggml_backend_t backend = nullptr,
+                                                       bool cache_constants = false);
 
 /**
  * Whether the tensor `name` is one that a decoding reads: the prediction network's and the joint's, but for the joint's
@@ -54,7 +69,7 @@ bool quantized_decoding(const ModelFile & m);
  */
 class PredictionNetwork {
 public:
-    explicit PredictionNetwork(const ModelFile & m);
+    explicit PredictionNetwork(const ModelFile & m, ggml_backend_t backend = nullptr, bool cache_constants = false);
 
     /** The tensors of one step: the output [hidden] and the next state [state_size()]. */
     struct Step {
@@ -75,6 +90,8 @@ public:
 
     int hidden() const { return hidden_; }
     int64_t state_size() const { return layers_->state_size(); }
+    /** The prepared constants owned by these layers, without starting preparation. */
+    PredictionConstants constants() const { return layers_->constants(); }
 
 private:
     const ModelFile & m_;

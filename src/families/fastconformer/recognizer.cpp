@@ -1,5 +1,6 @@
 #include "recognizer.h"
 
+#include <cstdlib>
 #include <stdexcept>
 
 #include "backend.h"
@@ -8,7 +9,19 @@
 
 namespace fastconformer {
 
-Recognizer::Transducer::Transducer(const ModelFile & m, const std::vector<std::string> & names) : prediction(m), joint(m), names(names) {
+namespace {
+
+bool cache_kda_constants(const ModelFile & model) {
+    const char * value = std::getenv("SPEECH_HAAS_KDA_CONSTANTS");
+    if (!value || std::string(value) == "0") return false;
+    if (std::string(value) != "1") throw Error(Fault::InvalidArgument, "SPEECH_HAAS_KDA_CONSTANTS must be 0 or 1");
+    return model.str("general.name") == "Haas-ja-v1.0" && model.str("fastconformer.decoder.prediction") == "kda";
+}
+
+}  // namespace
+
+Recognizer::Transducer::Transducer(const ModelFile & m, const std::vector<std::string> & names, ggml_backend_t backend, bool cache_constants)
+    : prediction(m, backend, cache_constants), joint(m), names(names) {
     for (const std::string & name : names) decoders.push_back(make_decoder(m, prediction, joint, name));
 }
 
@@ -19,11 +32,11 @@ const Decoder & Recognizer::Transducer::decoder(const std::string & name) const 
     throw std::logic_error("a FastConformer model has no decoding named " + name);
 }
 
-Recognizer::OnCpu::OnCpu(const ModelFile & device, int threads, const std::vector<std::string> & names)
+Recognizer::OnCpu::OnCpu(const ModelFile & device, int threads, const std::vector<std::string> & names, bool cache_constants)
     : pool(nullptr, ggml_threadpool_free),
       backend(start_device(find_device("cpu"), threads), ggml_backend_free),
       model(device, backend.get(), decoding_tensor),
-      transducer(model, names) {
+      transducer(model, names, backend.get(), cache_constants) {
     ggml_threadpool_params params = ggml_threadpool_params_default(threads);
     pool.reset(ggml_threadpool_new(&params));
     if (!pool) throw Error(Fault::OutOfMemory, "cannot start the CPU's threads for the decoding");
@@ -35,10 +48,11 @@ Recognizer::Recognizer(const std::string & path, ggml_backend_t backend, int thr
       on_cpu_(ggml_backend_dev_type(ggml_backend_get_device(backend)) == GGML_BACKEND_DEVICE_TYPE_CPU),
       threads_(threads),
       model_(path, backend, layout),
+      cache_constants_(cache_kda_constants(model_)),
       frontend_(model_, "fastconformer.", true),
       encoder_(model_, backend),
       decoding_names_(fastconformer::decodings(model_)),
-      device_(model_, decoding_names_),
+      device_(model_, decoding_names_, backend, cache_constants_),
       detokenizer_(model_),
       separators_(model_.str_array("fastconformer.segment.separators")),
       breaks_(model_.str_array("fastconformer.segment.breaks")),
@@ -68,8 +82,13 @@ Transcript Recognizer::recognize(const std::vector<float> & samples, const std::
 }
 
 Recognizer::OnCpu & Recognizer::cpu() {
-    if (!cpu_) cpu_ = std::make_unique<OnCpu>(model_, threads_, decoding_names_);
+    if (!cpu_) cpu_ = std::make_unique<OnCpu>(model_, threads_, decoding_names_, cache_constants_);
     return *cpu_;
+}
+
+PredictionConstants Recognizer::prediction_constants(DecodeOn on) const {
+    if (on == DecodeOn::Device || on_cpu_) return device_.prediction.constants();
+    return cpu_ ? cpu_->transducer.prediction.constants() : PredictionConstants{};
 }
 
 Decoding Recognizer::decoding(const std::vector<float> & projected, const std::string & name, DecodeOn on,

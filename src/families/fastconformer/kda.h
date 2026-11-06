@@ -28,11 +28,13 @@ namespace fastconformer {
  */
 class KdaLayers : public PredictionLayers {
 public:
-    explicit KdaLayers(const ModelFile & m);
+    explicit KdaLayers(const ModelFile & m, ggml_backend_t backend = nullptr, bool cache_constants = false);
+    ~KdaLayers() override;
 
     int64_t state_size() const override { return layers_ * layer_state(); }
     ggml_tensor * build(ggml_context * ctx, ggml_tensor * x, ggml_tensor * state, ggml_tensor ** next) const override;
     std::vector<std::string> matrices() const override;
+    PredictionConstants constants() const override;
 
 private:
     int64_t layer_state() const { return heads_ * head_dim_ * (head_dim_ + 3 * (conv_size_ - 1)); }
@@ -42,6 +44,11 @@ private:
     int64_t heads_, head_dim_, conv_size_;
     float norm_eps_, gate_norm_eps_, qk_norm_eps_;
     bool final_norm_;
+    ggml_backend_t backend_;
+    bool cache_constants_;
+    struct Constants;
+    mutable std::unique_ptr<Constants> constants_;
+    mutable size_t preparations_ = 0;
 };
 
 }  // namespace fastconformer

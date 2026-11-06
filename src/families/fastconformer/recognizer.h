@@ -90,6 +90,8 @@ public:
     const Encoder & encoder() const { return encoder_; }
     /** The prediction network and the joint on the model's device. */
     const PredictionNetwork & prediction() const { return device_.prediction; }
+    /** The completed constant preparation on `on`, without creating the CPU decoder. */
+    PredictionConstants prediction_constants(DecodeOn on) const;
     const Joint & joint() const { return device_.joint; }
     /** The decoding of decodings() named `name` on the model's device. */
     const Decoder & decoder(const std::string & name) const { return device_.decoder(name); }
@@ -102,7 +104,7 @@ public:
 private:
     /** The prediction network, the joint and the decoders of decodings() over the tensors of one model file. */
     struct Transducer {
-        Transducer(const ModelFile & m, const std::vector<std::string> & names);
+        Transducer(const ModelFile & m, const std::vector<std::string> & names, ggml_backend_t backend, bool cache_constants);
         Transducer(const Transducer &) = delete;
         Transducer & operator=(const Transducer &) = delete;
         const Decoder & decoder(const std::string & name) const;
@@ -128,7 +130,7 @@ private:
      * 4 threads, while 8 processes kept the cores busy (2026-10-13).
      */
     struct OnCpu {
-        OnCpu(const ModelFile & device, int threads, const std::vector<std::string> & names);
+        OnCpu(const ModelFile & device, int threads, const std::vector<std::string> & names, bool cache_constants);
 
         std::unique_ptr<ggml_threadpool, decltype(&ggml_threadpool_free)> pool;
         std::unique_ptr<ggml_backend, decltype(&ggml_backend_free)> backend;
@@ -143,6 +145,7 @@ private:
     bool on_cpu_;
     int threads_;
     ModelFile model_;
+    bool cache_constants_;
     NemoFrontend frontend_;
     Encoder encoder_;
     std::vector<std::string> decoding_names_;

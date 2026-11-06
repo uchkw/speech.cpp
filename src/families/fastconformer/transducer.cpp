@@ -62,8 +62,8 @@ private:
 
 }  // namespace
 
-std::unique_ptr<PredictionLayers> make_prediction_layers(const ModelFile & m) {
-    if (m.one_of("fastconformer.decoder.prediction", {"lstm", "kda"}) == "kda") return std::make_unique<KdaLayers>(m);
+std::unique_ptr<PredictionLayers> make_prediction_layers(const ModelFile & m, ggml_backend_t backend, bool cache_constants) {
+    if (m.one_of("fastconformer.decoder.prediction", {"lstm", "kda"}) == "kda") return std::make_unique<KdaLayers>(m, backend, cache_constants);
     return std::make_unique<LstmLayers>(m);
 }
 
@@ -83,8 +83,8 @@ bool quantized_decoding(const ModelFile & m) {
     return true;
 }
 
-PredictionNetwork::PredictionNetwork(const ModelFile & m)
-    : m_(m), layers_(make_prediction_layers(m)), hidden_((int) m.tensor("pred.embed.weight")->ne[0]) {}
+PredictionNetwork::PredictionNetwork(const ModelFile & m, ggml_backend_t backend, bool cache_constants)
+    : m_(m), layers_(make_prediction_layers(m, backend, cache_constants)), hidden_((int) m.tensor("pred.embed.weight")->ne[0]) {}
 
 PredictionNetwork::Step PredictionNetwork::build(Graph & g, int32_t label, const PredictionState & state) const {
     return build(g, g.input(std::vector<int32_t>{label}, 1), g.input(state, (int64_t) state.size()));

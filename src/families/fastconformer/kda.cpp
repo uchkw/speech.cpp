@@ -2,6 +2,8 @@
 
 #include <cmath>
 
+#include "error.h"
+
 namespace fastconformer {
 
 namespace {
@@ -23,7 +25,36 @@ ggml_tensor * qk_norm(ggml_context * ctx, ggml_tensor * x, float eps) {
 
 }  // namespace
 
-KdaLayers::KdaLayers(const ModelFile & m)
+struct KdaLayers::Constants {
+    std::unique_ptr<ggml_context, decltype(&ggml_free)> context{nullptr, ggml_free};
+    std::unique_ptr<ggml_backend_buffer, decltype(&ggml_backend_buffer_free)> buffer{nullptr, ggml_backend_buffer_free};
+    std::vector<ggml_tensor *> negative_a;
+
+    Constants(const ModelFile & model, ggml_backend_t backend, int layers, int64_t heads) {
+        context.reset(ggml_init({ggml_tensor_overhead() * (size_t) layers, nullptr, true}));
+        if (!context) throw Error(Fault::OutOfMemory, "cannot create the KDA constants context");
+        for (int l = 0; l < layers; l++) {
+            auto * value = ggml_new_tensor_2d(context.get(), GGML_TYPE_F32, 1, heads);
+            ggml_set_name(value, ("pred.kda." + std::to_string(l) + ".negative_a").c_str());
+            negative_a.push_back(value);
+        }
+        buffer.reset(ggml_backend_alloc_ctx_tensors(context.get(), backend));
+        if (!buffer) throw Error(Fault::OutOfMemory, "cannot allocate KDA constants");
+        std::unique_ptr<ggml_gallocr, decltype(&ggml_gallocr_free)> allocator(
+            ggml_gallocr_new(ggml_backend_get_default_buffer_type(backend)), ggml_gallocr_free);
+        if (!allocator) throw Error(Fault::OutOfMemory, "cannot create the KDA constants allocator");
+        Graph graph(8 * layers + 8);
+        for (int l = 0; l < layers; l++) {
+            auto * input = ggml_reshape_2d(graph.ctx(), model.tensor("pred.kda." + std::to_string(l) + ".a_log"), 1, heads);
+            graph.copy(ggml_neg(graph.ctx(), ggml_exp(graph.ctx(), input)), negative_a[l]);
+        }
+        graph.compute(backend, allocator.get());
+    }
+};
+
+KdaLayers::~KdaLayers() = default;
+
+KdaLayers::KdaLayers(const ModelFile & m, ggml_backend_t backend, bool cache_constants)
     : m_(m),
       layers_((int) m.u32("fastconformer.decoder.prediction_layers")),
       heads_(m.u32("fastconformer.decoder.kda.num_heads")),
@@ -32,9 +63,24 @@ KdaLayers::KdaLayers(const ModelFile & m)
       norm_eps_(m.f32("fastconformer.decoder.kda.norm_eps")),
       gate_norm_eps_(m.f32("fastconformer.decoder.kda.gate_norm_eps")),
       qk_norm_eps_(m.f32("fastconformer.decoder.kda.qk_norm_eps")),
-      final_norm_(m.boolean("fastconformer.decoder.kda.final_norm")) {}
+      final_norm_(m.boolean("fastconformer.decoder.kda.final_norm")),
+      backend_(backend), cache_constants_(cache_constants) {
+    if (cache_constants_ && !backend_) throw std::logic_error("KDA constant preparation needs its prediction backend");
+}
+
+PredictionConstants KdaLayers::constants() const {
+    if (!constants_) return {};
+    return {preparations_, ggml_backend_buffer_get_size(constants_->buffer.get()), backend_,
+            std::vector<const ggml_tensor *>(constants_->negative_a.begin(), constants_->negative_a.end())};
+}
 
 ggml_tensor * KdaLayers::build(ggml_context * ctx, ggml_tensor * x, ggml_tensor * state, ggml_tensor ** next) const {
+    if (cache_constants_ && !constants_) {
+        // A model serves one request at a time; only a completed preparation becomes visible to later graphs.
+        auto prepared = std::make_unique<Constants>(m_, backend_, layers_, heads_);
+        constants_ = std::move(prepared);
+        ++preparations_;
+    }
     const int64_t d = head_dim_, h = heads_, width = h * d, past = conv_size_ - 1;
     const size_t f = sizeof(float);
     // Each part of the next state is written into its place, in the order of the layout: a chain of concatenations
@@ -69,7 +115,9 @@ ggml_tensor * KdaLayers::build(ggml_context * ctx, ggml_tensor * x, ggml_tensor 
 
         ggml_tensor * gate = mul_mat(ctx, weight("f_b.weight"), mul_mat(ctx, weight("f_a.weight"), normed));
         gate = ggml_softplus(ctx, ggml_add(ctx, ggml_reshape_2d(ctx, gate, d, h), ggml_reshape_2d(ctx, weight("dt_bias"), d, h)));
-        gate = ggml_mul(ctx, gate, ggml_neg(ctx, ggml_exp(ctx, ggml_reshape_2d(ctx, weight("a_log"), 1, h))));
+        ggml_tensor * negative_a = constants_ ? constants_->negative_a[l] :
+            ggml_neg(ctx, ggml_exp(ctx, ggml_reshape_2d(ctx, weight("a_log"), 1, h)));
+        gate = ggml_mul(ctx, gate, negative_a);
         ggml_tensor * beta = ggml_sigmoid(ctx, ggml_reshape_2d(ctx, mul_mat(ctx, weight("b.weight"), normed), 1, h));
         ggml_tensor * recurrent = ggml_view_4d(ctx, state, d, d, h, 1, d * f, d * d * f, width * d * f, base);
         ggml_tensor * attended =
