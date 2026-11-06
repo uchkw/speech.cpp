@@ -2,7 +2,8 @@
   "schema_version": 1,
   "measure_id": "004",
   "title": "Reuse blank-joint graphs and CPU plans",
-  "status": "pending",
-  "reason": "Not evaluated.",
-  "checks": []
+  "status": "in_progress",
+  "reason": "Blank-joint graph reuse was rejected after the nine-input screen and alternating stage diagnostic. CPU-plan reuse is being evaluated as an independent trial.",
+  "checks": [],
+  "updated_utc": "2026-11-06T19:29:54.542150+00:00"
 }
