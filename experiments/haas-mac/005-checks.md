@@ -132,4 +132,49 @@ larger projection nor its strided heads causes an observed numerical change
 over the checked workload. No tolerance is relaxed and the failed original
 logs are not relabeled as passes. The original checks, both fusion diagnostics,
 the boundary traces and the corrected CPU/Metal results have separate paths
-under external campaign artifacts `005/`. Performance has not yet been measured.
+under external campaign artifacts `005/`.
+
+## Performance on November 7, 2026
+
+On the M2 Ultra with four CPU decoder threads, the full comparison uses the
+same `d3796ef` binary with the switch explicitly disabled or enabled, plus a
+directly measured fixed campaign anchor. The runner and Python 3.9.6 are fixed.
+Each type has 30 latency inputs over three alternating rounds and 650 separate
+timestamped quality requests. The paired reduction uses each input's median
+over rounds; it is not the percentage change of the aggregate p50.
+
+| Type | Paired latency reduction | Against fixed anchor | p50, off to on | Peak footprint, off to on | Load, off to on |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Q4_K | 2.48% | 1.99% | 81.48 to 77.81 ms | 456.99 to 493.17 MiB | 140.57 to 145.97 ms |
+| Q8_0 | 1.62% | 1.25% | 77.48 to 76.67 ms | 750.02 to 825.11 MiB | 189.14 to 197.03 ms |
+
+Q4_K improves 26 of the 30 input medians against the disabled switch and 28
+against the anchor. Its per-round reductions are 1.19%, 6.01% and 1.85%; the
+direct anchor comparison is steadier at 1.27%, 2.73% and 1.91%. Q8_0 improves
+all 30 input medians against both references, with per-round reductions of
+1.46%, 1.89% and 1.81% against the disabled switch. Every type's 650 quality
+outputs and 90 latency texts match both references exactly. Literal and
+repository CER are unchanged: 7.4668% and 4.6557% for Q4_K, and 7.5097% and
+4.5761% for Q8_0. The separate three-input stage timer reduces encoder compute
+by 2.70-4.57% for Q4_K and 2.74-5.29% for Q8_0; these percentages are not added
+to worker request gains.
+
+The independent six-prefix supplement reuses two- and four-second prefixes of
+three existing recordings and the primary run's binaries, timer and thread
+setting. All 18 text comparisons match for each type, and all six input medians
+improve. Q4_K's paired reduction is 2.63% overall, 3.17% for two seconds and
+1.87% for four seconds; Q8_0's is 4.19%, 3.51% and 4.21%, respectively. These
+are truncated prefixes without reference labels, not naturally completed
+utterances. Both CER fields remain null, and the supplement is separate from
+the primary evaluation.
+
+F16 remains a nine-input screen only: its paired reduction is 0.62%, with
+per-round changes from a 4.98% regression to a 3.40% reduction, so it does not
+receive a full evaluation. Its paired CPU/Metal correctness checks pass.
+
+This is a promising, unadopted prototype with a memory and load-time cost.
+Adoption still requires a switch-free implementation, another performance
+comparison of that implementation, official CPU F32/Metal reference checks,
+and Windows Vulkan validation. No model default changes here. The frozen full
+and prefix evidence is under `005/full/` and `005/short/`; `005/evaluation.json`
+records the independent per-round and duration-stratum aggregation.
