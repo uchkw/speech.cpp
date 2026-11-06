@@ -46,7 +46,8 @@ and exact sample boundaries. They are not naturally completed short utterances. 
 prefix references: both CER fields remain null. The supplement compares every latency text with the baseline over
 three alternating rounds and reports six-input and duration-stratum latency, separately from the primary result.
 It inherits the primary binaries, models, environment and thread setting and requires the same recorded Python
-version and executable. New primary manifests record `sys.executable`; old manifests are refused, not backfilled.
+version and executable, plus the identical recorded `worker.py` timer source. New primary manifests record
+`sys.executable`; old manifests are refused, not backfilled.
 Use `/usr/bin/python3` for the campaign's primary runs. The supplement freezes its runner files, uses the shared lock,
 and never changes the primary dataset, result or verdict. Its JSON can be shown as a separate diagnostic in the trial
 report; it cannot establish short-utterance CER or adoption on its own.

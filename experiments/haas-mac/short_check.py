@@ -35,6 +35,7 @@ def check(root):
                 'execution_environments': {'baseline': {'SPEECH_HAAS_TDT_RESIDENT_STATE': '0'}, 'candidate': {'SPEECH_HAAS_TDT_RESIDENT_STATE': '1'}},
                 'models': {'q4_k': {'sha256': model['sha256']}},
                 'conditions': {'python': platform.python_version(), 'python_executable': sys.executable, 'rounds': 3,
+                               'runner_sha256': {'worker.py': compare.sha(short.HERE / 'worker.py')},
                                'latency_count': 30, 'quality_count': 650, 'decode_on_cpu': True, 'threads': 4,
                                'latency_definition': 'Fixture timer.', 'aggregation': 'Median per input, then percentiles.'}}
 
@@ -60,6 +61,10 @@ def check(root):
     del manifest['conditions']['python_executable']; save_primary()
     refused(lambda: short.primary(primary, data), 'do not backfill')
     manifest['conditions']['python_executable'] = sys.executable; save_primary()
+    timer = manifest['conditions']['runner_sha256']['worker.py']
+    manifest['conditions']['runner_sha256']['worker.py'] = 'different-timer'; save_primary()
+    refused(lambda: short.primary(primary, data), 'same worker timer source')
+    manifest['conditions']['runner_sha256']['worker.py'] = timer; save_primary()
     changed = compare.read(input_dir / 'inputs.json'); changed['records'][0]['reference'] = 'full recording'
     compare.write(root / 'labeled.json', changed)
     refused(lambda: short.inputs(root / 'labeled.json'), 'must remain unlabeled')

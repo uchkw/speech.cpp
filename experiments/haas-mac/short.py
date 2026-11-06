@@ -104,6 +104,8 @@ def primary(path, data):
         raise ValueError('Use a primary run that records its interpreter; do not backfill an old manifest.')
     if Path(executable).resolve() != Path(sys.executable).resolve():
         raise ValueError(f"Use the primary run's recorded interpreter: {executable}")
+    if compare.sha(HERE / 'worker.py') != policy['runner_sha256']['worker.py']:
+        raise ValueError('Use the same worker timer source as the primary run; worker.py has changed.')
     if policy['rounds'] != 3 or policy['latency_count'] != 30 or policy['quality_count'] != 650 or not policy['decode_on_cpu']:
         raise ValueError('The primary comparison must retain the three-round 30/650 CPU-decoder campaign conditions.')
     for side in ['baseline', 'candidate']:
