@@ -439,7 +439,7 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
 endif()
 
 # The checks of FastConformer's stages.
-foreach(stage frontend encoder transducer times sentencepiece)
+foreach(stage frontend encoder transducer times sentencepiece cpu-plan)
     add_executable(fastconformer-${stage}-check checks/fastconformer/fastconformer-${stage}-check.cpp)
     target_include_directories(fastconformer-${stage}-check PRIVATE checks)
     target_link_libraries(fastconformer-${stage}-check PRIVATE fastconformer)

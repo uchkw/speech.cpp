@@ -82,9 +82,10 @@ public:
 
     /**
      * Uploads the inputs and computes the graph on `backend` again where compute() allocated it, which holds while
-     * no other graph is allocated with the same allocator.
+     * no other graph is allocated with the same allocator. A supplied plan belongs to this allocated graph and
+     * backend, and keeps the backend's thread pool, thread count and abort callback fixed for its lifetime.
      */
-    void compute_again(ggml_backend_t backend);
+    void compute_again(ggml_backend_t backend, ggml_backend_graph_plan_t plan = nullptr);
 
     /** The graph's nodes, which outputs and copies have put in, for asking a backend whether it computes each. */
     ggml_cgraph * cgraph() const { return gf_; }

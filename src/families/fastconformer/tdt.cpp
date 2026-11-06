@@ -1,16 +1,26 @@
 #include "tdt.h"
 
+#include <cstdlib>
+#include <cstring>
 #include <memory>
 #include <stdexcept>
 
 #include "error.h"
 #include "decoder-step.h"
+#include "ggml-cpu.h"
 
 namespace fastconformer {
 
 namespace {
 
 using Allocator = std::unique_ptr<ggml_gallocr, decltype(&ggml_gallocr_free)>;
+
+bool cpu_plan_requested() {
+    const char * value = std::getenv("SPEECH_HAAS_TDT_CPU_PLAN");
+    if (!value || std::strcmp(value, "0") == 0) return false;
+    if (std::strcmp(value, "1") == 0) return true;
+    throw std::runtime_error("SPEECH_HAAS_TDT_CPU_PLAN must be 0 or 1");
+}
 
 Allocator new_allocator(ggml_backend_t backend) {
     Allocator a(ggml_gallocr_new(ggml_backend_get_default_buffer_type(backend)), &ggml_gallocr_free);
@@ -21,11 +31,15 @@ Allocator new_allocator(ggml_backend_t backend) {
 }  // namespace
 
 TdtDecoder::TdtDecoder(const ModelFile & m, const PredictionNetwork & prediction, const Joint & joint)
+    : TdtDecoder(m, prediction, joint, cpu_plan_requested()) {}
+
+TdtDecoder::TdtDecoder(const ModelFile & m, const PredictionNetwork & prediction, const Joint & joint, bool retain_cpu_plan)
     : prediction_(prediction),
       joint_(joint),
       blank_((int) m.u32("fastconformer.decoder.blank_id")),
       durations_(m.i32_array("fastconformer.decoder.tdt.durations")),
-      max_symbols_(m.u32("fastconformer.decoder.tdt.max_symbols")) {}
+      max_symbols_(m.u32("fastconformer.decoder.tdt.max_symbols")),
+      retain_cpu_plan_(retain_cpu_plan) {}
 
 Decoding TdtDecoder::decode(const std::vector<float> & projected, ggml_backend_t backend, const DecodingProgress & progress) const {
     return run(projected, backend, progress, nullptr);
@@ -46,7 +60,7 @@ Decoding TdtDecoder::run(const std::vector<float> & projected, ggml_backend_t ba
     };
     // The step's graph and the joint's alone keep an allocator each, so that neither is planned again when the
     // other runs.
-    DecoderStep step(prediction_, joint_, backend, 1);
+    DecoderStep step(prediction_, joint_, backend, 1, retain_cpu_plan_ && ggml_backend_is_cpu(backend));
     const Allocator joint_allocator = new_allocator(backend);
 
     // The tree's bonus of each token from its state, which the tokens emitted so far reached, and the state each leads to.

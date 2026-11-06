@@ -9,7 +9,9 @@ namespace fastconformer {
 /** A fixed-shape prediction and joint graph, reused with new labels, prediction states and encoder frames. */
 class DecoderStep {
 public:
-    DecoderStep(const PredictionNetwork & prediction, const Joint & joint, ggml_backend_t backend, int64_t frames);
+    DecoderStep(const PredictionNetwork & prediction, const Joint & joint, ggml_backend_t backend, int64_t frames,
+                bool retain_cpu_plan = false);
+    ~DecoderStep();
 
     /** Computes the next prediction and the joint at each of the given projected encoder frames. */
     void compute(int32_t label, const PredictionState & state, const std::vector<float> & frames);
@@ -28,6 +30,8 @@ private:
     ggml_tensor * logits_;
     PredictionNetwork::Step step_;
     bool allocated_ = false;
+    bool retain_cpu_plan_;
+    ggml_backend_graph_plan_t plan_ = nullptr;
 };
 
 }  // namespace fastconformer

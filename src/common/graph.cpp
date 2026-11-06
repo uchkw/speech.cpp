@@ -130,9 +130,10 @@ void Graph::set(ggml_tensor * input, const std::vector<int32_t> & data) {
     std::memcpy(u.bytes.data(), data.data(), u.bytes.size());
 }
 
-void Graph::compute_again(ggml_backend_t backend) {
+void Graph::compute_again(ggml_backend_t backend, ggml_backend_graph_plan_t plan) {
     for (const Upload & u : uploads_) ggml_backend_tensor_set(u.tensor, u.bytes.data(), 0, u.bytes.size());
-    compute_graph(backend, gf_);
+    if (plan) computing(ggml_backend_name(backend), [&] { return ggml_backend_graph_plan_compute(backend, plan); });
+    else compute_graph(backend, gf_);
 }
 
 std::vector<float> Graph::read(const ggml_tensor * t) {

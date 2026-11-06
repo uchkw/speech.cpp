@@ -1,11 +1,15 @@
 #include "decoder-step.h"
 
 #include "error.h"
+#include "ggml-cpu.h"
 
 namespace fastconformer {
 
-DecoderStep::DecoderStep(const PredictionNetwork & prediction, const Joint & joint, ggml_backend_t backend, int64_t frames)
-    : backend_(backend), allocator_(ggml_gallocr_new(ggml_backend_get_default_buffer_type(backend)), ggml_gallocr_free) {
+DecoderStep::DecoderStep(const PredictionNetwork & prediction, const Joint & joint, ggml_backend_t backend, int64_t frames,
+                         bool retain_cpu_plan)
+    : backend_(backend), allocator_(ggml_gallocr_new(ggml_backend_get_default_buffer_type(backend)), ggml_gallocr_free),
+      retain_cpu_plan_(retain_cpu_plan) {
+    if (retain_cpu_plan_ && !ggml_backend_is_cpu(backend_)) throw std::logic_error("a decoder CPU plan requires the CPU backend");
     if (!allocator_) throw Error(Fault::OutOfMemory, "cannot create a graph allocator");
     label_ = graph_.input(std::vector<int32_t>{0}, 1);
     state_ = graph_.input(prediction.initial_state(), prediction.state_size());
@@ -18,13 +22,21 @@ DecoderStep::DecoderStep(const PredictionNetwork & prediction, const Joint & joi
     graph_.output(step_.state);
 }
 
+DecoderStep::~DecoderStep() {
+    if (plan_) ggml_backend_graph_plan_free(backend_, plan_);
+}
+
 void DecoderStep::compute(int32_t label, const PredictionState & state, const std::vector<float> & frames) {
     graph_.set(label_, std::vector<int32_t>{label});
     graph_.set(state_, state);
     graph_.set(frames_, frames);
-    if (allocated_) graph_.compute_again(backend_);
+    if (allocated_) graph_.compute_again(backend_, plan_);
     else {
         graph_.compute(backend_, allocator_.get());
+        if (retain_cpu_plan_) {
+            plan_ = ggml_backend_graph_plan_create(backend_, graph_.cgraph());
+            if (!plan_) throw Error(Fault::OutOfMemory, "cannot create a decoder CPU graph plan");
+        }
         allocated_ = true;
     }
 }
