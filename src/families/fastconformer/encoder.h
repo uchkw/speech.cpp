@@ -64,6 +64,9 @@ private:
     /** The projections of attention's fixed positions, shared by every utterance. */
     struct Positions;
     mutable std::unique_ptr<Positions> positions_;
+    /** The unchanged Q, K and V matrix rows packed into one projection per attention layer. */
+    struct PackedQkv;
+    std::unique_ptr<PackedQkv> packed_qkv_;
     ggml_backend_t backend_;
     const ModelFile & m_;
     int mels_, d_model_, layers_, heads_, conv_kernel_, sub_layers_;

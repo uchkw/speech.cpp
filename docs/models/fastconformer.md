@@ -32,8 +32,7 @@ speech serve parakeet-tdt-0.6b-v3                                  # POST /v1/au
 - A request is recognized whole, however long, but a stretch that holds several sentences loses whole sentences, as in
   NeMo itself: on minutes of Common Voice ja clips joined with pauses, reazonspeech-v2 dropped 522 of 600 and
   parakeet-ja 266. Recognize a long recording by the regions where someone speaks, with `--vad silero-vad` or
-  `chunking_strategy` (the [record](../adr/transcription-by-regions-recognizes-each-region-where-someone-speaks-alone-in-the-tools-and-joins-the-texts.md)
-  has the measurement). ReazonSpeech's time and memory grow with the length; the parakeet models attend over the whole
+  `chunking_strategy`. ReazonSpeech's time and memory grow with the length; the parakeet models attend over the whole
   request, so theirs grow with its square, and so do Haas's.
 - parakeet-v3 finds the language of the audio itself. None of the models takes a language: a request's `language` is only
   checked against the model's languages.
@@ -141,6 +140,11 @@ is the process's on the M5, whose GPU shares it, and the VRAM the video memory i
 
 In the Q6_K, Q5_K and Q4_K files the prediction network and the joint stay Q8_0. A quantized file decodes on the CPU
 by default and an F16 file on the GPU; `decode_on_cpu` sets where a request decodes.
+
+Haas Q4_K and Q8_0 on Metal automatically keep an extra 40.5 MiB and 76.5 MiB of encoder weights, respectively,
+for faster recognition, at the cost of more memory and load time. The memory figures above exclude this copy.
+It applies to the standard Haas files; CPU and Vulkan encoders, other weight types and files with mixed attention
+weight types keep no such copy. Its speed benefit has only been measured on an M2 Ultra, not on other Metal devices.
 
 ## Speed
 
