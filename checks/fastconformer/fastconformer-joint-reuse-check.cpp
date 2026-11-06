@@ -23,7 +23,7 @@ using namespace cache_check;
 namespace {
 
 void joint_cases(const ModelFile & model, const PredictionNetwork & prediction, const Joint & joint,
-                 ggml_backend_t backend, Checks & checks) {
+                 ggml_backend_t backend, bool synthetic, Checks & checks) {
     std::unique_ptr<ggml_gallocr, decltype(&ggml_gallocr_free)> fresh_allocator(
         ggml_gallocr_new(ggml_backend_get_default_buffer_type(backend)), ggml_gallocr_free);
     if (!fresh_allocator) throw std::runtime_error("cannot create the fresh-joint allocator");
@@ -58,6 +58,16 @@ void joint_cases(const ModelFile & model, const PredictionNetwork & prediction, 
                 products++;
             }
         }
+    }
+    if (synthetic) {
+        const auto frame = frames(joint.hidden(), 1, 55);
+        prediction_a.compute(1, state_a, frame);
+        prediction_b.compute(1, state_b, frame);
+        checks.expect(prediction_a.prediction() != prediction_b.prediction(), "prediction depends on history with the same label");
+        std::vector<float> a, b;
+        prediction_a.logits(a);
+        prediction_b.logits(b);
+        checks.expect(a != b, "joint logits depend on history with the same label and frame");
     }
     std::printf("fresh/reused joint evaluations: %zu, interleaved requests: 2\n", products);
 }
@@ -104,7 +114,7 @@ int main(int argc, char ** argv) {
         for (const auto & entry : types) std::printf("decoder weights: %s, %zu tensors\n", tensor_type_text(entry.first).c_str(), entry.second);
         std::printf("Official NeMo/FLA reference: not checked\n");
         Checks checks;
-        joint_cases(model, prediction, joint, backend.get(), checks);
+        joint_cases(model, prediction, joint, backend.get(), synthetic, checks);
         decoding_cases(model, prediction, joint, backend.get(), synthetic, checks);
         std::printf("joint graph reuse: %zu checks, %zu failed\n", checks.total, checks.failed);
         return checks.failed ? 1 : 0;

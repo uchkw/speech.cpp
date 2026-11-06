@@ -104,6 +104,9 @@ void decoding_cases(const ModelFile & model, const PredictionNetwork & predictio
         chains[t * joint.hidden() + chain_labels[t]] = 100.0f;
         chains[t * joint.hidden() + state_check::kBlank + 2] = 50.0f;
     }
+    const auto cancelled_chain = decode_pair(host, cached, backend, chains, 2, checks);
+    checks.expect(cancelled_chain.ids == std::vector<int32_t>({1, 2}) && cancelled_chain.frames == std::vector<int64_t>({2, 5}) &&
+                  cancelled_chain.graphs == 6, "cancellation follows blank-joint and prediction-step reuse");
     const auto multiple = decode_pair(host, cached, backend, chains, unlimited, checks);
     checks.expect(multiple.ids == std::vector<int32_t>({1, 2, 3}) && multiple.frames == std::vector<int64_t>({2, 5, 8}) &&
                   multiple.durations == std::vector<int32_t>({1, 1, 1}) && multiple.graphs == 10,
