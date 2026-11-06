@@ -16,6 +16,7 @@
 #include "inbox.h"
 #include "json.h"
 #include "sentences.h"
+#include "worker-trace.h"
 
 // speech worker: serves one model over the worker protocol, JSON Lines on stdin and stdout, for another program
 // that starts it, ASIST among them. Its stdout carries the protocol and nothing else. It loads the model, warmed up
@@ -116,6 +117,7 @@ void synthesize(Inbox & inbox, Protocol & protocol, speech_model * model, const 
 }
 
 void recognize(Inbox & inbox, Protocol & protocol, speech_model * model, const speech_model_info * info, const Job & job) {
+    worker_trace::Record trace(job.id);
     const Request request = new_request(model);
     speech_request * r = request.get();
     Cancellation cancellation;
@@ -123,20 +125,32 @@ void recognize(Inbox & inbox, Protocol & protocol, speech_model * model, const s
     Running running{protocol, job.id, Clock::now()};
     std::string terminal;
     try {
+        worker_trace::mark("pcm_before");
         const std::vector<float> samples = samples_of(job);
+        worker_trace::mark("pcm_end");
         check(speech_request_set_audio(r, samples.data(), samples.size(), job.sample_rate));
+        worker_trace::mark("audio_set_end");
         apply_options(r, job.options);
         check(speech_request_set_progress(r, on_progress, &running));
+        worker_trace::mark("setup_end");
+        worker_trace::mark("api_begin");
         if (check(cancellation.run(r, [&] { return speech_transcribe(r); })) == SPEECH_CANCELLED) {
+            worker_trace::mark("api_end");
             terminal = cancelled_line(job.id);
         } else {
+            worker_trace::mark("api_end");
             const bool timestamps = timestamps_in_effect(info, job.options), speakers = in_effect(info, job.options, SPEECH_OPT_SPEAKERS);
             terminal = "{\"type\":\"end\",\"id\":" + json_string(job.id) + recognition_members(speech_request_result(r), timestamps, speakers) + "}";
         }
+        worker_trace::mark("terminal_built");
     } catch (const std::exception & e) {
         terminal = error_line(job.id, e);
     }
+    worker_trace::mark("finish_before");
+    trace.terminal = true;
     inbox.finish(job, terminal);
+    trace.terminal = false;
+    worker_trace::mark("finish_after");
 }
 
 /** Enhances the job's audio as one request of the library, passing the enhanced audio in chunks as it comes. */

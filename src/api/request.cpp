@@ -17,6 +17,7 @@
 #include "resample.h"
 #include "speech.h"
 #include "utf8.h"
+#include "worker-trace.h"
 
 // Requests: each value checked against the model's table as it is set, the whole request when it runs, its
 // cancellation from any thread, and its result.
@@ -234,15 +235,21 @@ RequestValues take(speech_request * request, speech_task task) {
  */
 template <typename Work>
 speech_status hear(speech_request * request, speech_task task, Work && work) {
+    worker_trace::OnExit exit{"hear_exit"};
+    worker_trace::mark("hear_enter");
     const RequestValues values = take(request, task);
     auto result = std::make_unique<speech_result>();
     result->task = task;
     RequestRun run(*request, [](const float *, size_t, void *) { return 0; }, nullptr);
     std::lock_guard<std::mutex> lock(request->model->busy);
     spend(*request, run, [&] {
+        worker_trace::OnExit cleanup{"resample_scope_exit"};
         if (run.stopped()) return;
+        worker_trace::mark("resample_before");
         const std::vector<float> samples = Resampler(request->sample_rate, request->model->file->sample_rate)(request->audio);
+        worker_trace::mark("resample_after");
         work(samples, values, run, *result);
+        worker_trace::mark("hear_work_end");
     });
     if (run.stopped()) result->stop = SPEECH_STOP_CANCELLED;
     const speech_status status = run.stopped() ? SPEECH_CANCELLED : SPEECH_OK;

@@ -6,6 +6,7 @@
 #include "engine.h"
 #include "error.h"
 #include "fastconformer/recognizer.h"
+#include "worker-trace.h"
 
 namespace {
 
@@ -18,22 +19,31 @@ public:
      * milliseconds, the encoder runs as one graph, and the decoding steps frame by frame.
      */
     Recognized transcribe(const std::vector<float> & samples, const RequestValues & values, Run & run) override {
+        worker_trace::OnExit exit{"engine_exit"};
+        worker_trace::mark("engine_enter");
         // Before the work passes anything to the caller, so that a request whose keywords are refused can be fixed and run.
         const std::optional<fastconformer::Vocabulary> vocabulary = vocabulary_of(values);
         const NemoFrontend & frontend = recognizer_.frontend();
+        worker_trace::mark("frontend_before");
         const std::vector<float> features = frontend.features(samples);
+        worker_trace::mark("frontend_after");
         if (!run.progress(1.0 / 3)) return {};
+        worker_trace::mark("encode_before");
         const std::vector<float> projected = recognizer_.encode(features, frontend.frames(samples.size()));
+        worker_trace::mark("encode_after");
         if (!run.progress(2.0 / 3)) return {};
         const std::string & name = values.has(SPEECH_OPT_DECODING) ? values.string(SPEECH_OPT_DECODING) : recognizer_.decodings().front();
         const fastconformer::DecodeOn on = values.boolean(SPEECH_OPT_DECODE_ON_CPU) ? fastconformer::DecodeOn::Cpu : fastconformer::DecodeOn::Device;
         const auto progress = [&](double done) { return run.progress((2 + done) / 3); };
         if (vocabulary) return with_keywords(*vocabulary, values, samples, projected, name, on, progress, run);
+        worker_trace::mark("decode_before");
         const fastconformer::Decoding decoding = recognizer_.decoding(projected, name, on, progress);
+        worker_trace::mark("decode_after");
         if (run.stopped()) return {};
         const fastconformer::Detokenizer & detokenizer = recognizer_.detokenizer();
         Recognized out;
         out.text = detokenizer.text(decoding.ids);
+        worker_trace::mark("detokenize_after");
         if (values.boolean(SPEECH_OPT_TIMESTAMPS)) {
             const std::vector<std::string> texts = detokenizer.token_texts(decoding.ids);
             const std::vector<fastconformer::Span> spans = fastconformer::token_spans(decoding, detokenizer);
@@ -45,6 +55,7 @@ public:
             }
         }
         run.progress(1);
+        worker_trace::mark("engine_return");
         return out;
     }
 

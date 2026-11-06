@@ -8,6 +8,7 @@
 #include "base64.h"
 #include "json.h"
 #include "library.h"
+#include "worker-trace.h"
 
 namespace {
 
@@ -71,10 +72,15 @@ bool count_member(const JsonValue & message, const char * name, int64_t minimum,
 }  // namespace
 
 void Protocol::line(const std::string & json) {
+    const bool terminal = worker_trace::current && worker_trace::current->terminal;
+    if (terminal) worker_trace::mark("terminal_lock_before");
     std::lock_guard<std::mutex> lock(mutex_);
+    if (terminal) worker_trace::mark("terminal_write_before");
     std::fwrite(json.data(), 1, json.size(), out_);
     std::fputc('\n', out_);
+    if (terminal) worker_trace::mark("terminal_flush_before");
     std::fflush(out_);
+    if (terminal) worker_trace::mark("terminal_flush_after");
 }
 
 std::string error_object(const std::string & code, const std::string & option, const std::string & message) {

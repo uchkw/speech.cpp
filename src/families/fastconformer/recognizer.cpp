@@ -5,6 +5,7 @@
 #include "backend.h"
 #include "error.h"
 #include "layout.h"
+#include "worker-trace.h"
 
 namespace fastconformer {
 
@@ -52,11 +53,17 @@ Recognizer::~Recognizer() {
 }
 
 std::vector<float> Recognizer::encode(const std::vector<float> & features, int64_t frames) {
+    worker_trace::OnExit exit{"encoder_exit"};
+    worker_trace::mark("encoder_enter");
     Graph g;
     ggml_tensor * out = device_.joint.project_encoder(g.ctx(), encoder_.build(g, features, frames));
     g.output(out);
+    worker_trace::mark("encoder_build_end");
     g.compute(backend_, allocr_);
-    return Graph::read(out);
+    worker_trace::mark("encoder_compute_end");
+    std::vector<float> result = Graph::read(out);
+    worker_trace::mark("encoder_read_end");
+    return result;
 }
 
 Transcript Recognizer::recognize(const std::vector<float> & samples, const std::string & name, DecodeOn on) {
