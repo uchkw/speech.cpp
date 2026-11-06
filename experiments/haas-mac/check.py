@@ -171,6 +171,8 @@ def main():
         review_regressions(Path(temporary))
         from short_check import check as check_short_inputs
         check_short_inputs(Path(temporary) / 'short-prefixes')
+        from latency_repeat_check import check as check_latency_repeat
+        check_latency_repeat(Path(temporary) / 'latency-repeat')
     campaign = compare.read(compare.HERE / 'campaign.json')
     html = render.report_html({'measure_id': '999', 'title': '<script>bad()</script>', 'status': 'pending', 'reason': '<b>not markup</b>'}, '999.json', campaign)
     assert '<script>' not in html and '&lt;script&gt;' in html

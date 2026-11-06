@@ -52,6 +52,21 @@ Use `/usr/bin/python3` for the campaign's primary runs. The supplement freezes i
 and never changes the primary dataset, result or verdict. Its JSON can be shown as a separate diagnostic in the trial
 report; it cannot establish short-utterance CER or adoption on its own.
 
+A separate latency repeat can check variation in a completed primary comparison without rerunning quality:
+
+```sh
+/usr/bin/python3 -B experiments/haas-mac/latency-repeat.py run --primary-run "$ARTIFACTS/005-production/full" \
+  --runner "$ARTIFACTS/005-production/runner" --assets "$ARTIFACTS/assets/assets.json" \
+  --out "$ARTIFACTS/005-production-latency-repeat"
+```
+
+Commit the driver before execution. It verifies the primary frozen worker and comparison arithmetic, Python,
+binaries, models and PCM, then holds the shared lock for all work. It uses the original 30 recordings with all-input
+warmup in each fresh worker and three AB/BA/AB rounds. It records the original block order, including its anchor,
+while the repeat has only baseline and candidate. Every latency text is compared; quality, CER, stages and the
+six artificial prefixes are not rerun. The new block has its own summary with per-input, stratum and round paired
+ratios and cannot be pooled into the primary or prefix measurements. The existing worker timer is unchanged.
+
 `--screen` selects the shortest, middle and longest of the existing inputs in each duration stratum: nine inputs over
 three rounds, plus nine separate quality requests. It is useful for rejecting an unpromising variant before the full
 run, and cannot support acceptance. `--smoke` and `--screen` are mutually exclusive. Without `--anchor`, the report
