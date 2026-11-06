@@ -65,6 +65,8 @@ def check(root):
     manifest['conditions']['runner_sha256']['worker.py'] = 'different-timer'; save_primary()
     refused(lambda: short.primary(primary, data), 'same worker timer source')
     manifest['conditions']['runner_sha256']['worker.py'] = timer; save_primary()
+    with patch.dict(compare.os.environ, {'GGML_METAL_FUSION_DISABLE': '0'}):
+        refused(lambda: short.primary(primary, data), 'inherited')
     changed = compare.read(input_dir / 'inputs.json'); changed['records'][0]['reference'] = 'full recording'
     compare.write(root / 'labeled.json', changed)
     refused(lambda: short.inputs(root / 'labeled.json'), 'must remain unlabeled')

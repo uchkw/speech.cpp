@@ -26,15 +26,12 @@ import sys
 import unicodedata
 
 sys.dont_write_bytecode = True
+from worker import execution_environment
+
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 REPORTS = REPO / 'reports/haas-mac'
 LOCK = '/private/tmp/speech-haas-mac-perf.lock'
-BINARY_EXPERIMENT_ENVIRONMENT = {'SPEECH_HAAS_CPU_REPACK', 'SPEECH_HAAS_FFN_F16', 'SPEECH_HAAS_TDT_RESIDENT_STATE',
-                                 'SPEECH_HAAS_TDT_JOINT_REUSE', 'SPEECH_HAAS_TDT_CPU_PLAN', 'SPEECH_HAAS_ENCODER_QKV',
-                                 'GGML_METAL_MM_SILU', 'GGML_METAL_ADD_SOFTMAX', 'SPEECH_HAAS_TDT_BLANK_BATCH',
-                                 'SPEECH_HAAS_KDA_QKV', 'SPEECH_HAAS_POSITION_CACHE'}
-EXPERIMENT_ENVIRONMENT = BINARY_EXPERIMENT_ENVIRONMENT | {'GGML_METAL_MM_TILE_N'}
 
 
 def read(path):
@@ -65,14 +62,10 @@ def environment(values):
     result = {}
     for value in values:
         key, separator, setting = value.partition('=')
-        if not separator or key not in EXPERIMENT_ENVIRONMENT:
+        if not separator:
             raise ValueError('Only explicitly allowed experiment environment variables can be recorded.')
-        if key in BINARY_EXPERIMENT_ENVIRONMENT and setting not in {'0', '1'}:
-            raise ValueError(f'{key} must be explicitly set to 0 or 1.')
         result[key] = setting
-    for key in EXPERIMENT_ENVIRONMENT:
-        if key in os.environ and key not in result:
-            raise ValueError(f'{key} is inherited but not explicitly recorded; pass its value for each side.')
+    execution_environment(result)
     return result
 
 
@@ -83,6 +76,7 @@ def portable_build_flags(commands):
 
 
 def build(args):
+    child_environment = execution_environment({})
     source, out = Path(args.source).resolve(), Path(args.out).resolve()
     if git(source, 'status', '--porcelain'):
         raise ValueError('Build provenance requires a clean source worktree, including its submodule.')
@@ -97,7 +91,7 @@ def build(args):
     with (out / 'build.log').open('w') as log:
         for command in [configure, compile_command]:
             log.write(' '.join(command) + '\n'); log.flush()
-            subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, check=True)
+            subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, env=child_environment, check=True)
     if git(source, 'rev-parse', 'HEAD') != commit or git(source, 'status', '--porcelain'):
         raise ValueError('The source changed during the build; no verified manifest is written.')
     manifest = {'source_commit': commit, 'source_tree': git(source, 'rev-parse', 'HEAD^{tree}'),
@@ -361,7 +355,7 @@ def run_comparison(args):
                 command = ['/usr/bin/lockf', '-k', LOCK, b['stage_tool']['path'], model['path'], 'gpu', 'greedy', 'cpu',
                            str(policy['rounds']), str(policy['threads']), *[r['directory'] for r in data['stages']]]
                 with path.open('w') as output, path.with_suffix('.stderr.log').open('w') as log:
-                    subprocess.run(command, stdout=output, stderr=log, env={**os.environ, **environments[side]}, check=True)
+                    subprocess.run(command, stdout=output, stderr=log, env=execution_environment(environments[side]), check=True)
         summarize(directory)
     except Exception as error:
         write(directory / 'failure.json', {'status': 'blocked', 'error': str(error), 'run_manifest': str(directory / 'run.json')})

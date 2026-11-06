@@ -12,8 +12,28 @@ import subprocess
 import threading
 import time
 
+BINARY_EXPERIMENT_ENVIRONMENT = {'SPEECH_HAAS_CPU_REPACK', 'SPEECH_HAAS_FFN_F16', 'SPEECH_HAAS_TDT_RESIDENT_STATE',
+                                 'SPEECH_HAAS_TDT_JOINT_REUSE', 'SPEECH_HAAS_TDT_CPU_PLAN', 'SPEECH_HAAS_ENCODER_QKV',
+                                 'GGML_METAL_MM_SILU', 'GGML_METAL_ADD_SOFTMAX', 'SPEECH_HAAS_TDT_BLANK_BATCH',
+                                 'SPEECH_HAAS_KDA_QKV', 'SPEECH_HAAS_POSITION_CACHE'}
+EXPERIMENT_ENVIRONMENT = BINARY_EXPERIMENT_ENVIRONMENT | {'GGML_METAL_MM_TILE_N'}
+
+
+def execution_environment(recorded):
+    """Return the launch environment only when every backend override is explicitly recorded and allowed."""
+    for key, value in recorded.items():
+        if key not in EXPERIMENT_ENVIRONMENT:
+            raise ValueError('Only explicitly allowed experiment environment variables can be recorded.')
+        if key in BINARY_EXPERIMENT_ENVIRONMENT and value not in {'0', '1'}:
+            raise ValueError(f'{key} must be explicitly set to 0 or 1.')
+    for key in os.environ:
+        if key.startswith(('GGML_', 'SPEECH_')) and key not in recorded:
+            raise ValueError(f'{key} is inherited but not explicitly recorded; unset it or record an allowed switch explicitly.')
+    return {**os.environ, **recorded}
+
 
 def run(spec):
+    child_environment = execution_environment(spec['environment'])
     for item in [spec['build']['speech'], spec['model']]:
         digest = hashlib.sha256()
         with Path(item['path']).open('rb') as f:
@@ -33,7 +53,7 @@ def run(spec):
         process = subprocess.Popen(['/usr/bin/time', '-l', '-o', str(memory_log), *command],
                                    stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=log,
                                    text=True, encoding='utf-8', start_new_session=True,
-                                   env={**os.environ, **spec['environment']})
+                                   env=child_environment)
 
         def read():
             try:

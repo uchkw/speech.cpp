@@ -60,8 +60,11 @@ recorded as an alias of that measured side, without duplicate requests.
 
 For a switchable prototype, pass the same build manifest on both sides and record each environment explicitly:
 `--baseline-env GGML_METAL_MM_TILE_N=32 --candidate-env GGML_METAL_MM_TILE_N=64`.
-Only named campaign variables are allowed. The source-verified runner refuses an inherited experiment variable
-that the invocation does not record. The CPU prepacking prototype uses `SPEECH_HAAS_CPU_REPACK=0` and `=1` on its two
+Only named campaign variables are allowed. Before worker or stage launch, the runner refuses every inherited
+`GGML_*` or `SPEECH_*` variable that the invocation does not explicitly record, including a value of `0` for
+presence-based flags. Builds refuse all such overrides; configure flags remain explicit in the build command.
+This check runs before timing and does not retrospectively establish whether an old run inherited an override.
+The CPU prepacking prototype uses `SPEECH_HAAS_CPU_REPACK=0` and `=1` on its two
 sides; the selective FFN dequantization prototype uses `SPEECH_HAAS_FFN_F16=0` and `=1`, and the TDT resident-state
 prototype uses `SPEECH_HAAS_TDT_RESIDENT_STATE=0` and `=1`. These switches require explicit binary values.
 The independent joint-graph, CPU-plan and encoder-QKV prototypes use `SPEECH_HAAS_TDT_JOINT_REUSE`,

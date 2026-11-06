@@ -14,6 +14,7 @@ from unittest.mock import patch
 sys.dont_write_bytecode = True
 import compare
 import render
+import worker
 
 
 def refused(operation, message, expected=None):
@@ -24,6 +25,24 @@ def refused(operation, message, expected=None):
             assert expected in str(error), (expected, str(error))
         return
     raise AssertionError(message)
+
+
+def environment_launch_checks():
+    values = {'GGML_METAL_FUSION_DEBUG': '2', 'GGML_METAL_GRAPH_DEBUG': '1',
+              'GGML_METAL_FUSION_DISABLE': '0', 'GGML_METAL_N_CB': '0',
+              'GGML_METAL_GRAPH_OPTIMIZE_DISABLE': '0', 'GGML_NATIVE': 'OFF',
+              'SPEECH_UNRECORDED_EXPERIMENT': '0'}
+    for key, value in values.items():
+        refused(lambda: compare.environment([f'{key}={value}']),
+                'An unsupported recorded switch was accepted.', expected='Only explicitly allowed')
+        with patch.dict(compare.os.environ, {key: value}):
+            refused(lambda: compare.environment([]), 'An unrecorded backend switch was accepted.', expected='inherited')
+            with patch.object(worker.subprocess, 'Popen') as start:
+                refused(lambda: worker.run({'environment': {}}), 'Worker launch inherited an unrecorded switch.', expected='inherited')
+                start.assert_not_called()
+            with patch.object(compare, 'git') as git:
+                refused(lambda: compare.build(SimpleNamespace()), 'Build setup inherited an unrecorded switch.', expected='inherited')
+                git.assert_not_called()
 
 
 class Links(HTMLParser):
@@ -124,6 +143,7 @@ def main():
     refused(lambda: compare.paired(a, [b[0], b[0]]), 'Duplicate files were accepted.')
     refused(lambda: compare.paired(a, b[:1]), 'Missing paired input was accepted.')
     refused(lambda: compare.environment(['HOME=elsewhere']), 'An unrelated environment variable was accepted.')
+    environment_launch_checks()
     assert compare.environment(['GGML_METAL_MM_TILE_N=64'])['GGML_METAL_MM_TILE_N'] == '64'
     for key in ['SPEECH_HAAS_CPU_REPACK', 'SPEECH_HAAS_FFN_F16', 'SPEECH_HAAS_TDT_RESIDENT_STATE',
                 'SPEECH_HAAS_TDT_JOINT_REUSE', 'SPEECH_HAAS_TDT_CPU_PLAN', 'SPEECH_HAAS_ENCODER_QKV',
@@ -137,6 +157,8 @@ def main():
                 refused(lambda: compare.environment([]), 'An inherited switch was not recorded.', expected='inherited')
                 assert compare.environment([f'{key}=0'])[key] == '0'
                 assert compare.environment([f'{key}=1'])[key] == '1'
+                assert worker.execution_environment({key: '0'})[key] == '0'
+                assert worker.execution_environment({key: '1'})[key] == '1'
     subset = [{'file': f'{group}-{i}', 'seconds': seconds + i / 10, 'stratum': group}
               for group, seconds in [('6-10s', 6), ('10-20s', 10), ('20-30s', 20)] for i in range(10)]
     selected = compare.screen_inputs(list(reversed(subset)))
