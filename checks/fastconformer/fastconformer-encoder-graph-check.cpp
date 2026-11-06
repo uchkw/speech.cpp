@@ -1,7 +1,7 @@
 // Compares actual Recognizer::encode calls with and without its one-slot exact-frame graph cache.
-// Checks final joint-input bytes, input updates, eviction, failed updates, decoding histories and optional real audio.
+// Checks final joint-input bytes, input updates, eviction, failed updates, decoding histories and real audio fixtures.
 // This is a differential check, not an official reference check or a representative latency measurement.
-// Usage: fastconformer-encoder-graph-check <model.gguf> <cpu|gpu|device> <threads> [audio.npy ...]
+// Usage: fastconformer-encoder-graph-check <model.gguf> <cpu|gpu|device> <threads> <audio.npy> [audio.npy ...]
 
 #include <algorithm>
 #include <cmath>
@@ -80,6 +80,8 @@ using Outputs = std::pair<std::vector<float>, std::vector<float>>;
 struct Pair {
     std::unique_ptr<Recognizer> ordinary, cached;
     Checks & checks;
+    size_t last_callbacks = 0;
+    bool after_step_fixture_used = false;
 
     Pair(const std::string & path, ggml_backend_t backend, int threads, Checks & checks) : checks(checks) {
         setting("SPEECH_HAAS_ENCODER_GRAPH_CACHE_TRACE", "0");
@@ -122,8 +124,17 @@ struct Pair {
                     DecodeOn on = DecodeOn::Cpu, const Boost * boost = nullptr) {
         const auto before_a = ordinary->encoder_graph_cache_info(), before_b = cached->encoder_graph_cache_info();
         std::vector<double> a_progress, b_progress;
-        const auto progress_a = [&](double done) { a_progress.push_back(done); return a_progress.size() <= allowed; };
-        const auto progress_b = [&](double done) { b_progress.push_back(done); return b_progress.size() <= allowed; };
+        bool a_stopped = false, b_stopped = false;
+        const auto progress_a = [&](double done) {
+            a_progress.push_back(done);
+            a_stopped = a_progress.size() > allowed;
+            return !a_stopped;
+        };
+        const auto progress_b = [&](double done) {
+            b_progress.push_back(done);
+            b_stopped = b_progress.size() > allowed;
+            return !b_stopped;
+        };
         const std::string decoding = ordinary->decodings().front();
         const auto a = boost ? ordinary->decoding(output.first, decoding, on, progress_a, *boost) :
                                ordinary->decoding(output.first, decoding, on, progress_a);
@@ -132,10 +143,25 @@ struct Pair {
         checks.expect(same_path(a, b) && ordinary->detokenizer().text(a.ids) == cached->detokenizer().text(b.ids),
                       name + " TDT IDs, frames, durations, graphs and text");
         checks.expect(a_progress == b_progress, name + " progress and cancellation sequence");
+        if (allowed != std::numeric_limits<size_t>::max()) {
+            checks.expect(a_stopped && b_stopped, name + " both callbacks actually request cancellation");
+            checks.expect(a_progress.size() == allowed + 1 && b_progress.size() == allowed + 1,
+                          name + " cancellation occurs at exactly allowed + 1 callbacks");
+            if (allowed == 0) {
+                checks.expect(a.graphs == 0 && b.graphs == 0 && a.ids.empty() && b.ids.empty(),
+                              name + " before-first cancellation computes no decoder step");
+            } else {
+                checks.expect(a.graphs >= allowed && b.graphs >= allowed,
+                              name + " after-step cancellation follows completed decoder work");
+            }
+        }
         checks.expect(same_cache(before_a, ordinary->encoder_graph_cache_info()) &&
                           same_cache(before_b, cached->encoder_graph_cache_info()),
                       name + " decoding and boosting do not alter the encoder cache");
-        std::printf("%s tokens=%zu graphs=%zu callbacks=%zu\n", name.c_str(), b.ids.size(), b.graphs, b_progress.size());
+        last_callbacks = std::min(a_progress.size(), b_progress.size());
+        std::printf("%s tokens=%zu graphs=%zu ordinary_callbacks=%zu cached_callbacks=%zu ordinary_stop_requested=%s cached_stop_requested=%s\n",
+                    name.c_str(), b.ids.size(), b.graphs, a_progress.size(), b_progress.size(),
+                    a_stopped ? "true" : "false", b_stopped ? "true" : "false");
         return b;
     }
 };
@@ -179,18 +205,22 @@ void shapes(Pair & pair) {
     }
 }
 
+void cancel_and_retry(Pair & pair, const std::vector<float> & input, int64_t frames, const Outputs & output,
+                      const Decoding & plain, size_t allowed) {
+    const std::string name = "cancellation allowed=" + std::to_string(allowed);
+    pair.decode(output, allowed, name);
+    const auto again = pair.encode(input, frames, "same shape after " + name);
+    pair.checks.values(again.second, output.second, "encoder bytes after " + name);
+    pair.checks.expect(same_path(pair.decode(again, std::numeric_limits<size_t>::max(), "request after " + name), plain),
+                       "decoder state starts fresh after " + name);
+}
+
 void request_states(Pair & pair) {
     const size_t unlimited = std::numeric_limits<size_t>::max();
     const auto input = features(pair.ordinary->frontend().mels(), 129, 77);
     const auto output = pair.encode(input, 129, "decoder lifecycle input");
     const auto plain = pair.decode(output, unlimited, "plain CPU decoding");
-    for (size_t allowed : {size_t{0}, size_t{1}, size_t{2}}) {
-        pair.decode(output, allowed, "cancelled CPU decoding");
-        const auto again = pair.encode(input, 129, "same shape after cancellation");
-        pair.checks.values(again.second, output.second, "encoder bytes after cancellation");
-        pair.checks.expect(same_path(pair.decode(again, unlimited, "request after cancellation"), plain),
-                           "decoder state starts fresh after cancellation");
-    }
+    cancel_and_retry(pair, input, 129, output, plain, 0);
     const int blank = (int) pair.ordinary->model().u32("fastconformer.decoder.blank_id");
     const BoostingTree tree({{3, 4}, {5, 6}}, blank, 10.0, 1.0, 0.0f);
     const Boost boost{tree, 20.0f};
@@ -209,8 +239,17 @@ void audio_inputs(Pair & pair, const std::vector<std::string> & paths) {
         const auto & frontend = pair.ordinary->frontend();
         const int64_t frames = frontend.frames(audio.f32.size());
         require(frames > 0, "audio contains no complete frontend hop: " + path);
-        const auto output = pair.encode(frontend.features(audio.f32), frames, "audio " + path);
-        pair.decode(output, std::numeric_limits<size_t>::max(), "audio TDT path");
+        const auto input = frontend.features(audio.f32);
+        const auto output = pair.encode(input, frames, "audio " + path);
+        const auto plain = pair.decode(output, std::numeric_limits<size_t>::max(), "audio TDT path");
+        const bool eligible = pair.last_callbacks >= 3;
+        std::printf("after-step-cancel candidate=%s samples=%zu frames=%lld minimum_full_callbacks=%zu eligible=%s\n",
+                    path.c_str(), audio.f32.size(), (long long) frames, pair.last_callbacks, eligible ? "true" : "false");
+        if (eligible && !pair.after_step_fixture_used) {
+            std::printf("after-step-cancel fixture=%s\n", path.c_str());
+            for (size_t allowed : {size_t{1}, size_t{2}}) cancel_and_retry(pair, input, frames, output, plain, allowed);
+            pair.after_step_fixture_used = true;
+        }
         const auto before_a = pair.ordinary->encoder_graph_cache_info(), before_b = pair.cached->encoder_graph_cache_info();
         const auto a = pair.ordinary->recognize(audio.f32), b = pair.cached->recognize(audio.f32);
         pair.counters(before_a, before_b, frames, "same-audio recognize replay");
@@ -239,7 +278,7 @@ void owner_destruction(Pair & pair, const std::string & path, ggml_backend_t bac
 int main(int argc, char ** argv) {
     try {
         const auto args = utf8_args(argc, argv);
-        require(args.size() >= 4, "usage: fastconformer-encoder-graph-check <model.gguf> <device> <threads> [audio.npy ...]");
+        require(args.size() >= 5, "usage: fastconformer-encoder-graph-check <model.gguf> <device> <threads> <audio.npy> [audio.npy ...]");
         const int threads = std::stoi(args[3]);
         require(threads > 0, "threads must be positive");
         std::unique_ptr<ggml_backend, decltype(&ggml_backend_free)> backend(start_device(find_device(args[2]), threads), ggml_backend_free);
@@ -250,6 +289,8 @@ int main(int argc, char ** argv) {
         shapes(pair);
         request_states(pair);
         audio_inputs(pair, std::vector<std::string>(args.begin() + 4, args.end()));
+        checks.expect(pair.after_step_fixture_used,
+                      "after-step cancellation is unverified: supply real audio reaching at least three decoder callbacks");
         owner_destruction(pair, args[1], backend.get(), threads);
         std::printf("encoder graph: %zu checks, %zu failed; representative worker hit rate and API cancellation are not checked\n",
                     checks.total, checks.failed);

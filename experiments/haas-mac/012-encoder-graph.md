@@ -48,18 +48,27 @@ does not change either instance. It is designed to check the following after exe
   the recognizer's allocator even when no graph is retained; they exclude weights, position caches and host metadata.
 - Invalid input sizes on a hit and a miss, slot eviction on the exception, unchanged completed-call counters and
   successful retry. Backend allocation or execution failure injection is not part of this check.
-- Exact emitted TDT IDs, frames, durations, graph counts and text, callback cancellation sequences, fresh requests
-  after cancellation and boosting, and changing the decoder device without changing the encoder slot.
+- Exact emitted TDT IDs, frames, durations, graph counts and text, fresh requests after cancellation and boosting,
+  and changing the decoder device without changing the encoder slot. Before-first cancellation must actually
+  return false on callback one and compute no graph. For after-step cancellation, the check first finds supplied
+  real audio whose complete decode reaches at least three callbacks. It records every candidate's reachability
+  and the selected fixture, then requires both sides to return false at exactly callback `allowed + 1` for
+  `allowed=1` and `2`, after at least that many computed graphs. Each cancelled run is followed by a same-shape
+  input update and a complete ordinary decode that must recover the pre-cancellation result.
 - Destruction of a model with a live cached graph, continued use of the independent ordinary model, and creation
   of a new empty cache whose outputs match the destroyed model's outputs.
-- Optional real mono F32 `.npy` audio at the model sample rate, with direct encoder comparisons and a full
-  `Recognizer::recognize()` replay. These deliberate same-shape replays are numerical checks, not latency evidence.
+- Real mono F32 `.npy` audio supplied explicitly on the command line, at the model sample rate, with direct encoder
+  comparisons and a full `Recognizer::recognize()` replay. If no supplied input reaches the after-step cancellation
+  condition, including a run without audio arguments, that coverage remains unverified and the check fails.
+  These deliberate same-shape replays are numerical checks, not latency evidence.
 
 Every finite-value or bitwise mismatch fails; equal text does not erase a tensor difference. The synthetic cases
 use generated features and the supplied model's actual weights. They are not official F32 reference tensors or
 recognition-quality samples. Direct boosting checks do not cover the C API's keyword parsing and guard behavior.
 The existing recognition API and worker smoke checks must separately cover request reset, cancellation, callbacks,
 keywords and timestamps. Candidate-off still needs comparison with an unchanged baseline binary.
+The evaluation record must retain the model SHA-256 and each supplied audio input's SHA-256 beside the command and
+raw check log, including the fixture selected for cancellation. This source checkpoint supplies no executed result.
 
 Example commands, not executed at this checkpoint:
 
