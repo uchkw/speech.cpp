@@ -57,6 +57,29 @@ std::vector<std::string> word_entries(const std::string & words) {
     return entries;
 }
 
+PreparedWords::PreparedWords(const std::string & raw, const std::vector<std::string> & entries, float alpha)
+    : raw(raw), entry_count(entries.size()), vocabulary(entries, alpha) {}
+
+size_t PreparedWords::tree_bytes() const {
+    return boosting ? boosting->arcs().capacity() * sizeof(BoostingTree::Arc) +
+                          boosting->states().capacity() * sizeof(BoostingTree::State) : 0;
+}
+
+PreparedWords & WordsCache::prepare(const std::string & raw, const std::vector<std::string> & entries, float alpha,
+                                   std::unique_ptr<PreparedWords> & pending) {
+    pending.reset();
+    if (enabled_ && last_ && last_->raw == raw && last_->vocabulary.alpha() == alpha) return *last_;
+    pending = std::make_unique<PreparedWords>(raw, entries, alpha);
+    return *pending;
+}
+
+bool WordsCache::publish(std::unique_ptr<PreparedWords> & pending) {
+    if (!enabled_ || !pending || !pending->boosting || pending->raw.size() > kRawBytes ||
+        pending->entry_count > kEntries || pending->tree_bytes() > kTreeBytes) return false;
+    last_ = std::move(pending);
+    return true;
+}
+
 bool WordsModel::offers(const ModelFile & m) {
     return m.one_of("fastconformer.vocabulary.kind", {"none", "haas-asr"}) == "haas-asr";
 }
@@ -122,6 +145,19 @@ BoostingTree WordsModel::tree(const Vocabulary & vocabulary) const {
 WordsText WordsModel::recognize(Recognizer & recognizer, const Vocabulary & vocabulary, bool guard, const std::vector<float> & samples,
                                 const std::vector<float> & projected, const std::string & name, DecodeOn on,
                                 const DecodingProgress & progress) const {
+    std::optional<BoostingTree> boosting;
+    return recognize(recognizer, vocabulary, boosting, guard, samples, projected, name, on, progress);
+}
+
+WordsText WordsModel::recognize(Recognizer & recognizer, PreparedWords & prepared, bool guard, const std::vector<float> & samples,
+                                const std::vector<float> & projected, const std::string & name, DecodeOn on,
+                                const DecodingProgress & progress) const {
+    return recognize(recognizer, prepared.vocabulary, prepared.boosting, guard, samples, projected, name, on, progress);
+}
+
+WordsText WordsModel::recognize(Recognizer & recognizer, const Vocabulary & vocabulary, std::optional<BoostingTree> & boosting,
+                                bool guard, const std::vector<float> & samples, const std::vector<float> & projected,
+                                const std::string & name, DecodeOn on, const DecodingProgress & progress) const {
     const Detokenizer & detokenizer = recognizer.detokenizer();
     WordsText out;
     const Decoding plain = recognizer.decoding(projected, name, on, [&](double done) { return !progress || progress(done / 2); });
@@ -129,9 +165,9 @@ WordsText WordsModel::recognize(Recognizer & recognizer, const Vocabulary & voca
     out.speech = has_speech(samples, speech_rms_, (size_t) speech_frame_);
     std::string text = out.plain;
     if (out.speech) {
-        const BoostingTree boosting = tree(vocabulary);
+        if (!boosting) boosting.emplace(tree(vocabulary));
         const Decoding boosted = recognizer.decoding(projected, name, on, [&](double done) { return !progress || progress((1 + done) / 2); },
-                                                     Boost{boosting, vocabulary.alpha()});
+                                                     Boost{*boosting, vocabulary.alpha()});
         out.boosted = strip(detokenizer.text(boosted.ids));
         if (out.boosted != out.plain) text = guard ? guarded(out.plain, out.boosted, vocabulary) : out.boosted;
     }

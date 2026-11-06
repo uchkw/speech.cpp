@@ -1,5 +1,7 @@
 #include <cmath>
-#include <optional>
+#include <cstdlib>
+#include <cstring>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -9,9 +11,22 @@
 
 namespace {
 
+/** Selects the last-one preparation cache only for a Haas model that offers its custom vocabulary. */
+bool keyword_cache_enabled(const fastconformer::Recognizer & recognizer) {
+    if (!recognizer.words() || recognizer.model().str("general.name") != "Haas-ja-v1.0" ||
+        recognizer.model().str("fastconformer.decoder.prediction") != "kda") return false;
+    const char * value = std::getenv("SPEECH_HAAS_KEYWORD_CACHE");
+    if (!value || std::strcmp(value, "0") == 0) return false;
+    if (std::strcmp(value, "1") != 0) {
+        throw Error(Fault::InvalidArgument, "SPEECH_HAAS_KEYWORD_CACHE must be 0 or 1");
+    }
+    return true;
+}
+
 class FastConformerEngine : public Engine {
 public:
-    FastConformerEngine(const std::string & path, ggml_backend_t backend, int threads) : recognizer_(path, backend, threads) {}
+    FastConformerEngine(const std::string & path, ggml_backend_t backend, int threads)
+        : recognizer_(path, backend, threads), words_cache_(keyword_cache_enabled(recognizer_)) {}
 
     /**
      * The three stages report their progress in thirds, the decoding by the frames it has passed: the frontend takes
@@ -19,7 +34,8 @@ public:
      */
     Recognized transcribe(const std::vector<float> & samples, const RequestValues & values, Run & run) override {
         // Before the work passes anything to the caller, so that a request whose keywords are refused can be fixed and run.
-        const std::optional<fastconformer::Vocabulary> vocabulary = vocabulary_of(values);
+        std::unique_ptr<fastconformer::PreparedWords> pending;
+        fastconformer::PreparedWords * prepared = vocabulary_of(values, pending);
         const NemoFrontend & frontend = recognizer_.frontend();
         const std::vector<float> features = frontend.features(samples);
         if (!run.progress(1.0 / 3)) return {};
@@ -28,7 +44,11 @@ public:
         const std::string & name = values.has(SPEECH_OPT_DECODING) ? values.string(SPEECH_OPT_DECODING) : recognizer_.decodings().front();
         const fastconformer::DecodeOn on = values.boolean(SPEECH_OPT_DECODE_ON_CPU) ? fastconformer::DecodeOn::Cpu : fastconformer::DecodeOn::Device;
         const auto progress = [&](double done) { return run.progress((2 + done) / 3); };
-        if (vocabulary) return with_keywords(*vocabulary, values, samples, projected, name, on, progress, run);
+        if (prepared) {
+            Recognized out = with_keywords(*prepared, values, samples, projected, name, on, progress, run);
+            if (!run.stopped()) words_cache_.publish(pending);
+            return out;
+        }
         const fastconformer::Decoding decoding = recognizer_.decoding(projected, name, on, progress);
         if (run.stopped()) return {};
         const fastconformer::Detokenizer & detokenizer = recognizer_.detokenizer();
@@ -71,7 +91,7 @@ private:
      * so that no decoding's tokens make it. Keywords of blank lines alone are refused rather than read as none, so that a
      * request has keywords exactly where their value is not "", which a caller tells without the rules of whitespace.
      */
-    static std::optional<fastconformer::Vocabulary> vocabulary_of(const RequestValues & values) {
+    fastconformer::PreparedWords * vocabulary_of(const RequestValues & values, std::unique_ptr<fastconformer::PreparedWords> & pending) {
         const std::string given = values.has(SPEECH_OPT_KEYWORDS) ? values.string(SPEECH_OPT_KEYWORDS) : std::string();
         const std::vector<std::string> keywords = fastconformer::word_entries(given);
         if (keywords.empty() && !given.empty()) {
@@ -86,7 +106,7 @@ private:
                                 speech_option_name(unused));
                 }
             }
-            return std::nullopt;
+            return nullptr;
         }
         if (values.boolean(SPEECH_OPT_TIMESTAMPS)) {
             throw Error(Fault::InvalidArgument,
@@ -95,14 +115,14 @@ private:
                         speech_option_name(SPEECH_OPT_TIMESTAMPS));
         }
         return naming(speech_option_name(SPEECH_OPT_KEYWORDS),
-                      [&] { return fastconformer::Vocabulary(keywords, (float) values.number(SPEECH_OPT_KEYWORDS_ALPHA)); });
+                      [&] { return &words_cache_.prepare(given, keywords, (float) values.number(SPEECH_OPT_KEYWORDS_ALPHA), pending); });
     }
 
     /** A recognition with the custom vocabulary of the request's keywords: its text alone. */
-    Recognized with_keywords(const fastconformer::Vocabulary & vocabulary, const RequestValues & values, const std::vector<float> & samples,
+    Recognized with_keywords(fastconformer::PreparedWords & prepared, const RequestValues & values, const std::vector<float> & samples,
                              const std::vector<float> & projected, const std::string & name, fastconformer::DecodeOn on,
                              const fastconformer::DecodingProgress & progress, Run & run) {
-        const fastconformer::WordsText found = recognizer_.words()->recognize(recognizer_, vocabulary, values.boolean(SPEECH_OPT_KEYWORDS_GUARD),
+        const fastconformer::WordsText found = recognizer_.words()->recognize(recognizer_, prepared, values.boolean(SPEECH_OPT_KEYWORDS_GUARD),
                                                                               samples, projected, name, on, progress);
         if (run.stopped()) return {};
         Recognized out;
@@ -112,6 +132,7 @@ private:
     }
 
     fastconformer::Recognizer recognizer_;
+    fastconformer::WordsCache words_cache_;
 };
 
 }  // namespace

@@ -1,7 +1,10 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <map>
+#include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -27,6 +30,40 @@ struct WordsText {
     bool speech;
     /** The text: the plain one, the guarded or the boosted one, with the words in their written forms. */
     std::string text;
+};
+
+/** A request's parsed vocabulary and its tree, built only when the audio has speech. */
+struct PreparedWords {
+    PreparedWords(const std::string & raw, const std::vector<std::string> & entries, float alpha);
+
+    /** Allocated arc/state vector payload, excluding the vocabulary and allocator overhead. */
+    size_t tree_bytes() const;
+
+    const std::string raw;
+    const size_t entry_count;
+    const Vocabulary vocabulary;
+    std::optional<BoostingTree> boosting;
+};
+
+/** The last completed keyword preparation of one serially used model. */
+class WordsCache {
+public:
+    explicit WordsCache(bool enabled) : enabled_(enabled) {}
+
+    /** Borrows the retained entry on a hit, or constructs a request-owned entry in `pending` on a miss. */
+    PreparedWords & prepare(const std::string & raw, const std::vector<std::string> & entries, float alpha,
+                            std::unique_ptr<PreparedWords> & pending);
+
+    /** Retains a completed request's bounded tree, returning whether it replaces the last entry. */
+    bool publish(std::unique_ptr<PreparedWords> & pending);
+
+    static constexpr size_t kRawBytes = 4 * 1024;
+    static constexpr size_t kEntries = 128;
+    static constexpr size_t kTreeBytes = 1024 * 1024;
+
+private:
+    bool enabled_;
+    std::unique_ptr<PreparedWords> last_;
 };
 
 /**
@@ -61,11 +98,19 @@ public:
     WordsText recognize(Recognizer & recognizer, const Vocabulary & vocabulary, bool guard, const std::vector<float> & samples,
                         const std::vector<float> & projected, const std::string & name, DecodeOn on, const DecodingProgress & progress) const;
 
+    /** The same recognition, reusing only the preparation's vocabulary and completed tree. */
+    WordsText recognize(Recognizer & recognizer, PreparedWords & prepared, bool guard, const std::vector<float> & samples,
+                        const std::vector<float> & projected, const std::string & name, DecodeOn on, const DecodingProgress & progress) const;
+
     float alpha() const { return alpha_; }
     float speech_rms() const { return speech_rms_; }
     int speech_frame() const { return speech_frame_; }
 
 private:
+    WordsText recognize(Recognizer & recognizer, const Vocabulary & vocabulary, std::optional<BoostingTree> & boosting,
+                        bool guard, const std::vector<float> & samples, const std::vector<float> & projected,
+                        const std::string & name, DecodeOn on, const DecodingProgress & progress) const;
+
     /** The ids of `pieces` where the vocabulary holds every one, boosting._pieces(); empty with `found` false otherwise. */
     std::vector<int32_t> ids_of(const std::vector<std::string> & pieces, bool & found) const;
 
