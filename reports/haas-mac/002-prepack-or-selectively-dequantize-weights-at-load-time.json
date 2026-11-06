@@ -2,7 +2,8 @@
   "schema_version": 1,
   "measure_id": "002",
   "title": "Prepack or selectively dequantize weights at load time",
-  "status": "pending",
-  "reason": "Not evaluated.",
-  "checks": []
+  "status": "in_progress",
+  "reason": "CPU decoder repacking was rejected after the nine-input screen. Load-time selective F16 dequantization of encoder FFN matrices is being evaluated as a separate trial.",
+  "checks": [],
+  "updated_utc": "2026-11-06T18:05:27.355705+00:00"
 }
