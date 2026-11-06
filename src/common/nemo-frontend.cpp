@@ -1,8 +1,11 @@
 #include "nemo-frontend.h"
 
+#include <algorithm>
 #include <cmath>
 #include <complex>
+#include <future>
 #include <string>
+#include <system_error>
 
 #include "error.h"
 
@@ -19,14 +22,19 @@ std::vector<double> read_tensor(const ModelFile & m, const std::string & name) {
 }  // namespace
 
 NemoFrontend::NemoFrontend(const ModelFile & m, const std::string & prefix, bool per_feature)
+    : NemoFrontend(m, prefix, per_feature, 1) {}
+
+NemoFrontend::NemoFrontend(const ModelFile & m, const std::string & prefix, bool per_feature, int threads)
     : sample_rate_((int) m.u32("speech.sample_rate")),
       n_fft_((int) m.u32(prefix + "frontend.n_fft")),
       hop_((int) m.u32(prefix + "frontend.hop_length")),
       mels_((int) m.u32(prefix + "frontend.n_mels")),
       per_feature_(per_feature),
+      threads_(std::min(threads, 4)),
       preemphasis_(m.f32(prefix + "frontend.preemphasis")),
       log_guard_(m.f32(prefix + "frontend.log_guard")),
       fft_(n_fft_) {
+    if (threads < 1) throw std::invalid_argument("the frontend thread limit must be positive");
     if (per_feature) std_guard_ = m.f32(prefix + "frontend.std_guard");
     const std::vector<double> w = read_tensor(m, "frontend.window");
     const int64_t window = (int64_t) w.size();
@@ -97,7 +105,26 @@ std::vector<double> NemoFrontend::log_mels(const std::vector<float> & samples) c
     std::vector<float> x(samples.size());
     preemphasize(samples.data(), samples.size(), true, 0.0f, x.data());
     std::vector<double> mel((size_t) (frames * mels_));
-    log_mel(x.data(), 0, (int64_t) x.size(), 0, frames, mel.data());
+    const int workers = (int) std::max<int64_t>(1, std::min<int64_t>(threads_, frames / 128));
+    if (workers == 1) {
+        log_mel(x.data(), 0, (int64_t) x.size(), 0, frames, mel.data());
+    } else {
+        const auto compute = [&](int worker) {
+            const int64_t first = frames * worker / workers, last = frames * (worker + 1) / workers;
+            log_mel(x.data(), 0, (int64_t) x.size(), first, last - first, mel.data() + first * mels_);
+        };
+        // Async futures wait for their tasks on destruction, so a launch or worker failure cannot outlive x or mel.
+        std::vector<std::future<void>> pending;
+        pending.reserve((size_t) (workers - 1));
+        try {
+            for (int worker = 1; worker < workers; worker++) pending.push_back(std::async(std::launch::async, compute, worker));
+        } catch (const std::system_error & e) {
+            throw Error(Fault::OutOfMemory, std::string("the host cannot start another frontend thread (") + e.what() +
+                                               "); close other programs and run it again");
+        }
+        compute(0);
+        for (auto & task : pending) task.get();
+    }
     return mel;
 }
 

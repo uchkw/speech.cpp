@@ -125,7 +125,7 @@ def main():
     refused(lambda: compare.paired(a, b[:1]), 'Missing paired input was accepted.')
     refused(lambda: compare.environment(['HOME=elsewhere']), 'An unrelated environment variable was accepted.')
     assert compare.environment(['GGML_METAL_MM_TILE_N=64'])['GGML_METAL_MM_TILE_N'] == '64'
-    for key in ['SPEECH_HAAS_CPU_REPACK', 'SPEECH_HAAS_FFN_F16']:
+    for key in ['SPEECH_HAAS_CPU_REPACK', 'SPEECH_HAAS_FFN_F16', 'SPEECH_HAAS_FRONTEND_PARALLEL']:
         for value in ['0', '1']:
             assert compare.environment([f'{key}={value}'])[key] == value
         refused(lambda: compare.environment([f'{key}=2']), 'An invalid binary switch was accepted.', expected='0 or 1')

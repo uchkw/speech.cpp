@@ -27,6 +27,8 @@ public:
      * frontend.filterbank.
      */
     NemoFrontend(const ModelFile & m, const std::string & prefix, bool per_feature);
+    /** Limits whole-input frame computation to at most four host threads; incremental log_mel() stays sequential. */
+    NemoFrontend(const ModelFile & m, const std::string & prefix, bool per_feature, int threads);
 
     /** The features of mono samples at sample_rate(), [frames, mels] row-major (ggml [mels, frames]). */
     std::vector<float> features(const std::vector<float> & samples) const;
@@ -67,6 +69,7 @@ public:
 private:
     int sample_rate_, n_fft_, hop_, mels_;
     bool per_feature_;
+    int threads_;
     float preemphasis_, log_guard_, std_guard_ = 0;
     /** The window zero-padded to n_fft and centred, as torch.stft() pads it. */
     std::vector<double> window_;

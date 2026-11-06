@@ -536,3 +536,7 @@ target_link_libraries(drama3-prompt-check PRIVATE drama3)
 
 add_executable(fft-check checks/common/fft-check.cpp)
 target_link_libraries(fft-check PRIVATE speechcommon)
+
+add_executable(nemo-frontend-parallel-check checks/common/nemo-frontend-parallel-check.cpp)
+target_include_directories(nemo-frontend-parallel-check PRIVATE checks)
+target_link_libraries(nemo-frontend-parallel-check PRIVATE fastconformer sortformer)

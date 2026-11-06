@@ -1,5 +1,7 @@
 #include "recognizer.h"
 
+#include <cstdlib>
+#include <cstring>
 #include <stdexcept>
 
 #include "backend.h"
@@ -7,6 +9,18 @@
 #include "layout.h"
 
 namespace fastconformer {
+
+namespace {
+
+int frontend_threads(const ModelFile & model, int threads) {
+    if (model.str("fastconformer.decoder.prediction") != "kda") return 1;
+    const char * value = std::getenv("SPEECH_HAAS_FRONTEND_PARALLEL");
+    if (!value || std::strcmp(value, "0") == 0) return 1;
+    if (std::strcmp(value, "1") == 0) return threads;
+    throw std::runtime_error("SPEECH_HAAS_FRONTEND_PARALLEL must be 0 or 1");
+}
+
+}  // namespace
 
 Recognizer::Transducer::Transducer(const ModelFile & m, const std::vector<std::string> & names) : prediction(m), joint(m), names(names) {
     for (const std::string & name : names) decoders.push_back(make_decoder(m, prediction, joint, name));
@@ -35,7 +49,7 @@ Recognizer::Recognizer(const std::string & path, ggml_backend_t backend, int thr
       on_cpu_(ggml_backend_dev_type(ggml_backend_get_device(backend)) == GGML_BACKEND_DEVICE_TYPE_CPU),
       threads_(threads),
       model_(path, backend, layout),
-      frontend_(model_, "fastconformer.", true),
+      frontend_(model_, "fastconformer.", true, frontend_threads(model_, threads)),
       encoder_(model_, backend),
       decoding_names_(fastconformer::decodings(model_)),
       device_(model_, decoding_names_),
