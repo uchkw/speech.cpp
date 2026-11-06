@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
+#include <cstring>
 #include <limits>
 #include <map>
 
@@ -16,18 +18,71 @@ namespace fastconformer {
 
 namespace {
 
+bool depthwise_prepack_requested(const ModelFile & model) {
+    const char * value = std::getenv("SPEECH_HAAS_DEPTHWISE_PREPACK");
+    if (!value || std::strcmp(value, "0") == 0) return false;
+    if (std::strcmp(value, "1") != 0) throw Error(Fault::InvalidArgument, "SPEECH_HAAS_DEPTHWISE_PREPACK must be 0 or 1");
+    return model.str("general.name") == "Haas-ja-v1.0" && model.str("fastconformer.decoder.prediction") == "kda";
+}
+
 /**
  * The depthwise convolution of `x` [channels, width, height] by `kernel` [kw, kh, 1, channels], [channels, width',
  * height']: ggml_conv_2d_dw_direct() on the channel-fastest layout, which its result keeps, with the kernel's taps
  * channel-fastest as well, as the CPU asserts and Vulkan's shader reads them without looking at the strides.
  */
-ggml_tensor * depthwise(ggml_context * ctx, ggml_tensor * x, ggml_tensor * kernel, int stride, int pad_w, int pad_h) {
-    kernel = ggml_permute(ctx, ggml_cont(ctx, ggml_permute(ctx, kernel, 2, 3, 1, 0)), 3, 2, 0, 1);
+ggml_tensor * depthwise(ggml_context * ctx, ggml_tensor * x, ggml_tensor * kernel, ggml_tensor * prepared,
+                        int stride, int pad_w, int pad_h) {
+    kernel = prepared ? prepared : ggml_cont(ctx, ggml_permute(ctx, kernel, 2, 3, 1, 0));
+    kernel = ggml_permute(ctx, kernel, 3, 2, 0, 1);
     ggml_tensor * y = ggml_conv_2d_dw_direct(ctx, kernel, ggml_permute(ctx, x, 2, 0, 1, 3), stride, stride, pad_w, pad_h, 1, 1);
     return ggml_permute(ctx, y, 1, 2, 0, 3);
 }
 
 }  // namespace
+
+struct Encoder::DepthwiseWeights {
+    std::unique_ptr<ggml_context, decltype(&ggml_free)> context{nullptr, ggml_free};
+    std::unique_ptr<ggml_backend_buffer, decltype(&ggml_backend_buffer_free)> buffer{nullptr, ggml_backend_buffer_free};
+    std::map<std::string, ggml_tensor *> kernels;
+
+    DepthwiseWeights(const ModelFile & model, int sub_layers, int layers) {
+        const auto buft = ggml_backend_buffer_get_type(model.tensor("blk.0.conv_dw.weight")->buffer);
+        context.reset(ggml_init({ggml_tensor_overhead() * (size_t) (sub_layers - 1 + layers), nullptr, true}));
+        if (!context) throw Error(Fault::OutOfMemory, "cannot create the prepared depthwise weight context");
+        const auto add = [&](const std::string & name, bool subsampling) {
+            const auto * source = model.tensor(name);
+            const int64_t channels = subsampling ? source->ne[3] : source->ne[1];
+            const int64_t kw = source->ne[0], kh = subsampling ? source->ne[1] : 1;
+            if (source->type != GGML_TYPE_F32 || !ggml_is_contiguous(source) ||
+                ggml_nelements(source) != channels * kw * kh || ggml_backend_buffer_get_type(source->buffer) != buft) {
+                throw Error(Fault::InvalidArgument, "SPEECH_HAAS_DEPTHWISE_PREPACK requires contiguous F32 depthwise weights on one buffer type: " + name);
+            }
+            auto * prepared = ggml_new_tensor_4d(context.get(), source->type, channels, 1, kw, kh);
+            ggml_set_name(prepared, (name + ".prepacked").c_str());
+            kernels.emplace(name, prepared);
+        };
+        for (int i = 1; i < sub_layers; ++i) add("sub.conv." + std::to_string(i) + ".dw.weight", true);
+        for (int i = 0; i < layers; ++i) add("blk." + std::to_string(i) + ".conv_dw.weight", false);
+        buffer.reset(ggml_backend_alloc_ctx_tensors_from_buft(context.get(), buft));
+        if (!buffer) throw Error(Fault::OutOfMemory, "cannot allocate prepared depthwise weights");
+        ggml_backend_buffer_set_usage(buffer.get(), GGML_BACKEND_BUFFER_USAGE_WEIGHTS);
+        for (const auto & entry : kernels) {
+            const auto * source = model.tensor(entry.first);
+            auto * prepared = entry.second;
+            const size_t channels = (size_t) prepared->ne[0], taps = (size_t) (prepared->ne[2] * prepared->ne[3]);
+            std::vector<uint8_t> original(ggml_nbytes(source)), packed(original.size());
+            ggml_backend_tensor_get(source, original.data(), 0, original.size());
+            // PERMUTE(2,3,1,0) followed by CONT maps [kw,kh,1,C] to [C,1,kw,kh]. Byte copies preserve every F32 bit.
+            for (size_t tap = 0; tap < taps; ++tap) {
+                for (size_t channel = 0; channel < channels; ++channel) {
+                    std::memcpy(packed.data() + (tap * channels + channel) * sizeof(float),
+                                original.data() + (channel * taps + tap) * sizeof(float), sizeof(float));
+                }
+            }
+            ggml_backend_tensor_set(prepared, packed.data(), 0, packed.size());
+        }
+    }
+};
 
 struct Encoder::Positions {
     std::unique_ptr<ggml_context, decltype(&ggml_free)> context{nullptr, ggml_free};
@@ -80,6 +135,15 @@ Encoder::Encoder(const ModelFile & m, ggml_backend_t backend)
     cached_span_ = local_ ? context_ : rows > 0 ? (rows - 1) / 2 : -1;
     sub_layers_ = 0;
     for (uint32_t f = m.u32("fastconformer.encoder.subsampling_factor"); f > 1; f /= 2) sub_layers_++;
+    if (depthwise_prepack_requested(m)) depthwise_weights_ = std::make_unique<DepthwiseWeights>(m, sub_layers_, layers_);
+}
+
+size_t Encoder::depthwise_prepack_bytes() const {
+    return depthwise_weights_ ? ggml_backend_buffer_get_size(depthwise_weights_->buffer.get()) : 0;
+}
+
+ggml_tensor * Encoder::prepared_depthwise(const std::string & name) const {
+    return depthwise_weights_ ? depthwise_weights_->kernels.at(name) : nullptr;
 }
 
 int64_t Encoder::subsampled_frames(int64_t frames) const {
@@ -110,7 +174,8 @@ ggml_tensor * Encoder::subsample(Graph & g, const std::vector<float> & features,
     x = ggml_reshape_3d(ctx, ggml_relu(ctx, ggml_add(ctx, x, m_.tensor("sub.conv.0.bias"))), c, cols->ne[1], cols->ne[2]);
     for (int i = 1; i < sub_layers_; i++) {
         const std::string p = "sub.conv." + std::to_string(i);
-        x = ggml_add(ctx, depthwise(ctx, x, m_.tensor(p + ".dw.weight"), 2, 1, 1), m_.tensor(p + ".dw.bias"));
+        x = ggml_add(ctx, depthwise(ctx, x, m_.tensor(p + ".dw.weight"), prepared_depthwise(p + ".dw.weight"), 2, 1, 1),
+                     m_.tensor(p + ".dw.bias"));
         const int64_t w = x->ne[1], h = x->ne[2];
         x = ggml_reshape_3d(ctx, ggml_relu(ctx, linear(ctx, ggml_reshape_2d(ctx, x, c, w * h), p + ".pw", true)), c, w, h);
     }
@@ -307,7 +372,8 @@ ggml_tensor * Encoder::convolution(Graph & g, ggml_tensor * x, const std::string
     ggml_tensor * h = layer_norm(ctx, x, name + "_norm");
     h = ggml_mul(ctx, linear(ctx, h, name + "_pw1_a", use_bias_), ggml_sigmoid(ctx, linear(ctx, h, name + "_pw1_gate", use_bias_)));
     ggml_tensor * kernel = ggml_reshape_4d(ctx, m_.tensor(name + "_dw.weight"), conv_kernel_, 1, 1, d_model_);
-    h = ggml_reshape_2d(ctx, depthwise(ctx, ggml_reshape_3d(ctx, h, d_model_, t, 1), kernel, 1, (int) pad, 0), d_model_, t);
+    h = ggml_reshape_2d(ctx, depthwise(ctx, ggml_reshape_3d(ctx, h, d_model_, t, 1), kernel,
+                                    prepared_depthwise(name + "_dw.weight"), 1, (int) pad, 0), d_model_, t);
     h = ggml_silu(ctx, ggml_add(ctx, h, m_.tensor(name + "_dw.bias")));
     return ggml_add(ctx, x, linear(ctx, h, name + "_pw2", use_bias_));
 }

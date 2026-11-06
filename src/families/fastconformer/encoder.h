@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -44,8 +45,11 @@ public:
 
     int d_model() const { return d_model_; }
     int subsampling_factor() const { return 1 << sub_layers_; }
+    /** The additional retained weight allocation for the depthwise prototype, zero when it is disabled. */
+    size_t depthwise_prepack_bytes() const;
 
 private:
+    ggml_tensor * prepared_depthwise(const std::string & name) const;
     ggml_tensor * linear(ggml_context * ctx, ggml_tensor * x, const std::string & name, bool bias) const;
     ggml_tensor * layer_norm(ggml_context * ctx, ggml_tensor * x, const std::string & name) const;
     ggml_tensor * subsample(Graph & g, const std::vector<float> & features, int64_t frames) const;
@@ -64,6 +68,9 @@ private:
     /** The projections of attention's fixed positions, shared by every utterance. */
     struct Positions;
     mutable std::unique_ptr<Positions> positions_;
+    /** Channel-first copies of the original depthwise weights, owned by this encoder and read by its request graphs. */
+    struct DepthwiseWeights;
+    std::unique_ptr<DepthwiseWeights> depthwise_weights_;
     ggml_backend_t backend_;
     const ModelFile & m_;
     int mels_, d_model_, layers_, heads_, conv_kernel_, sub_layers_;
