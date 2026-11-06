@@ -22,6 +22,8 @@ namespace fastconformer {
 class TdtDecoder : public Decoder {
 public:
     TdtDecoder(const ModelFile & m, const PredictionNetwork & prediction, const Joint & joint);
+    /** Chooses scalar or four-frame blank joints for an independent comparison of the prototype. */
+    TdtDecoder(const ModelFile & m, const PredictionNetwork & prediction, const Joint & joint, bool batch_blanks);
 
     Decoding decode(const std::vector<float> & projected, ggml_backend_t backend, const DecodingProgress & progress) const override;
     Decoding decode(const std::vector<float> & projected, ggml_backend_t backend, const DecodingProgress & progress,
@@ -37,6 +39,7 @@ private:
     int blank_;
     std::vector<int32_t> durations_;
     uint32_t max_symbols_;
+    bool batch_blanks_;
 };
 
 }  // namespace fastconformer

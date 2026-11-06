@@ -1,5 +1,8 @@
 #include "tdt.h"
 
+#include <algorithm>
+#include <cstdlib>
+#include <cstring>
 #include <memory>
 #include <stdexcept>
 
@@ -12,6 +15,13 @@ namespace {
 
 using Allocator = std::unique_ptr<ggml_gallocr, decltype(&ggml_gallocr_free)>;
 
+bool blank_batch_requested() {
+    const char * value = std::getenv("SPEECH_HAAS_TDT_BLANK_BATCH");
+    if (!value || std::strcmp(value, "0") == 0) return false;
+    if (std::strcmp(value, "1") == 0) return true;
+    throw std::runtime_error("SPEECH_HAAS_TDT_BLANK_BATCH must be 0 or 1");
+}
+
 Allocator new_allocator(ggml_backend_t backend) {
     Allocator a(ggml_gallocr_new(ggml_backend_get_default_buffer_type(backend)), &ggml_gallocr_free);
     if (!a) throw Error(Fault::OutOfMemory, "cannot create a graph allocator");
@@ -21,11 +31,15 @@ Allocator new_allocator(ggml_backend_t backend) {
 }  // namespace
 
 TdtDecoder::TdtDecoder(const ModelFile & m, const PredictionNetwork & prediction, const Joint & joint)
+    : TdtDecoder(m, prediction, joint, blank_batch_requested()) {}
+
+TdtDecoder::TdtDecoder(const ModelFile & m, const PredictionNetwork & prediction, const Joint & joint, bool batch_blanks)
     : prediction_(prediction),
       joint_(joint),
       blank_((int) m.u32("fastconformer.decoder.blank_id")),
       durations_(m.i32_array("fastconformer.decoder.tdt.durations")),
-      max_symbols_(m.u32("fastconformer.decoder.tdt.max_symbols")) {}
+      max_symbols_(m.u32("fastconformer.decoder.tdt.max_symbols")),
+      batch_blanks_(batch_blanks && m.str("fastconformer.decoder.prediction") == "kda") {}
 
 Decoding TdtDecoder::decode(const std::vector<float> & projected, ggml_backend_t backend, const DecodingProgress & progress) const {
     return run(projected, backend, progress, nullptr);
@@ -39,7 +53,7 @@ Decoding TdtDecoder::decode(const std::vector<float> & projected, ggml_backend_t
 
 Decoding TdtDecoder::run(const std::vector<float> & projected, ggml_backend_t backend, const DecodingProgress & progress,
                          const Boost * boost) const {
-    const int hidden = joint_.hidden();
+    const int hidden = joint_.hidden(), outputs = joint_.outputs();
     const int64_t frames = (int64_t) (projected.size() / (size_t) hidden);
     auto frame = [&](int64_t t) {
         return std::vector<float>(projected.begin() + t * hidden, projected.begin() + (t + 1) * hidden);
@@ -82,22 +96,34 @@ Decoding TdtDecoder::run(const std::vector<float> & projected, ggml_backend_t ba
         const std::vector<float> prediction = step.prediction();
         std::vector<float> out;
         step.logits(out);
+        int64_t first = t, count = 1;
+        bool blank_joint = false;
 
         int64_t label_frame;
         int32_t duration;
         for (;;) {
-            label = label_of(out.data());
-            duration = durations_[(size_t) first_argmax(out.data() + blank_ + 1, (int) durations_.size())];
+            const float * logits = out.data() + (size_t) (t - first) * outputs;
+            if (blank_joint) d.blank_rows_used++;
+            label = label_of(logits);
+            duration = durations_[(size_t) first_argmax(logits + blank_ + 1, (int) durations_.size())];
             if (label == blank_ && duration == 0) duration = 1;
             label_frame = t;
             t += duration;
             if (label != blank_ || t >= frames) break;
+            if (t < first + count) continue;
+            // A blank keeps the prediction fixed. Durations may skip rows; a token ends this buffer's lifetime even
+            // when its duration is zero or max_symbols forces the next prediction onto another frame.
+            first = t;
+            count = std::min<int64_t>(batch_blanks_ ? 4 : 1, frames - t);
+            const std::vector<float> future(projected.begin() + t * hidden, projected.begin() + (t + count) * hidden);
             Graph j(64);
-            ggml_tensor * next = joint_.build(j.ctx(), j.input(frame(t), hidden), j.input(prediction, hidden));
+            ggml_tensor * next = joint_.build(j.ctx(), j.input(future, hidden, count), j.input(prediction, hidden));
             j.output(next);
             j.compute(backend, joint_allocator.get());
             d.graphs++;
+            d.blank_rows_computed += (size_t) count;
             out = Graph::read(next);
+            blank_joint = true;
         }
         if (label == blank_) break;
         d.ids.push_back(label);

@@ -20,6 +20,10 @@ struct Decoding {
     std::vector<int32_t> durations;
     /** The graphs the decoding computed. Each is a round trip to the backend, so that on a GPU its time grows with them. */
     size_t graphs = 0;
+    /** The blank-joint rows computed, including future frames that the decoding never visits. */
+    size_t blank_rows_computed = 0;
+    /** The blank-joint rows whose label and duration the decoding reads. */
+    size_t blank_rows_used = 0;
 };
 
 /**
