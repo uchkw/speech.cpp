@@ -16,7 +16,7 @@ This page lists the subcommands of `speech` and their options. `speech <subcomma
 | [`speech pull`](#speech-pull) | fetches models ahead of their use |
 | [`speech rm`](#speech-rm) | removes fetched models, or the old files no model names |
 | [`speech quantize`](#speech-quantize) | writes a model file of F32 weights in another weight type |
-| [`speech update`](#speech-update) | installs the latest release, or says whether one is out |
+| [`speech update`](#speech-update) | explains how to update this source-only fork |
 | [`speech serve`](server.md) | serves a model of each task over HTTP with OpenAI's audio API, and a page to try models on |
 | [`speech worker`](worker.md) | serves a model over JSON Lines on stdin and stdout, for programs such as ASIST |
 
@@ -90,10 +90,7 @@ speech info irodori-tts-mf
   without color, mark or spinner.
 - On Windows the command line is read as UTF-8, and stdin and stdout are binary.
 - `speech --version` prints the release and the C API's version: `speech.cpp 0.10.1, C API 4.1`.
-- On a terminal, a subcommand says on stderr when a later release is out, once it ends (`speech serve` as it starts):
-  `speech: speech.cpp 0.10.2 is out (this is 0.10.1); run speech update to install it`. It asks github.com at most once a
-  day, and only when stderr is a terminal, so a script or a program that starts `speech` never makes the request; the
-  worker never asks. `SPEECH_NO_UPDATE_CHECK=1` turns it off.
+- This source-only fork does not check for binary releases or display update notices.
 
 | Exit | Meaning |
 |---|---|
@@ -483,21 +480,9 @@ implementation:
 speech update [--check]
 ```
 
-Asks github.com for the latest release. When it is later than this one, and this `speech` is the one the installer put
-in place, `speech update` runs the installer with `--no-modify-path` (`-NoModifyPath` on Windows), which downloads the
-release, checks it against the release's `SHA256SUMS` and replaces this version ([install.md](install.md#update)), and
-exits with the installer's status. `--check` only says whether a later release is out. Messages go to stderr.
-
-```
-$ speech update
-speech.cpp 0.10.2 is out (this is 0.10.1); running the installer
-Downloading https://github.com/nyosegawa/speech.cpp/releases/download/v0.10.2/speech-0.10.2-macos-arm64-metal.zip
-...
-```
-
-A `speech` built from source or copied elsewhere is left as it is, and `speech update` exits with 1, saying where it is
-and how to update it: run the installer, or pull and build again. Without the network it exits with 1 and an `io`
-failure.
+This fork has no published binary releases. Both `speech update` and `speech update --check` exit with 1 and an
+`unsupported` error on stderr, with a link to the [source update instructions](install.md#update). They do not contact
+a release server, run an installer or replace the executable.
 
 ## speech serve and speech worker
 

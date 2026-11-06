@@ -37,8 +37,7 @@ README.md and `docs/` are the documentation for users; what a developer needs is
   it, not before, and never as a framework for families that do not exist yet.
 - `tools/` holds `speech`, the one executable for users, with a subcommand per program: `tts`,
   `asr`, `vad`, `diarize`, `enhance`, `voice`, `info`, `devices`, `quantize` and `update` in `tools/cli/` (with
-  `main.cpp`, which dispatches
-  them and prints the notice of a newer release on a terminal), `worker` in
+  `main.cpp`, which dispatches them), `worker` in
   `tools/worker/` and `serve` in `tools/server/`, and what they share in `tools/common/`: the one parser of every
   command line, which makes a flag of each option of the C API's vocabulary, the JSON reader, and the request options
   read from text or JSON and set through the library's setters, transcription by regions, which `asr --vad` and
@@ -51,8 +50,7 @@ README.md and `docs/` are the documentation for users; what a developer needs is
   events (`realtime-events.cpp`), which they all write. Every subcommand reaches the models only through the
   C API. `tools/catalog/` names models: the catalog of the release (`catalog.json`, which `update_catalog.py` writes
   from Hugging Face and the build compiles in), the cache folder, and the fetching of a named model with the system's
-  curl (`curl.cpp` runs it), which `models`, `pull` and `rm` and every subcommand that takes a model share; it also asks
-  github.com for the latest release with the same curl (`release.cpp`), for `update` and the notice. The library never
+  curl (`curl.cpp` runs it), which `models`, `pull` and `rm` and every subcommand that takes a model share. The library never
   reaches the network. The worker's protocol is JSON Lines, one JSON object per line on stdin and
   stdout, and is the contract of every program that starts it, ASIST among them: stdout carries the protocol and
   nothing else, every log goes to stderr, and every request gets exactly one terminal message. Its `ready` message

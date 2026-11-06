@@ -300,7 +300,6 @@ add_executable(speech-cli
     tools/catalog/cache.cpp
     tools/catalog/curl.cpp
     tools/catalog/fetch.cpp
-    tools/catalog/release.cpp
     tools/catalog/sha256.cpp
     ${CMAKE_CURRENT_BINARY_DIR}/catalog-json.cpp
     ${CMAKE_CURRENT_BINARY_DIR}/page-files.cpp

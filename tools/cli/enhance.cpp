@@ -270,6 +270,5 @@ Command enhance_command() {
     c.min_args = 2;
     c.max_args = SIZE_MAX;
     c.run = run_enhance;
-    c.release_notice = ReleaseNotice::AtEnd;
     return c;
 }

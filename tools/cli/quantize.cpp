@@ -67,6 +67,5 @@ Command quantize_command() {
     c.min_args = 2;
     c.max_args = 2;
     c.run = run_quantize;
-    c.release_notice = ReleaseNotice::AtEnd;
     return c;
 }

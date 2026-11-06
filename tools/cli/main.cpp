@@ -1,9 +1,8 @@
 // speech: speech synthesis, speech recognition and the detection of speech with every model speech.cpp runs, through
 // its C API, as one executable with a subcommand per program: tts, asr and vad for the command line, voice, info and
 // devices about models and devices, models, pull and rm about the models it fetches by name, quantize to write a model file in another
-// weight type, update to install the latest release, serve for OpenAI's audio API over HTTP and worker for JSON Lines on
-// stdin and stdout. On a terminal, the subcommands for people say on stderr when a later release is out, unless
-// SPEECH_NO_UPDATE_CHECK is set; the worker never does.
+// weight type, update to explain source updates, serve for OpenAI's audio API over HTTP and worker for JSON Lines on
+// stdin and stdout.
 //
 // usage: speech <subcommand> [options]     speech <subcommand> --help     speech --version
 //
@@ -14,7 +13,6 @@
 
 #include <cstdio>
 #include <exception>
-#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -29,7 +27,6 @@
 #include "spelling.h"
 #include "take-stdout.h"
 #include "terminal.h"
-#include "update.h"
 
 namespace {
 
@@ -108,11 +105,9 @@ int run(const std::vector<std::string> & args, FILE * out) {
         std::fputs(command_help(*command, out).c_str(), out);
         return 0;
     }
-    std::optional<NewerReleaseNotice> notice;
     int status = 0;
     try {
         const CommandLine line = parse_command_line(*command, rest);
-        notice.emplace(command->release_notice);
         status = command->run(line, out);
     } catch (const UsageError & e) {
         std::fprintf(stderr, "%s %s\n%s\n", terminal::paint(terminal::Color::Red, "speech:").c_str(), e.what(),
@@ -129,9 +124,7 @@ int run(const std::vector<std::string> & args, FILE * out) {
         if (command->report) command->report(internal, out);
         status = 1;
     }
-    // The subcommand's output is flushed first, so that a notice on a terminal comes after it.
     std::fflush(out);
-    if (notice) notice->ended();
     return status;
 }
 

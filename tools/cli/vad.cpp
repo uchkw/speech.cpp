@@ -192,6 +192,5 @@ Command vad_command() {
     c.min_args = 2;
     c.max_args = SIZE_MAX;
     c.run = run_vad;
-    c.release_notice = ReleaseNotice::AtEnd;
     return c;
 }

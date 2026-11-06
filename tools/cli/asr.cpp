@@ -391,6 +391,5 @@ Command asr_command() {
     c.min_args = 1;
     c.max_args = SIZE_MAX;
     c.run = run_asr;
-    c.release_notice = ReleaseNotice::AtEnd;
     return c;
 }

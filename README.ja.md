@@ -1,3 +1,5 @@
+> **Mac 最適化のソースビルド専用フォークです．** [uchkw/speech.cpp](https://github.com/uchkw/speech.cpp) はバイナリをリリースしていません．変更を維持するため，[このフォークをソースからビルド](#インストール)し，チェックアウトを更新してください．バイナリインストーラと `speech update` は非対応です．
+
 <p align="center"><img src="docs/images/banner.png" alt="speech.cpp" width="768"></p>
 
 <p align="center">
@@ -17,8 +19,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/nyosegawa/speech.cpp/actions/workflows/build.yml"><img src="https://img.shields.io/github/actions/workflow/status/nyosegawa/speech.cpp/build.yml?branch=main&style=flat-square&label=CI" alt="CI"></a>
-  <a href="https://github.com/nyosegawa/speech.cpp/releases/latest"><img src="https://img.shields.io/github/v/release/nyosegawa/speech.cpp?style=flat-square" alt="最新のリリース"></a>
+  <a href="https://github.com/uchkw/speech.cpp/actions/workflows/build.yml"><img src="https://img.shields.io/github/actions/workflow/status/uchkw/speech.cpp/build.yml?branch=main&style=flat-square&label=CI" alt="CI"></a>
   <img src="https://img.shields.io/badge/macOS-Apple%20Silicon%20%C2%B7%20Metal-lightgrey?style=flat-square" alt="Apple Silicon の macOS で Metal を使う">
   <img src="https://img.shields.io/badge/Windows-x64%20%C2%B7%20Vulkan-lightgrey?style=flat-square" alt="x64 の Windows で Vulkan を使う">
   <img src="https://img.shields.io/badge/Linux-x64%20%C2%B7%20Vulkan%20or%20CPU-lightgrey?style=flat-square" alt="x64 の Linux で Vulkan か CPU を使う">
@@ -69,19 +70,18 @@ speech.cpp は、1つのコマンド `speech` と1つの共有ライブラリ `l
 
 ## インストール
 
-Apple silicon の macOS と x86-64 の Linux では、次のコマンドを実行します。
+macOS では CMake 3.20 以降と C++17 コンパイラを用意し，このフォークを Metal 対応でビルドします．
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/nyosegawa/speech.cpp/main/install.sh | sh
+git clone --recurse-submodules https://github.com/uchkw/speech.cpp.git
+cd speech.cpp
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release -j4
+export PATH="$PWD/build:$PATH"
+speech --help
 ```
 
-x64 の Windows では、PowerShell で次のコマンドを実行します。
-
-```powershell
-irm https://raw.githubusercontent.com/nyosegawa/speech.cpp/main/install.ps1 | iex
-```
-
-インストーラはリリースのアーカイブを SHA-256 で確かめ、`speech` をホームフォルダの下に置き、`PATH` に加えます。`speech update` を実行するか、インストーラをもう一度実行すると更新されます。Linux では、Vulkan のローダーが入っていれば Vulkan 版を、入っていなければ CPU 版をインストールします。Linux 版には glibc 2.34 以降が必要です。オプション、アンインストールの方法、各プラットフォームで必要なものは [docs/install.md](docs/install.md) にあります。Intel Mac やその他のシステムでは、[ソースからビルド](docs/install.md#build-from-source)してください。
+`PATH` の設定は現在のシェルに適用されます．他のプラットフォーム，共有ライブラリ，ソースからの更新方法は [docs/install.md](docs/install.md) を参照してください．このフォークはバイナリリリースの確認や更新通知を行いません．モデル名と Hugging Face の取得元は上流と共通です．
 
 ## クイックスタート
 
@@ -123,7 +123,7 @@ irm https://raw.githubusercontent.com/nyosegawa/speech.cpp/main/install.ps1 | ie
 | `speech devices` | モデルを動かせるデバイスを一覧にします |
 | `speech models`, `pull`, `rm` | モデルの一覧表示、取得、削除をします |
 | `speech quantize` | F32 の重みのモデルファイルを F16、Q8_0、またはより小さい型で書き出します |
-| `speech update` | 最新のリリースをインストールするか、新しいリリースが出ているかどうかを表示します |
+| `speech update` | このフォークをソースから更新する方法を案内します |
 | `speech serve` | OpenAI の音声 API と、モデルを試すページを HTTP で提供します |
 | `speech worker` | プログラムのために、標準入力と標準出力の JSON Lines でモデルを提供します |
 
@@ -206,7 +206,7 @@ FastConformer のモデル(parakeet、ReazonSpeech、Haas-ja-v1.0)は、2026-10-
 
 | ページ | 内容 |
 |---|---|
-| [Install](docs/install.md) | インストーラ、更新、アンインストール、必要なもの、リリースのアーカイブ、ソースからのビルド |
+| [Install](docs/install.md) | ソースからのビルド，バックエンド，共有ライブラリ，更新 |
 | [Command line](docs/cli.md) | すべてのサブコマンドとオプション |
 | [Models](docs/models.md) | カタログ、モデルの名前、モデルを置く場所、声、言語 |
 | [Qwen3-TTS](docs/models/qwen3-tts.md), [Irodori-TTS](docs/models/irodori-tts.md), [Drama 3](docs/models/drama3.md), [FastConformer](docs/models/fastconformer.md), [Qwen3-ASR](docs/models/qwen3-asr.md), [Nemotron 3.5 Transcribe](docs/models/nemotron-transcribe.md), [Silero VAD](docs/models/silero-vad.md), [Sortformer](docs/models/sortformer.md), [SEMamba](docs/models/semamba.md) | 各ファミリーができること、オプション、精度、速度 |

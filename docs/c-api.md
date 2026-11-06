@@ -120,7 +120,7 @@ if (check(speech_model_load("Nemotron-3-Diarization-99M-Q8_0.gguf", NULL, &model
 The library loads files and never reaches the network: a program passes a model file's path. `speech pull NAME` prints
 the path of a model of the catalog.
 
-Link `libspeech` from a release archive ([install.md](install.md#release-archives)). On Windows, define `SPEECH_SHARED`
+Link `libspeech` from the same source build ([install.md](install.md#shared-library)). On Windows, define `SPEECH_SHARED`
 and link `speech.lib`. Inside this CMake project, link the target `speech` (shared) or `speech-static`.
 
 ## Functions
