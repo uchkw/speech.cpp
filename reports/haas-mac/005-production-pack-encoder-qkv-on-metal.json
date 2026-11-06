@@ -28,7 +28,7 @@
       "The repository CER is not the published metric accepting alternative spellings of words.",
       "Fresh-process load and first-request times do not reset filesystem or system Metal caches.",
       "The candidate contains the production runtime from 37b7107 plus check-only source at 71c4fe9. There is no prototype switch; all measured environments are empty and the frozen runner rejects unrecorded GGML_*/SPEECH_* overrides.",
-      "Fresh baseline and candidate have 74 matching compile-flag files and 74 matching link files after replacing only source/build directory prefixes. The fixed anchor has explicit -arch arm64/-isysroot flags absent from the fresh pair; equivalent effective defaults are not established despite matching LC_BUILD_VERSION.",
+      "Fresh baseline and candidate have 74 matching compile-flag files and 74 matching link files after replacing only source/build directory prefixes. The fresh baseline and candidate explicitly pass -arch arm64 and -isysroot; the fixed anchor omits both. Equivalent effective defaults are not established despite matching LC_BUILD_VERSION.",
       "Q4_K improves 22 of 30 per-input medians, but its 20-30 s stratum has a -0.5924% paired reduction, and aggregate p90 rises from 121.78 to 126.04 ms.",
       "Q8_0 improves 25 of 30 per-input medians, but round 1 has a -2.4706% paired reduction; its short round 1 is also negative. Do not claim a gain in every round.",
       "The permanent copies add exactly 40.5 MiB for standard Q4_K and 76.5 MiB for standard Q8_0. Measured whole-process peak changes include allocator and sampling differences and need not equal these byte counts.",
@@ -927,7 +927,9 @@
       "audit-checks.py": "c77e97d0097469a0bb606676647a02c9b068fcf8555584748725d583a4b52034",
       "audit-measurements.py": "bce26c76ac0b84741c4380e365212d96f8c14a00827e0f1af4a6a4f68d57aa3f"
     },
-    "review_log_sha256": "41a8dc19a372023bc4321e8438036ed4682779ba1a50d5cc5da30ff2eef73dce"
+    "review_log_sha256": "41a8dc19a372023bc4321e8438036ed4682779ba1a50d5cc5da30ff2eef73dce",
+    "toolchain_direction_audit_path": "report-imports/005-production/toolchain-direction-audit.json",
+    "toolchain_direction_audit_sha256": "e08fce2707de35f1f9af310bd44d29d6ae776b1c18187835193734b430a82254"
   },
   "checks": [
     {
