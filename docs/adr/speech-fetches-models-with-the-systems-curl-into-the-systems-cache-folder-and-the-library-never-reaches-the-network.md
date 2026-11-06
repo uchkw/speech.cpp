@@ -44,9 +44,7 @@ older release still installed may use.
   model's file and what was fetched of it. Only the folders a fetch makes are looked into, so a `SPEECH_MODEL_DIR` that
   also holds other files never offers them for removal.
 - **Only the command line and the server fetch.** The library and the C API load files and never reach the network; a
-  binding or a program on `libspeech` fetches as it chooses, and can read the pins from `speech models --json`. The
-  command line also asks github.com for the latest release, through the same curl, on a terminal and for
-  `speech update`.
+  binding or a program on `libspeech` fetches as it chooses, and can read the pins from `speech models --json`.
 
 The alternatives were turned down:
 

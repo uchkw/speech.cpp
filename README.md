@@ -1,3 +1,5 @@
+> **Source-only Mac optimization fork:** [uchkw/speech.cpp](https://github.com/uchkw/speech.cpp) has no binary releases. [Build this fork from source](#install) and update its checkout to keep its changes. Binary installers and `speech update` are unsupported.
+
 <p align="center"><img src="docs/images/banner.png" alt="speech.cpp" width="768"></p>
 
 <p align="center">
@@ -17,8 +19,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/nyosegawa/speech.cpp/actions/workflows/build.yml"><img src="https://img.shields.io/github/actions/workflow/status/nyosegawa/speech.cpp/build.yml?branch=main&style=flat-square&label=CI" alt="CI"></a>
-  <a href="https://github.com/nyosegawa/speech.cpp/releases/latest"><img src="https://img.shields.io/github/v/release/nyosegawa/speech.cpp?style=flat-square" alt="Latest release"></a>
+  <a href="https://github.com/uchkw/speech.cpp/actions/workflows/build.yml"><img src="https://img.shields.io/github/actions/workflow/status/uchkw/speech.cpp/build.yml?branch=main&style=flat-square&label=CI" alt="CI"></a>
   <img src="https://img.shields.io/badge/macOS-Apple%20Silicon%20%C2%B7%20Metal-lightgrey?style=flat-square" alt="macOS on Apple Silicon, with Metal">
   <img src="https://img.shields.io/badge/Windows-x64%20%C2%B7%20Vulkan-lightgrey?style=flat-square" alt="Windows on x64, with Vulkan">
   <img src="https://img.shields.io/badge/Linux-x64%20%C2%B7%20Vulkan%20or%20CPU-lightgrey?style=flat-square" alt="Linux on x64, with Vulkan or the CPU">
@@ -82,23 +83,20 @@ family has a page: [Qwen3-TTS](docs/models/qwen3-tts.md), [Irodori-TTS](docs/mod
 
 ## Install
 
-macOS on Apple silicon and Linux on x86-64:
+On macOS, install CMake 3.20 or later and a C++17 compiler, then build this fork with Metal:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/nyosegawa/speech.cpp/main/install.sh | sh
+git clone --recurse-submodules https://github.com/uchkw/speech.cpp.git
+cd speech.cpp
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release -j4
+export PATH="$PWD/build:$PATH"
+speech --help
 ```
 
-Windows x64, in PowerShell:
-
-```powershell
-irm https://raw.githubusercontent.com/nyosegawa/speech.cpp/main/install.ps1 | iex
-```
-
-The installer checks the release's archive against its SHA-256, puts `speech` under your home folder, and adds it to
-`PATH`. `speech update`, or running it again, updates it. On Linux it installs the Vulkan build when the Vulkan loader
-is installed, and the CPU build otherwise; the Linux builds need glibc 2.34 or later. [docs/install.md](docs/install.md)
-has the options, how to uninstall, and what each platform needs. On an Intel Mac or another system, [build from
-source](docs/install.md#build-from-source).
+This sets `PATH` for the current shell. [docs/install.md](docs/install.md) covers other platforms, shared libraries
+and updating from source. This fork does not check for binary releases or display update notices. Model names and
+Hugging Face sources remain the same as upstream.
 
 ## Quick start
 
@@ -140,7 +138,7 @@ source](docs/install.md#build-from-source).
 | `speech devices` | lists the devices a model can run on |
 | `speech models`, `pull`, `rm` | list, fetch and remove models |
 | `speech quantize` | writes a model file of F32 weights in F16, Q8_0 or a smaller type |
-| `speech update` | installs the latest release, or says whether one is out |
+| `speech update` | explains how to update this source-only fork |
 | `speech serve` | serves models over HTTP with OpenAI's audio API, and a page to try them |
 | `speech worker` | serves a model over JSON Lines on stdin and stdout, for programs |
 
@@ -239,7 +237,7 @@ more.
 
 | Page | What it covers |
 |---|---|
-| [Install](docs/install.md) | installers, updating, uninstalling, requirements, release archives and building from source |
+| [Install](docs/install.md) | building from source, backends, shared libraries and updating |
 | [Command line](docs/cli.md) | every subcommand and option |
 | [Models](docs/models.md) | the catalog, names, where models are kept, voices and languages |
 | [Qwen3-TTS](docs/models/qwen3-tts.md), [Irodori-TTS](docs/models/irodori-tts.md), [Drama 3](docs/models/drama3.md), [FastConformer](docs/models/fastconformer.md), [Qwen3-ASR](docs/models/qwen3-asr.md), [Nemotron 3.5 Transcribe](docs/models/nemotron-transcribe.md), [Silero VAD](docs/models/silero-vad.md), [Sortformer](docs/models/sortformer.md), [SEMamba](docs/models/semamba.md) | each family: what it does, its options, accuracy and speed |

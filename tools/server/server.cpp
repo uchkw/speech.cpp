@@ -496,6 +496,5 @@ Command serve_command() {
     c.model = ModelKind::Any;
     c.max_args = 5;
     c.run = run_serve;
-    c.release_notice = ReleaseNotice::AtStart;
     return c;
 }

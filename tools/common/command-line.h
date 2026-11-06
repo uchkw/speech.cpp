@@ -42,9 +42,6 @@ struct Flag {
 
 class CommandLine;
 
-/** When a subcommand says on a terminal that a newer release is out: never, once it ends, or as it starts. */
-enum class ReleaseNotice { Never, AtEnd, AtStart };
-
 struct Command {
     std::string name;
     /** The usage after "speech ", such as "tts MODEL -o FILE|- [options] [TEXT]". */
@@ -74,7 +71,6 @@ struct Command {
      * the protocol alone, so the worker answers it with a `fatal` line.
      */
     void (*report)(const Failure & failure, FILE * out) = nullptr;
-    ReleaseNotice release_notice = ReleaseNotice::Never;
 };
 
 /** A subcommand's command line as read, each flag's value checked against the flag's type. */

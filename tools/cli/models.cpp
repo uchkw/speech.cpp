@@ -225,7 +225,6 @@ Command models_command() {
         {"--json", "", false, "print one JSON object with every pin of the catalog, each file's path and whether it is fetched"},
     };
     c.run = run_models;
-    c.release_notice = ReleaseNotice::AtEnd;
     return c;
 }
 
@@ -241,7 +240,6 @@ Command pull_command() {
     c.min_args = 1;
     c.max_args = SIZE_MAX;
     c.run = run_pull;
-    c.release_notice = ReleaseNotice::AtEnd;
     return c;
 }
 
@@ -258,6 +256,5 @@ Command rm_command() {
     };
     c.max_args = SIZE_MAX;
     c.run = run_rm;
-    c.release_notice = ReleaseNotice::AtEnd;
     return c;
 }
