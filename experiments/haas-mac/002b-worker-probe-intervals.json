@@ -1,0 +1,37 @@
+{
+  "intervals": {
+    "request_setup_ms": ["worker_enter", "pcm_before"],
+    "pcm_to_float_ms": ["pcm_before", "pcm_end"],
+    "set_audio_ms": ["pcm_end", "audio_set_end"],
+    "option_setup_ms": ["audio_set_end", "setup_end"],
+    "api_ms": ["api_begin", "api_end"],
+    "resample_copy_ms": ["resample_before", "resample_after"],
+    "engine_ms": ["engine_enter", "engine_exit"],
+    "frontend_ms": ["frontend_before", "frontend_after"],
+    "encode_ms": ["encode_before", "encode_after"],
+    "encoder_build_ms": ["encoder_enter", "encoder_build_end"],
+    "encoder_compute_ms": ["encoder_build_end", "encoder_compute_end"],
+    "encoder_read_ms": ["encoder_compute_end", "encoder_read_end"],
+    "encoder_cleanup_ms": ["encoder_read_end", "encoder_exit"],
+    "decode_ms": ["decode_before", "decode_after"],
+    "detokenize_ms": ["decode_after", "detokenize_after"],
+    "engine_cleanup_ms": ["engine_return", "engine_exit"],
+    "resample_cleanup_ms": ["hear_work_end", "resample_scope_exit"],
+    "terminal_build_ms": ["api_end", "terminal_built"],
+    "pcm_float_cleanup_ms": ["terminal_built", "finish_before"],
+    "finish_inbox_ms": ["finish_before", "terminal_lock_before"],
+    "terminal_mutex_wait_ms": ["terminal_lock_before", "terminal_write_before"],
+    "terminal_write_ms": ["terminal_write_before", "terminal_flush_before"],
+    "terminal_flush_ms": ["terminal_flush_before", "terminal_flush_after"],
+    "post_terminal_cleanup_ms": ["finish_after", "worker_exit"]
+  },
+  "python_contained_end": "finish_before",
+  "notes": [
+    "worker_enter follows the trace record's initial reserve; trace setup before this point remains in the outside-worker residual.",
+    "API contains resampling and engine intervals; engine contains frontend, encode and decode; encode contains build, compute, read and graph cleanup. These overlapping intervals are not additive.",
+    "The engine encoder span includes graph cleanup before returning, unlike the standalone stage tool's core_total boundary.",
+    "finish_before is before the terminal protocol write and is safely contained in the Python request timer. terminal_flush_after and worker_exit are not guaranteed to precede the Python timer end.",
+    "pcm_float_cleanup_ms covers the end of the worker try scope after terminal construction, including destruction of its float input; it is not a direct allocator-only measurement.",
+    "The initial diagnostic has no reader-thread or client subinterval timers. Its outside-worker residual does not separate Python serialization, pipe transfer, C++ line/JSON/base64 processing, queue delay or end reception."
+  ]
+}

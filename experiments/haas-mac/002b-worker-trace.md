@@ -45,19 +45,29 @@ following request, which is why overhead is measured separately.
 
 ## Replay
 
-The external campaign artifact directory retains the exact driver and worker
-adapter under `002b-worker-probe/runner-snapshot/`, input and model hashes in
-`run.json`, binary/source identities in the two build manifests, raw traces and
-the analysis. Build manifests are `builds/002b-ffn-f16/build.json` and
-`builds/002b-worker-trace/build.json`. Use a new output directory for a replay:
+This directory retains the measured driver and interval map byte for byte.
+`worker.py` also matches the measured snapshot. Their SHA-256 identities are:
+
+| File | SHA-256 |
+|---|---|
+| `002b-worker-probe.py` | `08bf960c247bd89f69f92ae6b54ae5d0f97aea6ebddc2740a5c7b10686b6b6c1` |
+| `002b-worker-probe-intervals.json` | `e0594adf757ae8f92d65c1bcae17bf6a8467a58b180097547ac6068f126236c0` |
+| `worker.py` | `4b97435f62e153d3b4f17cdadf01691c367225b1bbcb0e0572e817997f2a3a7a` |
+
+The external campaign artifact directory retains input and model hashes in
+`002b-worker-probe/run.json`, binary/source identities in the two build
+manifests, raw traces and analysis. Build manifests are
+`builds/002b-ffn-f16/build.json` and `builds/002b-worker-trace/build.json`.
+Set `diagnostic_source` to this branch's checkout and `campaign` to the prepared
+campaign artifacts. Use a new output directory for a replay:
 
 ```sh
-python3 -B "$campaign/diagnostic-tools/002b-worker-probe.py" prepare \
-  --runner "$campaign_source/experiments/haas-mac" \
+python3 -B "$diagnostic_source/experiments/haas-mac/002b-worker-probe.py" prepare \
+  --runner "$diagnostic_source/experiments/haas-mac" \
   --assets "$campaign/assets/assets.json" \
   --plain-build "$campaign/builds/002b-ffn-f16/build.json" \
   --trace-build "$campaign/builds/002b-worker-trace/build.json" \
-  --intervals "$campaign/diagnostic-tools/002b-worker-probe-intervals.json" \
+  --intervals "$diagnostic_source/experiments/haas-mac/002b-worker-probe-intervals.json" \
   --out "$new_output"
 python3 -B "$new_output/runner-snapshot/002b-worker-probe.py" run \
   --manifest "$new_output/run.json"
