@@ -7,9 +7,12 @@ encoder graph have not been observed. This branch is not an adoption candidate.
 The parent starts at `114c514430c8aa1455c077819f8e72e674a48b75`, with ggml
 `e1a9ac12edbb57402618fd6936598603f5ee6266`. The ggml cases are committed before the
 kernel: `3613336f` adds the cases and `977f41d9` adds the partial-residual alias
-case. The latter is the original-kernel comparison source, with the same test
-code as the candidate. Kernel commit `4a409be2ec3dc2c23070d57247f48d43bdbda664`
-implements the prototype. No other campaign optimization is included.
+case. Kernel commit `4a409be2ec3dc2c23070d57247f48d43bdbda664` implements the
+prototype. Review adds only positive residual-input alias cases in candidate
+`eb97e21752e680fa92f402cc80a84a4700e60cea`. The original-kernel comparison source
+`8f5f4e2932255663d46f3fedbc180464b2db4ea6` contains the same test-only addition
+on the cases-only base. Their test files compare byte for byte. No other
+campaign optimization is included.
 
 ## Scope and arithmetic
 
@@ -82,14 +85,16 @@ so those addresses are never compared as host memory.
 
 ## Prepared checks and pending execution
 
-`test-backend-ops -o RESIDUAL_NORM` has 59 backend-reference cases. Shapes include
+`test-backend-ops -o RESIDUAL_NORM` has 71 backend-reference cases. Shapes include
 T=1,31,32,33,100,171,172,375, with asymmetric inputs, half-ULP residual addends,
 large finite values and nearly constant rows. Rejection cases cover other
 widths, row strides, broadcast residuals, per-row weights, F16 residuals,
 retained or reused intermediates, partial aliases and separate shared wrappers.
+Positive physical layouts include the residual ADD overwriting A or B, with
+the final affine output either separate or sharing the same input, at T=1,33,375.
 
 The serial Metal helper runs each case with two deterministic input generations
-and OFF/ON: 236 planned executions. It poisons intermediate/output storage
+and OFF/ON: 284 planned executions. It poisons intermediate/output storage
 before every execution and restores all four inputs afterward. Exact input
 aliases necessarily restore finite output bytes as well, so those cases also
 require the result to differ from the restored input. Each result must be finite,
