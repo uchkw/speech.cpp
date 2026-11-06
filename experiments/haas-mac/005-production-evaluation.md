@@ -1,8 +1,12 @@
 # Haas QKV production evaluation
 
-Status: pending adoption. The checked outputs match, and an independent latency repeat reproduces small paired median
-gains in all three rounds. Q4_K's p90 still increases, and Q8_0's long-input gain is negligible. Adoption remains pending
-review of these latency and memory tradeoffs. This is a measured, unmerged implementation.
+Status: measurements complete; conditional adoption candidate. The checked outputs match, and an independent latency
+repeat reproduces small paired median gains on the M2 Ultra. This switch-free implementation is retained in PR #5;
+it is not merged into main or made the default baseline for other measures. No further identical repeat is required.
+
+Q4_K's p90 increases at the same 22.62 s input in the primary and repeat, while Q8_0's long-input repeat gain is nearly
+zero. The retained weight copies cost 40.5/76.5 MiB. This is not a change that makes every input faster. Keep it as a
+candidate for combined evaluation after larger host-overhead improvements, including measure 023.
 
 ## Fixed conditions
 
