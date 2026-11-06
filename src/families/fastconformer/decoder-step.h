@@ -13,8 +13,11 @@ public:
 
     /** Computes the next prediction and the joint at each of the given projected encoder frames. */
     void compute(int32_t label, const PredictionState & state, const std::vector<float> & frames);
+    /** Copies `count` projected frame values into the graph before computing the step. */
+    void compute(int32_t label, const PredictionState & state, const float * frames, size_t count);
     PredictionState state() const { return PredictionNetwork::read_state(step_); }
     std::vector<float> prediction() const { return Graph::read(predicted_); }
+    void prediction(std::vector<float> & out) const { Graph::read(predicted_, out); }
     void logits(std::vector<float> & out) const { Graph::read(logits_, out); }
 
 private:

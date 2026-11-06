@@ -19,9 +19,13 @@ DecoderStep::DecoderStep(const PredictionNetwork & prediction, const Joint & joi
 }
 
 void DecoderStep::compute(int32_t label, const PredictionState & state, const std::vector<float> & frames) {
+    compute(label, state, frames.data(), frames.size());
+}
+
+void DecoderStep::compute(int32_t label, const PredictionState & state, const float * frames, size_t count) {
     graph_.set(label_, std::vector<int32_t>{label});
     graph_.set(state_, state);
-    graph_.set(frames_, frames);
+    graph_.set(frames_, frames, count);
     if (allocated_) graph_.compute_again(backend_);
     else {
         graph_.compute(backend_, allocator_.get());

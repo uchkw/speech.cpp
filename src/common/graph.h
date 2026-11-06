@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -46,6 +47,8 @@ public:
     ggml_context * ctx() const { return ctx_; }
 
     ggml_tensor * input(const std::vector<float> & data, int64_t ne0, int64_t ne1 = 1, int64_t ne2 = 1, int64_t ne3 = 1);
+    /** Copies `count` floats into an owned input immediately; the source may change or expire before compute(). */
+    ggml_tensor * input(const float * data, size_t count, int64_t ne0, int64_t ne1 = 1, int64_t ne2 = 1, int64_t ne3 = 1);
     ggml_tensor * input(const std::vector<int32_t> & data, int64_t ne0);
     /** A half-precision input of `data`, [ne0, ne1, ne2, ne3]: what ggml_flash_attn_ext takes as its mask. */
     ggml_tensor * half_input(const std::vector<float> & data, int64_t ne0, int64_t ne1, int64_t ne2 = 1, int64_t ne3 = 1);
@@ -78,6 +81,8 @@ public:
 
     /** Gives `input`, an input of this graph, the data `data` from the next compute on, converted to its type. */
     void set(ggml_tensor * input, const std::vector<float> & data);
+    /** Copies `count` floats into the owned upload immediately, converting them to the input's type. */
+    void set(ggml_tensor * input, const float * data, size_t count);
     void set(ggml_tensor * input, const std::vector<int32_t> & data);
 
     /**

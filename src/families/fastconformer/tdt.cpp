@@ -1,5 +1,7 @@
 #include "tdt.h"
 
+#include <cstdlib>
+#include <cstring>
 #include <memory>
 #include <stdexcept>
 
@@ -12,6 +14,13 @@ namespace {
 
 using Allocator = std::unique_ptr<ggml_gallocr, decltype(&ggml_gallocr_free)>;
 
+bool buffer_reuse_requested() {
+    const char * value = std::getenv("SPEECH_HAAS_TDT_BUFFER_REUSE");
+    if (!value || std::strcmp(value, "0") == 0) return false;
+    if (std::strcmp(value, "1") == 0) return true;
+    throw std::runtime_error("SPEECH_HAAS_TDT_BUFFER_REUSE must be 0 or 1");
+}
+
 Allocator new_allocator(ggml_backend_t backend) {
     Allocator a(ggml_gallocr_new(ggml_backend_get_default_buffer_type(backend)), &ggml_gallocr_free);
     if (!a) throw Error(Fault::OutOfMemory, "cannot create a graph allocator");
@@ -21,11 +30,19 @@ Allocator new_allocator(ggml_backend_t backend) {
 }  // namespace
 
 TdtDecoder::TdtDecoder(const ModelFile & m, const PredictionNetwork & prediction, const Joint & joint)
+    : TdtDecoder(m, prediction, joint, m.str("fastconformer.decoder.prediction") == "kda" && buffer_reuse_requested()) {}
+
+TdtDecoder::TdtDecoder(const ModelFile & m, const PredictionNetwork & prediction, const Joint & joint, bool reuse_buffers)
     : prediction_(prediction),
       joint_(joint),
       blank_((int) m.u32("fastconformer.decoder.blank_id")),
       durations_(m.i32_array("fastconformer.decoder.tdt.durations")),
-      max_symbols_(m.u32("fastconformer.decoder.tdt.max_symbols")) {}
+      max_symbols_(m.u32("fastconformer.decoder.tdt.max_symbols")),
+      reuse_buffers_(reuse_buffers) {
+    if (reuse_buffers_ && m.str("fastconformer.decoder.prediction") != "kda") {
+        throw std::runtime_error("SPEECH_HAAS_TDT_BUFFER_REUSE requires a KDA prediction network");
+    }
+}
 
 Decoding TdtDecoder::decode(const std::vector<float> & projected, ggml_backend_t backend, const DecodingProgress & progress) const {
     return run(projected, backend, progress, nullptr);
@@ -69,6 +86,7 @@ Decoding TdtDecoder::run(const std::vector<float> & projected, ggml_backend_t ba
 
     Decoding d;
     PredictionState state = prediction_.initial_state();
+    std::vector<float> reused_prediction, reused_logits;
     int32_t label = blank_;
     int64_t t = 0, last_token_frame = -1;
     uint32_t tokens_on_frame = 0;
@@ -76,11 +94,15 @@ Decoding TdtDecoder::run(const std::vector<float> & projected, ggml_backend_t ba
         if (progress && !progress((double) t / (double) frames)) break;
         // The prediction network takes the last label, and the joint is evaluated at the current frame with its
         // output, in one graph.
-        step.compute(label, state, frame(t));
+        if (reuse_buffers_) step.compute(label, state, projected.data() + t * hidden, (size_t) hidden);
+        else step.compute(label, state, frame(t));
         d.graphs++;
         state = step.state();
-        const std::vector<float> prediction = step.prediction();
-        std::vector<float> out;
+        std::vector<float> local_prediction, local_logits;
+        std::vector<float> & prediction = reuse_buffers_ ? reused_prediction : local_prediction;
+        std::vector<float> & out = reuse_buffers_ ? reused_logits : local_logits;
+        if (reuse_buffers_) step.prediction(prediction);
+        else prediction = step.prediction();
         step.logits(out);
 
         int64_t label_frame;
@@ -93,11 +115,14 @@ Decoding TdtDecoder::run(const std::vector<float> & projected, ggml_backend_t ba
             t += duration;
             if (label != blank_ || t >= frames) break;
             Graph j(64);
-            ggml_tensor * next = joint_.build(j.ctx(), j.input(frame(t), hidden), j.input(prediction, hidden));
+            ggml_tensor * next = joint_.build(j.ctx(), reuse_buffers_ ? j.input(projected.data() + t * hidden, (size_t) hidden, hidden)
+                                                                    : j.input(frame(t), hidden),
+                                             j.input(prediction, hidden));
             j.output(next);
             j.compute(backend, joint_allocator.get());
             d.graphs++;
-            out = Graph::read(next);
+            if (reuse_buffers_) Graph::read(next, out);
+            else out = Graph::read(next);
         }
         if (label == blank_) break;
         d.ids.push_back(label);

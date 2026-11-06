@@ -49,11 +49,15 @@ Graph::~Graph() {
 }
 
 ggml_tensor * Graph::input(const std::vector<float> & data, int64_t ne0, int64_t ne1, int64_t ne2, int64_t ne3) {
+    return input(data.data(), data.size(), ne0, ne1, ne2, ne3);
+}
+
+ggml_tensor * Graph::input(const float * data, size_t count, int64_t ne0, int64_t ne1, int64_t ne2, int64_t ne3) {
     ggml_tensor * t = ggml_new_tensor_4d(ctx_, GGML_TYPE_F32, ne0, ne1, ne2, ne3);
-    if ((int64_t) data.size() != ggml_nelements(t)) throw std::runtime_error("an input's data does not fit its shape");
+    if ((int64_t) count != ggml_nelements(t)) throw std::runtime_error("an input's data does not fit its shape");
     ggml_set_input(t);
     Upload u{t, std::vector<uint8_t>(ggml_nbytes(t))};
-    std::memcpy(u.bytes.data(), data.data(), u.bytes.size());
+    std::memcpy(u.bytes.data(), data, u.bytes.size());
     uploads_.push_back(std::move(u));
     return t;
 }
@@ -117,10 +121,14 @@ Graph::Upload & Graph::upload_of(const ggml_tensor * input) {
 }
 
 void Graph::set(ggml_tensor * input, const std::vector<float> & data) {
+    set(input, data.data(), data.size());
+}
+
+void Graph::set(ggml_tensor * input, const float * data, size_t count) {
     Upload & u = upload_of(input);
-    if ((int64_t) data.size() != ggml_nelements(input)) throw std::runtime_error("an input's data does not fit its shape");
-    if (input->type == GGML_TYPE_F16) ggml_fp32_to_fp16_row(data.data(), reinterpret_cast<ggml_fp16_t *>(u.bytes.data()), ggml_nelements(input));
-    else if (input->type == GGML_TYPE_F32) std::memcpy(u.bytes.data(), data.data(), u.bytes.size());
+    if ((int64_t) count != ggml_nelements(input)) throw std::runtime_error("an input's data does not fit its shape");
+    if (input->type == GGML_TYPE_F16) ggml_fp32_to_fp16_row(data, reinterpret_cast<ggml_fp16_t *>(u.bytes.data()), ggml_nelements(input));
+    else if (input->type == GGML_TYPE_F32) std::memcpy(u.bytes.data(), data, u.bytes.size());
     else throw std::logic_error("float data was given to an input of another type");
 }
 
