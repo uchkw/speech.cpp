@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <limits>
 #include <map>
 
@@ -15,6 +16,17 @@ namespace fastconformer {
  */
 
 namespace {
+
+int position_cache_mib(const ModelFile & model) {
+    const char * value = std::getenv("SPEECH_HAAS_POSITION_CACHE");
+    const std::string setting = value ? value : "0";
+    if (setting != "0" && setting != "1") {
+        throw Error(Fault::InvalidArgument, "SPEECH_HAAS_POSITION_CACHE must be 0 or 1");
+    }
+    return setting == "1" && model.str("general.name") == "Haas-ja-v1.0" &&
+        model.str("fastconformer.decoder.prediction") == "kda" &&
+        model.str("fastconformer.encoder.attention") == "rel_pos" ? 72 : 32;
+}
 
 /**
  * The depthwise convolution of `x` [channels, width, height] by `kernel` [kw, kh, 1, channels], [channels, width',
@@ -58,6 +70,9 @@ struct Encoder::Positions {
 Encoder::~Encoder() = default;
 
 Encoder::Encoder(const ModelFile & m, ggml_backend_t backend)
+    : Encoder(m, backend, position_cache_mib(m)) {}
+
+Encoder::Encoder(const ModelFile & m, ggml_backend_t backend, int position_cache_mib)
     : backend_(backend), m_(m),
       mels_((int) m.u32("fastconformer.frontend.n_mels")),
       d_model_((int) m.u32("fastconformer.encoder.d_model")),
@@ -75,11 +90,15 @@ Encoder::Encoder(const ModelFile & m, ggml_backend_t backend)
         global_tokens_ = (int) m.u32("fastconformer.encoder.global_tokens");
     }
     // Global attention can reuse the same central positions across input lengths. Bound the retained projections
-    // to 32 MiB; longer inputs compute their positions in the utterance graph. Local attention has a fixed span.
-    const int64_t rows = 32 * 1024 * 1024 / ((int64_t) layers_ * d_model_ * (int64_t) sizeof(float));
+    // to the experiment's budget; longer inputs compute positions in the utterance graph. Local attention has a fixed span.
+    const int64_t rows = (int64_t) position_cache_mib * 1024 * 1024 / ((int64_t) layers_ * d_model_ * (int64_t) sizeof(float));
     cached_span_ = local_ ? context_ : rows > 0 ? (rows - 1) / 2 : -1;
     sub_layers_ = 0;
     for (uint32_t f = m.u32("fastconformer.encoder.subsampling_factor"); f > 1; f /= 2) sub_layers_++;
+}
+
+size_t Encoder::position_cache_bytes() const {
+    return positions_ ? ggml_backend_buffer_get_size(positions_->buffer.get()) : 0;
 }
 
 int64_t Encoder::subsampled_frames(int64_t frames) const {
@@ -180,7 +199,8 @@ Encoder::AttentionInputs Encoder::attention_inputs(Graph & g, int64_t t) const {
  * is then element T - 1 - i + j of row i of (q + v) p^T, which never reaches the zero column: element
  * i (2T - 2) + j + T - 1 of [T, 2T - 1], a view whose rows step by 2T - 2.
  */
-ggml_tensor * Encoder::attention(Graph & g, ggml_tensor * x, const AttentionInputs & in, const std::string & name) const {
+ggml_tensor * Encoder::attention(Graph & g, ggml_tensor * x, const AttentionInputs & in, const std::string & name,
+                                EncoderStages * stages) const {
     ggml_context * ctx = g.ctx();
     const int64_t t = x->ne[1], dk = d_model_ / heads_;
     ggml_tensor * h = layer_norm(ctx, x, name + "_norm");
@@ -199,6 +219,7 @@ ggml_tensor * Encoder::attention(Graph & g, ggml_tensor * x, const AttentionInpu
         projected = ggml_view_2d(ctx, projected, d_model_, 2 * t - 1, projected->nb[1],
                                  (size_t) (cached_span_ - (t - 1)) * projected->nb[1]);
     }
+    if (stages) stages->positions.push_back(projected);
     ggml_tensor * p = heads(projected, 2 * t - 1);
     ggml_tensor * qu = heads(ggml_add(ctx, q, m_.tensor(name + "_pos_bias_u")), t);
     ggml_tensor * qv = heads(ggml_add(ctx, q, m_.tensor(name + "_pos_bias_v")), t);
@@ -326,7 +347,7 @@ ggml_tensor * Encoder::build(Graph & g, const std::vector<float> & features, int
     for (int l = 0; l < layers_; l++) {
         const std::string p = "blk." + std::to_string(l) + ".";
         x = feed_forward(ctx, x, p + "ff1");
-        x = attention(g, x, in, p + "attn");
+        x = attention(g, x, in, p + "attn", stages);
         x = convolution(g, x, p + "conv");
         x = feed_forward(ctx, x, p + "ff2");
         x = layer_norm(ctx, x, p + "out_norm");

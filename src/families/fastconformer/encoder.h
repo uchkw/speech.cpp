@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -16,6 +17,8 @@ struct EncoderStages {
     ggml_tensor * subsampled = nullptr;
     /** The output of each conformer layer, [d_model, frames / factor] each. */
     std::vector<ggml_tensor *> layers;
+    /** The global attention's actual projected positions, cached views or utterance-graph products. */
+    std::vector<ggml_tensor *> positions;
 };
 
 /**
@@ -34,6 +37,8 @@ struct EncoderStages {
 class Encoder {
 public:
     Encoder(const ModelFile & m, ggml_backend_t backend);
+    /** An explicit global-position budget for the experiment's checks; zero keeps positions in each utterance graph. */
+    Encoder(const ModelFile & m, ggml_backend_t backend, int position_cache_mib);
     ~Encoder();
 
     /** The encoder's output for `features` ([frames, mels] row-major), [d_model, subsampled_frames(frames)]. */
@@ -44,6 +49,9 @@ public:
 
     int d_model() const { return d_model_; }
     int subsampling_factor() const { return 1 << sub_layers_; }
+    int64_t cached_position_span() const { return cached_span_; }
+    /** The retained backend allocation, zero before the first cache-eligible request. */
+    size_t position_cache_bytes() const;
 
 private:
     ggml_tensor * linear(ggml_context * ctx, ggml_tensor * x, const std::string & name, bool bias) const;
@@ -56,7 +64,8 @@ private:
         ggml_tensor * mask;
     };
     AttentionInputs attention_inputs(Graph & g, int64_t t) const;
-    ggml_tensor * attention(Graph & g, ggml_tensor * x, const AttentionInputs & in, const std::string & name) const;
+    ggml_tensor * attention(Graph & g, ggml_tensor * x, const AttentionInputs & in, const std::string & name,
+                            EncoderStages * stages) const;
     ggml_tensor * local_attention(Graph & g, ggml_tensor * q, ggml_tensor * k, ggml_tensor * v, const AttentionInputs & in,
                                   const std::string & name) const;
     ggml_tensor * convolution(Graph & g, ggml_tensor * x, const std::string & name) const;
