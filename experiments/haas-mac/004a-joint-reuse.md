@@ -34,5 +34,43 @@ memory separately. All types use the modified decoder when enabled, including
 native F16 under the campaign's explicit CPU decode option. F16 is therefore
 not an unchanged-path control for this measure.
 
-Status: source preparation only. No build, check or performance result is
-claimed by this document.
+## Evaluation on November 7, 2026
+
+The prototype is rejected at the screen stage. The M2 Ultra worker comparison
+uses Python 3.9.6, four CPU decoder threads and nine inputs in three alternating
+rounds against the fixed campaign anchor. Median paired request reductions are
+1.57% for Q4_K, 0.18% for Q8_0 and 4.08% for F16. All 81 latency texts and 27
+timestamped public outputs match exactly. Q4_K request ratios by round are
+0.98395, 0.99818 and 0.92974; a stable reduction is not established.
+
+The supplementary stage comparison uses three inputs in three alternating
+fresh-process rounds, with three warm observations per input. Q4_K decoder
+totals have candidate/baseline ratios 0.98337, 0.95680 and 1.00416; core ratios
+are 1.00396, 0.99572 and 1.00639. Its 7.98-second input's decoder improves by
+8-13% in each round, but this local result does not generalize to all inputs or
+request latency. Q8_0 decoder ratios are 0.89479, 1.02086 and 1.13170; F16
+ratios are 0.85047, 1.18136 and 0.70671. These sign changes do not establish a
+consistent gain. All 81 paired stage text/token-count/graph-count observations
+match. No 30-input latency or 650-input quality extension is performed.
+
+The measured clean source is `47a3699d54e6776f88880fe4281e2afa4fd561a0`.
+All nine differential conditions pass: synthetic F32 on CPU with one and four
+threads and on Metal with four threads, and Q4_K/Q8_0/F16 on CPU and Metal with
+four threads. Every condition compares 128 joint logits bit for bit. Each
+synthetic case passes 307 assertions; each model/device case passes 284. The
+controlled cancellation occurs after the reused graph has run, and the next
+request starts clean. The synthetic prediction and logits remain sensitive to
+different histories with the same final label and frame.
+
+The build, check and screen manifests, logs, load/first-request/peak-memory
+measurements and source snapshots are retained under external `004a/` and
+`builds/004a-joint-reuse-reviewed/` campaign artifacts. The earlier build at
+`0be4200` is not used for inference measurements. Official Haas stage and
+Windows Vulkan validation remain unavailable.
+
+`stage-pairs.py` is the exact supplementary stage driver used for this trial.
+It takes `--run` with the screen's `run.json`, `--assets` with the matching
+`assets.json`, and `--out` with a new directory. Run it with `/usr/bin/python3`;
+it checks Python, binary, model and audio identities and holds the shared lock
+separately for each process. This evaluation changes no inference source after
+the measured checkpoint and makes no adoption claim.
