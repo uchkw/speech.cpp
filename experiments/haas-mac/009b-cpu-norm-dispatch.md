@@ -7,9 +7,7 @@ other trial runtime, or other ggml optimization is included.
 
 ## Status and original control
 
-This checkpoint is source only. No build, check executable, inference, timing, model hash or Python driver has been
-run. Source inspection and `git diff --check` are the only validation so far. The campaign compute lease belongs
-to trial 010. Neither repository has been pushed by the owner of this trial.
+This experiment has been evaluated and is not adopted. The supplied aggregate verdict for measure `009b` is `rejected`: The screen does not establish a stable speed gain across weight types or an improvement over the fixed anchor. No full run is claimed by this renderer. The supplied figures and limitations are summarized in the Evaluation section below.
 
 The cases-only ggml commit is `4bbef873bb6fb0e741244bb5804abf1c742c3198`, on `codex/haas-009b-cases`. It keeps
 the original e1a9 runtime and adds the same direct operation cases that the candidate runs. The parent cases-only
@@ -93,4 +91,21 @@ public quality equality. Keep `TRACE=0` for all timings. Full evaluation depends
 
 Official changed-stage KDA/prediction F32 reference checks and Windows Vulkan have not run. This statement does
 not claim that frontend, encoder or `joint.enc` references are absent. No production adoption or permanent fork
-policy is settled by this source-only prototype, and the trial branch is not a production merge candidate.
+policy is settled by this experimental prototype, and the trial branch is not a production merge candidate.
+
+## Evaluation
+
+Rendered from the supplied aggregate record for measure `009b` (candidate `711ac954089593d00c1d9bc67c44107dbf09c3e0`, ggml `21027944523aabaac5e15b44a8adaeeb28857ff0`, runner `a7e227c2b9067ee0b73a4582acf2e453cff5f179`). Verdict: `rejected`: The screen does not establish a stable speed gain across weight types or an improvement over the fixed anchor. The experiment is evaluated and not adopted. No full run is claimed by this renderer.
+
+- q4_k: paired reduction 1.1533393879562315% (positive means faster; not the p50 change), anchor reduction -0.19047523552342405%, p50 80.11516699999999 to 81.19245900000016 ms, p90 127.25075839999982 to 127.66650800000012 ms, p99 150.30698863999982 to 149.1339380000001 ms, RTFx 170.64062994674293 to 172.01648123811432, load 148.14520899999997 to 152.065542 ms, first request 170.25124999999997 to 170.6415 ms, peak memory 451675192 to 445154336 bytes, per-round reductions: 0.03563510738127107%, 0.9628973472990188%, 0.8573883514313763%.
+- q8_0: paired reduction -0.4233468151032538% (positive means faster; not the p50 change), anchor reduction -0.4069787707462469%, p50 75.44762500000002 to 76.88195799999997 ms, p90 124.20499159999996 to 124.71517540000013 ms, p99 144.21061135999997 to 144.74920564000004 ms, RTFx 178.94743886710387 to 178.0318577353308, load 189.50958300000005 to 193.47470799999994 ms, first request 167.94179200000002 to 164.81933300000006 ms, peak memory 756319504 to 764069184 bytes, per-round reductions: -0.962282861794761%, -0.528585639018786%, -0.33317864949993226%.
+- f16: paired reduction 1.4578677570260101% (positive means faster; not the p50 change), anchor reduction -0.12555843493808894%, p50 75.49820900000003 to 76.30508399999991 ms, p90 126.06360800000007 to 123.18198320000002 ms, p99 147.09129799999994 to 141.31737272000024 ms, RTFx 177.63077203824625 to 179.96954226765706, load 285.4621669999999 to 294.38400000000007 ms, first request 165.44691700000013 to 164.29350000000008 ms, peak memory 1338836720 to 1346602736 bytes, per-round reductions: -0.9125471243011107%, -0.24572602811940847%, 2.3096570891024126%.
+
+Limitations:
+- No stable gain common to all three weight types was established. Q4_K has a small positive paired signal; Q8_0 is slower in every round; F16 changes sign across rounds. Full evaluation was not run after the screen rejection.
+- No improvement over the fixed anchor was established. Anchor build uses implicit SDK selection while the new matched original/candidate builds use explicit SDKROOT; this limits the independent anchor comparison, not the primary same-binary off/on comparison.
+- The p99 of nine duration-stratified inputs is not a production-tail estimate. Fresh-process load and first-request times do not reset filesystem or Metal caches.
+- Official F32 references for the changed KDA/prediction path and Windows Vulkan execution remain unverified. Existing frontend/encoder reference tensors are not evidence for the changed decoder operations.
+- CPU4 is the explicit M2 Ultra campaign condition. Automatic thread defaults and other devices are separate experiments.
+- The original restricted Metal attempt and its skipped cases remain in raw evidence and are excluded from valid coverage. One direct strided-input case remains unsupported even in the authorized Metal runs.
+- This result concerns the small CPU NORM/MUL/ADD dispatcher variant 009b. It does not alter the rejected 009a projection variant or prove every possible small-operation optimization ineffective.
