@@ -125,7 +125,7 @@ another one.
   library and `libspeech` never include either. `speech` has the library and ggml linked in statically, so that a release is
   one executable beside the shared library `libspeech`, which exports the C API and nothing else, for bindings and
   other programs.
-- The submodule is the branch `speech.cpp` of github.com/nyosegawa/ggml: an upstream tag of ggml-org/ggml, a commit of
+- The submodule is the branch `speech.cpp` of github.com/uchkw/ggml: an upstream tag of ggml-org/ggml, a commit of
   `test-backend-ops` cases, one commit for each defect of the tag that speech.cpp's models meet, which its cases
   show, and one commit for each speed-up of speech.cpp's models that the tag lacks, with cases that show it correct
   and its effect measured on Metal and on Vulkan. A defect of ggml is fixed there, with its cases, rather than avoided
@@ -265,3 +265,26 @@ holds steps these rules do not repeat.
   README's screenshots of the page, the tag and checking the release.
 - `speed-up`: making a model faster or smaller in memory, measuring the gain and checking the output.
 - `windows-check`: checking a change on a Windows machine with a Vulkan GPU.
+
+## Fork optimization workflow
+
+- `origin` is `uchkw/speech.cpp`; `upstream` is `nyosegawa/speech.cpp`. The ggml submodule follows
+  `uchkw/ggml`, with `nyosegawa/ggml` as its upstream. Keep the pinned submodule commit when changing remotes.
+- The Haas Mac campaign targets the latency of individual utterances lasting a few seconds to 30 seconds.
+  Compare each implementation with the same model file, request options and build flags. A request that explicitly
+  selects a weight type keeps that type. Higher weight precision alone is not evidence of better recognition.
+- `experiments/haas-mac/` is the narrow exception to the whole-request measurement boundary above: it reproduces this
+  fork's per-measure comparisons and renders their evidence. General benchmarking, model evaluation across runtimes,
+  and comparisons unrelated to this campaign remain in speech-bench.
+- Keep one implementation and its evaluation independently reviewable. An implementation commit and a separate
+  report commit may identify the exact source that was measured. Never amend a measured commit or combine unrelated
+  measures into one implementation commit.
+- Keep compact result JSON and standalone HTML reports in `reports/haas-mac/`. The JSON is the source for the HTML.
+  Keep models, audio, reference tensors, builds, raw predictions and logs under ignored `outputs/` directories.
+- Keep rejected and inconclusive implementations on experiment branches, with their results and reasons recorded.
+  An adopted change is implemented without experiment switches and measured again. Measure cumulative gains against
+  a fixed anchor directly; do not add or multiply the gains of individual experiments.
+- A report names the source and submodule commits, binary hashes, inputs, options, machine, build flags, warm-up,
+  rounds, quality criteria, memory, latency, checks and adoption decision. An unavailable check is unverified, and a
+  refused or skipped check is not a pass. The validation requirements above apply unless the maintainer explicitly
+  changes the campaign's scope.

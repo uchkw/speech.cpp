@@ -5,11 +5,14 @@ description: Add a fix or a speed-up to the ggml fork speech.cpp builds (the bra
 
 # Changing the ggml fork
 
-speech.cpp builds ggml from a submodule pinned by commit on the branch `speech.cpp` of github.com/nyosegawa/ggml: an
+speech.cpp builds ggml from a submodule pinned by commit on the branch `speech.cpp` of github.com/uchkw/ggml: an
 upstream release tag, one commit of `test-backend-ops` cases, then one commit for each fix and one for each speed-up,
 and nothing else. A defect of ggml is fixed there with cases that show it, rather than avoided in speech.cpp. The
 decision record about the fork in `docs/adr/` lists each commit with what shows it and when it is dropped; read it
 first.
+
+The fork's upstream is github.com/nyosegawa/ggml. Push campaign branches only to `uchkw/ggml`; do not push them to the
+upstream repository. The parent repository is `uchkw/speech.cpp`.
 
 ## 1. The branch
 
