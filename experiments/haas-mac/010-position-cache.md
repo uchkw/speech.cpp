@@ -1,9 +1,11 @@
 # Extend the Haas position projection cache
 
-This is an unmeasured prototype on `codex/exp-haas-010`, based on
+This prototype on `codex/exp-haas-010` is based on
 `114c514430c8aa1455c077819f8e72e674a48b75` with ggml
 `e1a9ac12edbb57402618fd6936598603f5ee6266`. It contains no other campaign runtime change.
-The source checkpoint has not been compiled or executed. It is not an adoption decision.
+Source checkpoint `b47696771ff816224701e8942a81aeeda64a4fd4` was evaluated without runtime changes.
+The separate `010-position-cache-evaluation.md` records the completed checks and measurements. Q4 is a conditional
+candidate for longer inputs; this prototype changes no production default or measurement baseline.
 
 ## Change and size
 
@@ -109,10 +111,10 @@ lock, for example:
 ```
 
 The `.npy` inputs are finite mono float32 samples at the model's sample rate. Preserve their hashes and source PCM
-identity. An official F32 stage check still requires the pinned official dumps and matching F32 model. They are
-unavailable at this checkpoint, as is Windows Vulkan. Differential Q4_K/Q8_0/F16 checks do not replace them.
+identity. An official F32 stage check requires the pinned official dumps and matching F32 model. The completed
+evaluation uses those separately from the differential Q4_K/Q8_0/F16 checks. Windows Vulkan remains unverified.
 
-## Planned evaluation
+## Evaluation protocol
 
 Build from the clean checkpoint with the campaign helper, `/usr/bin/python3`, Release/native/Metal and four compile
 jobs under the shared lock. Freeze the current common runner independently from this prototype's source identity.
@@ -126,5 +128,5 @@ unchanged runtime control. Every disabled-switch result must be checked against 
 
 Only a reproducible request-level gain justifies 30 inputs over three rounds, the 650-input quality check and short
 inputs. A speed result from this prototype is not an adopted implementation. Any later implementation without a
-switch needs a fresh build and evaluation. This checkpoint records source preparation only; no build, check,
-benchmark, official-reference result, Vulkan result or performance claim is available yet.
+switch needs a fresh build and evaluation. The evaluation record preserves the original screen, independent repeat,
+full comparison and short supplement separately, including regressions and startup costs.
