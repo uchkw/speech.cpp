@@ -16,8 +16,11 @@ the original e1a9 runtime and adds the same direct operation cases that the cand
 branch, `codex/exp-haas-009b-cases`, adds the dedicated check and pins that ggml commit. It is the original runtime
 control for the three-way comparison, rather than a candidate whose switch is merely off.
 
-The candidate parent branch will pin the dispatcher commit after this cases-only checkpoint. Runtime support is
-not present in the cases-only branch, so its feature and trace environment variables have no runtime effect.
+That parent cases-only commit is `3f3655a05ccc14838f2832f549401ba3ef9779ac`. The candidate parent branch pins
+ggml `21027944523aabaac5e15b44a8adaeeb28857ff0`, on `codex/haas-009b-norm-dispatch`, whose only runtime change is
+47 added lines in the CPU dispatcher. Runtime support is not present in the cases-only branch, so its feature
+and trace environment variables have no runtime effect. Check sources are identical in the original and candidate
+parent commits.
 
 ## Candidate boundary
 
