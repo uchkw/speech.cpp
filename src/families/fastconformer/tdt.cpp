@@ -1,5 +1,7 @@
 #include "tdt.h"
 
+#include <cstdlib>
+#include <cstring>
 #include <memory>
 #include <stdexcept>
 
@@ -12,6 +14,13 @@ namespace {
 
 using Allocator = std::unique_ptr<ggml_gallocr, decltype(&ggml_gallocr_free)>;
 
+bool joint_reuse_requested() {
+    const char * value = std::getenv("SPEECH_HAAS_TDT_JOINT_REUSE");
+    if (!value || std::strcmp(value, "0") == 0) return false;
+    if (std::strcmp(value, "1") == 0) return true;
+    throw std::runtime_error("SPEECH_HAAS_TDT_JOINT_REUSE must be 0 or 1");
+}
+
 Allocator new_allocator(ggml_backend_t backend) {
     Allocator a(ggml_gallocr_new(ggml_backend_get_default_buffer_type(backend)), &ggml_gallocr_free);
     if (!a) throw Error(Fault::OutOfMemory, "cannot create a graph allocator");
@@ -21,11 +30,15 @@ Allocator new_allocator(ggml_backend_t backend) {
 }  // namespace
 
 TdtDecoder::TdtDecoder(const ModelFile & m, const PredictionNetwork & prediction, const Joint & joint)
+    : TdtDecoder(m, prediction, joint, joint_reuse_requested()) {}
+
+TdtDecoder::TdtDecoder(const ModelFile & m, const PredictionNetwork & prediction, const Joint & joint, bool reuse_joint)
     : prediction_(prediction),
       joint_(joint),
       blank_((int) m.u32("fastconformer.decoder.blank_id")),
       durations_(m.i32_array("fastconformer.decoder.tdt.durations")),
-      max_symbols_(m.u32("fastconformer.decoder.tdt.max_symbols")) {}
+      max_symbols_(m.u32("fastconformer.decoder.tdt.max_symbols")),
+      reuse_joint_(reuse_joint) {}
 
 Decoding TdtDecoder::decode(const std::vector<float> & projected, ggml_backend_t backend, const DecodingProgress & progress) const {
     return run(projected, backend, progress, nullptr);
@@ -47,7 +60,9 @@ Decoding TdtDecoder::run(const std::vector<float> & projected, ggml_backend_t ba
     // The step's graph and the joint's alone keep an allocator each, so that neither is planned again when the
     // other runs.
     DecoderStep step(prediction_, joint_, backend, 1);
-    const Allocator joint_allocator = new_allocator(backend);
+    Allocator joint_allocator(nullptr, ggml_gallocr_free);
+    if (!reuse_joint_) joint_allocator = new_allocator(backend);
+    std::unique_ptr<JointStep> blank_step;
 
     // The tree's bonus of each token from its state, which the tokens emitted so far reached, and the state each leads to.
     std::vector<float> bonus, boosted((size_t) blank_);
@@ -92,12 +107,18 @@ Decoding TdtDecoder::run(const std::vector<float> & projected, ggml_backend_t ba
             label_frame = t;
             t += duration;
             if (label != blank_ || t >= frames) break;
-            Graph j(64);
-            ggml_tensor * next = joint_.build(j.ctx(), j.input(frame(t), hidden), j.input(prediction, hidden));
-            j.output(next);
-            j.compute(backend, joint_allocator.get());
+            if (reuse_joint_) {
+                if (!blank_step) blank_step = std::make_unique<JointStep>(joint_, backend);
+                blank_step->compute(frame(t), prediction);
+                out = blank_step->logits();
+            } else {
+                Graph j(64);
+                ggml_tensor * next = joint_.build(j.ctx(), j.input(frame(t), hidden), j.input(prediction, hidden));
+                j.output(next);
+                j.compute(backend, joint_allocator.get());
+                out = Graph::read(next);
+            }
             d.graphs++;
-            out = Graph::read(next);
         }
         if (label == blank_) break;
         d.ids.push_back(label);

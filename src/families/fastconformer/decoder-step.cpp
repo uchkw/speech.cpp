@@ -29,4 +29,23 @@ void DecoderStep::compute(int32_t label, const PredictionState & state, const st
     }
 }
 
+JointStep::JointStep(const Joint & joint, ggml_backend_t backend)
+    : backend_(backend), allocator_(ggml_gallocr_new(ggml_backend_get_default_buffer_type(backend)), ggml_gallocr_free) {
+    if (!allocator_) throw Error(Fault::OutOfMemory, "cannot create a graph allocator");
+    frame_ = graph_.input(std::vector<float>((size_t) joint.hidden()), joint.hidden());
+    prediction_ = graph_.input(std::vector<float>((size_t) joint.hidden()), joint.hidden());
+    logits_ = joint.build(graph_.ctx(), frame_, prediction_);
+    graph_.output(logits_);
+}
+
+void JointStep::compute(const std::vector<float> & frame, const std::vector<float> & prediction) {
+    graph_.set(frame_, frame);
+    graph_.set(prediction_, prediction);
+    if (allocated_) graph_.compute_again(backend_);
+    else {
+        graph_.compute(backend_, allocator_.get());
+        allocated_ = true;
+    }
+}
+
 }  // namespace fastconformer
