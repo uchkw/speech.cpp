@@ -9,6 +9,10 @@ It does not establish correctness or a speed-up and is not part of the adopted r
 - ggml base: `e1a9ac12edbb57402618fd6936598603f5ee6266`.
 - Cases first: `d26db9300e9e0790ecd5cdb13f35f66611e34c56`.
 - Kernel prototype: `5b8aac4feaf70b8acd45df6a8b92538ae878127d`.
+- Check correction: `85e2b88f847fd46bf05b06fabdaaea139ccb7db9`.
+- Allocation-dependency correction: `0984bab5fc2e38e284a289d481576db3d76d80f4`.
+- Independent original kernel with corrected checks: `72a0c44f16914cba1f73d50096d968edf0a6752d`, on
+  `codex/haas-mac-006a-original-cases`, from the case-only commit plus the test-only correction.
 - Parent branch: `codex/exp-haas-006a`; ggml branch: `codex/haas-mac-006a-silu`.
 - Both remotes belong to `uchkw`; the coordinator alone pushes them, ggml first.
 
@@ -27,24 +31,38 @@ the tensor API is not selected. The M5 tensor shader is unchanged and unmeasured
 other matrix dimensions, batched or strided inputs, other types and other unary operations retain their paths.
 Products marked as outputs or read by another consumer cannot be elided. A full match also rejects an output
 that overlaps either external matrix operand. The generic fusion dependency and memory checks still apply.
+This new pattern adds no allocation dependencies: the raw-pattern dependency pass skips it, so disabled experiments,
+unrelated shapes or unary operations and M5 keep their original input lifetimes. Graph optimization unpacks every
+temporarily grouped node after reordering. If allocation then makes an output overlap an input, the full matcher
+rejects fusion and the encoder runs the original product and unary nodes separately.
 
 The adopted fork's decision table remains unchanged: this branch is an experiment, not a measured addition to the
 fork's `speech.cpp` branch. No earlier tile, prepacking, resident-state, graph or QKV trial is included.
 
 ## Checks prepared
 
-The shared case table has 86 cases: 51 eligible cases and 35 controls. Eligible cases cover all three types with
+The shared case table has 89 cases: 51 eligible cases and 38 controls. Eligible cases cover all three types with
 N=17,31,32,33,38,63,64,65,75,125,171,172,250,375, offset contiguous views, an in-place SiLU and a following consumer.
 Controls cover a second consumer of the product, a protected product output, strided and transposed activations,
-batches, ReLU, N=1,8,16, M=4095, K=1280 and F32/BF16 weights.
+batches, ReLU, N=1,8,16, M=4095, K=1280 and F32/BF16 weights. Three more controls place the unary output over an
+expanded activation-input allocation: the separate operations can safely reuse it after the product finishes,
+whereas the fused product must reject that placement after graph optimization.
 
 `test-backend-ops -o MUL_MAT_SILU -b MTL0` compares the complete graph with the CPU using the existing
 matrix-product NMSE bound, with the switch explicitly set to each value. It does not compare with official model
 dumps. `test-metal-mm-silu` uses deterministic stored weights and activations, runs the same buffers with generic
 Metal fusion disabled and enabled, and requires finite outputs, bitwise equality and the exact `MUL_MAT+UNARY`
-fusion count. It also checks the protected product itself. Use `GGML_METAL_MM_SILU=0 test-metal-mm-silu 0`, then
-`GGML_METAL_MM_SILU=1 test-metal-mm-silu 1` on this M2 Ultra. The case-only commit expects zero fusions and provides
-an independent original-kernel comparison through the emitted input/output hashes. M5 expects zero, not one.
+fusion count. It poisons product, activation and final-output storage with NaN before each execution, rejecting
+unexpected overlap with either source input and allowing output-only aliases. The explicit input-alias control
+restores the same active input prefix each time, preserves it during poisoning and poisons the remaining output.
+Two four-value buffer-write guards emulate a wrong destination and a missing final store: they require the stale
+output to hide the defect without poisoning and a non-finite result to expose it with poisoning. These guards do
+not dispatch a GPU kernel. The helper calls the real Metal graph optimizer before allocation and requires zero
+added allocation dependencies for these graphs. It also checks the protected product itself for finite, identical
+values. Use `GGML_METAL_MM_SILU=0 test-metal-mm-silu 0`, then
+`GGML_METAL_MM_SILU=1 test-metal-mm-silu 1` on this M2 Ultra. The independent original-kernel branch has identical
+check files and expects zero fusions; compare its emitted input/output hashes with the candidate's disabled and
+enabled runs. M5 expects zero, not one.
 
 The direct helper is a correctness check, not a performance benchmark. Repeating the same pair of graph pointers
 would give the product extra uses and reject fusion; that construction cannot measure this epilogue. Product timings
