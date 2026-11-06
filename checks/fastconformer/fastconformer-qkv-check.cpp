@@ -1,6 +1,7 @@
 // Checks the encoder's QKV packing against its separate projections: source bytes, the actual graph and head
 // strides, then exact F32 activation bits at projection, attention, layer and encoder outputs over boundary lengths.
-// CPU, F16 and mixed-type controls retain separate projections. These paired inputs are not official reference dumps.
+// Excluded models and backends check the separate-projection graph only. Numerical comparisons cover packing on
+// Metal with Q4_K or Q8_0 weights, using mixed-type selection as the separate path. These are not official dumps.
 //
 // usage: fastconformer-qkv-check <model.gguf> [gpu|cpu|device name]
 
@@ -272,6 +273,11 @@ int main(int argc, char ** argv) {
         std::printf("backend: %s, expected path: %s, F32 activations with the file's original weight types\n",
                     ggml_backend_name(backend.get()), packed ? "packed" : "separate");
         graph_contract(model, *ordinary, selected, backend.get(), packed);
+        if (!packed) {
+            std::printf("passed: separate-projection control, original weight operands, no packed products, backend support\n");
+            std::printf("numerical packing comparison: not applicable to this model and backend\n");
+            return 0;
+        }
         std::unique_ptr<ggml_gallocr, decltype(&ggml_gallocr_free)> allocator(
             ggml_gallocr_new(ggml_backend_get_default_buffer_type(backend.get())), ggml_gallocr_free);
         require(bool(allocator), "cannot allocate the paired encoder graphs");
