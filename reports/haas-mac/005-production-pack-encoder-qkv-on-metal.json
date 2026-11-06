@@ -1,7 +1,7 @@
 {
   "measure_id": "005-production",
   "status": "conditional",
-  "reason": "Production implementation measured, adoption pending: Q4_K and Q8_0 show median paired reductions of 1.378% and 2.398% against a fresh baseline, with all 650 quality outputs and 90 latency texts per type unchanged. Q4_K regresses in the 20–30-second stratum and aggregate p90; Q8_0 has a slower second round. Permanent weight copies increase memory. An independent latency repeat is required before adoption; no implementation is merged.",
+  "reason": "Measurements complete: retain this production implementation as a conditional adoption candidate for M2 Ultra. Median paired reductions recur in the independent block: Q4_K 1.873% and Q8_0 1.321%, with all three rounds faster on that aggregate and every latency text exact. Q4_K p90 still worsens at the same 22.62-second input; Q8_0 long-input benefit is only 0.058%. Packed copies add 40.5/76.5 MiB. No main merge, default change or other-measure baseline switch is made.",
   "scope": "full",
   "conditions": {
     "name": "Haas on Apple Silicon",
@@ -42,7 +42,10 @@
       "The separately linked official joint.enc diagnostic checks isolated F32/F16 projections from official encoded.npy. It does not execute packed QKV or establish full KDA/TDT reference equivalence.",
       "The public worker exposes text and public token/segment arrays with timestamps. Raw internal TDT IDs, frame indices and duration choices are not observed by the full quality comparison.",
       "The original prototype has separate source, checks, timing and evidence. Its historical asymmetric-check failure and correction remain on the prototype report and are not relabeled by this trial.",
-      "The planned independent latency repeat is not included here. It must retain its own 30-input, three-round block and must not be pooled with the original full or six-prefix data."
+      "The independent thirty-input repeat completes the requested follow-up. It uses the identical worker/Python/binaries/models/PCM/CPU4 conditions with AB/BA/AB ordering, without anchor, quality or stage workers. The original primary block includes the anchor and separate quality/stage phases; both block orders remain recorded.",
+      "All 90 latency texts per type match within the repeat. All 180 side/round texts per type also match their corresponding primary latency texts. The 650-input quality evaluation is not rerun and no repeat CER is computed.",
+      "Q4_K repeat p90 rises by 2.202 ms. The 22.62-second recording occupies the lower interpolation neighbor on both sides, contributing +2.695 ms; the upper neighbor contributes -0.493 ms. This identifies the observed percentile inputs, not a runtime cause.",
+      "No further identical repeat is required for this decision. Retain the conditional candidate for a separate combination evaluation after larger host-overhead changes such as measure 023; do not change other baselines or add gains across experiments."
     ],
     "thread_setting_note": "Four CPU threads are an explicit tuned campaign setting, not the runtime default. Unspecified threads (threads=0) use performance cores: 16 on this M2 Ultra. Code gains compare the tuned anchor and do not include the preliminary thread-tuning gain; measure 021 evaluates automatic versus four threads separately.",
     "hardware": {
@@ -929,7 +932,22 @@
     },
     "review_log_sha256": "41a8dc19a372023bc4321e8438036ed4682779ba1a50d5cc5da30ff2eef73dce",
     "toolchain_direction_audit_path": "report-imports/005-production/toolchain-direction-audit.json",
-    "toolchain_direction_audit_sha256": "e08fce2707de35f1f9af310bd44d29d6ae776b1c18187835193734b430a82254"
+    "toolchain_direction_audit_sha256": "e08fce2707de35f1f9af310bd44d29d6ae776b1c18187835193734b430a82254",
+    "latency_repeat": {
+      "directory": "005-production-latency-repeat",
+      "checkpoint_summary_sha256": "6eebc2798790d7a6142736823351c0e4acf68e1c12359546fd1ddeb81abca669",
+      "evidence_manifest_sha256": "9f10fd2acb25487d7181ca808bf13a6ebe6f747e971aed7918039914fc6cb75f",
+      "adoption_status_sha256": "5dd89282ad7e086b6498e6650b172fdc1edf11b273a93bc6580c40e456794e1f",
+      "summary_sha256": "147ee6c95f558506f305f4e02a8aa442b42ea6121945c88d19a069dbcbb41fa2",
+      "q4_tail_analysis_sha256": "9b8f86910777ee76d7e1efe1ff638021099bfadb41ad39e57f2d879347ac8364",
+      "independent_manifest_path": "report-imports/005-production-latency-repeat/independent-evidence-sha256.json",
+      "independent_manifest_sha256": "7c3cab03d2f22ea24ed44703cbc1ec42514c3b0dba5e67c03650b18f0b4cfe73",
+      "independent_manifest_files": 60,
+      "measurement_audit_path": "report-imports/005-production-latency-repeat/measurement-audit.json",
+      "measurement_audit_sha256": "d0c06c261efe5b940c32d7c94841bfb6d5888e4f462cb67b15297e97e443241d",
+      "audit_source_sha256": "1c6ae99c73371d76f3acfc1754e4d7a6b31ee242e068e3af36c9ab1fa7d8975b",
+      "import_source_sha256": "658ee84466f60c93a669f134cb6ef929141aaf2cc9787fe6cc248cc6ab0eb6db"
+    }
   },
   "checks": [
     {
@@ -1006,11 +1024,11 @@
     },
     {
       "name": "Independent repeat of the original thirty latency inputs",
-      "status": "skipped",
+      "status": "passed",
       "scope": "mac",
       "required": true,
-      "evidence": "005-production/adoption-status.json",
-      "reason": "Not measured in this immutable checkpoint. Driver 09cc038 prepares a separate three-round latency-only follow-up; its later result must remain separate."
+      "evidence": "005-production-latency-repeat/summary.json",
+      "reason": "Separate thirty-input, three-round block: 90 paired latency texts per type match; 180 side/round texts per type also match the original full block. Worker, Python, binaries, models, PCM and CPU4 match. No quality rerun or pooling; the tail tradeoff remains."
     },
     {
       "name": "Windows Vulkan and other Metal devices",
@@ -1023,8 +1041,8 @@
   "schema_version": 1,
   "parent_measure_id": "005",
   "title": "Pack encoder QKV in the production Metal path",
-  "adoption_status": "pending",
-  "prior_evidence_note": "This is the switch-free production trial, separate from the historical switchable prototype on measure 005. Its full, artificial-prefix and stage observations remain separate. No latency-repeat result is included at this checkpoint.",
+  "adoption_status": "conditional_candidate",
+  "prior_evidence_note": "The main tables below retain the original production full run: Q4_K/Q8_0 1.378%/2.398% against the fresh baseline. The independent repeat is shown in separate tables and is not pooled with the full, prefix or prototype observations.",
   "updated_utc": "2026-11-06T21:41:34.808105+00:00",
   "implementation_checkpoint": {
     "runtime_source_commit": "37b71071212677bc8d67fe87373dbb43183c7367",
@@ -1039,7 +1057,10 @@
     "ggml_commit": "e1a9ac12edbb57402618fd6936598603f5ee6266",
     "prototype_switch_removed": true,
     "adopted": false,
-    "merged": false
+    "merged": false,
+    "decision_commit": "02adb0bfa9b447db612c0a02add005bf5b4d6583",
+    "repeat_evaluation_commit": "b4eb7fff33451f50def02d8c291b94cd33f7dd2c",
+    "latest_evaluation_notes_sha256": "8709bba67c53f062d413807b6574a2d2d58f409d14dd16c63506235b12fd37a1"
   },
   "paired_diagnostics": {
     "full": {
@@ -1593,15 +1614,19 @@
     "pooled_with_primary": false
   },
   "followup_latency_repeat": {
-    "status_at_this_checkpoint": "not_run",
+    "status_at_this_checkpoint": "completed",
     "driver_source_commit": "09cc038",
-    "planned_artifact_directory": "005-production-latency-repeat",
     "latency_inputs": 30,
     "rounds": 3,
     "quality_inputs": 0,
     "fixed_anchor": false,
     "same_primary_worker": true,
-    "pooling_allowed": false
+    "pooling_allowed": false,
+    "evaluation_commit": "b4eb7fff33451f50def02d8c291b94cd33f7dd2c",
+    "decision_commit": "02adb0bfa9b447db612c0a02add005bf5b4d6583",
+    "summary_sha256": "147ee6c95f558506f305f4e02a8aa442b42ea6121945c88d19a069dbcbb41fa2",
+    "further_identical_repeat_required": false,
+    "artifact_directory": "005-production-latency-repeat"
   },
   "diagnostics": [
     {
@@ -2000,10 +2025,660 @@
         ],
         [
           "Independent latency repeat",
-          "Not included at this checkpoint",
-          "Separate thirty-input follow-up; no pooling or repeated quality"
+          "Completed in a separate thirty-input / three-round block",
+          "No pooling, fixed-anchor rerun, stage rerun or repeated quality"
         ]
       ]
+    },
+    {
+      "title": "Independent repeat: latency distribution",
+      "method": "The same original thirty recordings, warmed once per fresh worker, then three AB/BA/AB rounds. No fixed anchor, quality or stage worker is run in this independent block. All percentiles below use thirty per-input medians only.",
+      "headers": [
+        "Type",
+        "Build",
+        "p50 ms",
+        "p90 ms",
+        "p99 ms",
+        "RTFx",
+        "Peak MiB"
+      ],
+      "rows": [
+        [
+          "Q4_K",
+          "baseline",
+          "78.307",
+          "122.610",
+          "146.628",
+          "174.578",
+          "430.923"
+        ],
+        [
+          "Q4_K",
+          "candidate",
+          "77.879",
+          "124.812",
+          "144.968",
+          "177.420",
+          "474.110"
+        ],
+        [
+          "Q8_0",
+          "baseline",
+          "75.349",
+          "119.370",
+          "140.141",
+          "183.037",
+          "722.923"
+        ],
+        [
+          "Q8_0",
+          "candidate",
+          "74.653",
+          "117.621",
+          "140.232",
+          "184.542",
+          "800.361"
+        ]
+      ],
+      "notes": [
+        "This block is not pooled with the primary or six-prefix supplement. Its process peak covers latency workers only; the primary peak also includes its quality workers.",
+        "No new CER is claimed. The original 650-input exact comparison remains the quality evidence."
+      ]
+    },
+    {
+      "title": "Independent repeat: paired reductions and rounds",
+      "method": "The combined value takes the median of per-input three-round ratios. Round values pair each file within that single round. Positive is faster; gains are not added to the primary results.",
+      "headers": [
+        "Type",
+        "Combined paired reduction",
+        "Faster input medians",
+        "Round 1",
+        "Round 2",
+        "Round 3",
+        "Texts changed / compared"
+      ],
+      "rows": [
+        [
+          "Q4_K",
+          "1.873%",
+          "26 / 30",
+          "2.304%",
+          "2.014%",
+          "1.788%",
+          "0 / 90"
+        ],
+        [
+          "Q8_0",
+          "1.321%",
+          "24 / 30",
+          "1.024%",
+          "1.316%",
+          "0.755%",
+          "0 / 90"
+        ]
+      ]
+    },
+    {
+      "title": "Independent repeat: duration strata",
+      "method": "Ten recordings per duration stratum, using each input's median over three rounds. The Q8_0 longest stratum is nearly unchanged.",
+      "headers": [
+        "Type",
+        "Duration",
+        "Median paired reduction",
+        "Faster / equal / slower"
+      ],
+      "rows": [
+        [
+          "Q4_K",
+          "10-20s",
+          "1.762%",
+          "9 / 0 / 1"
+        ],
+        [
+          "Q4_K",
+          "20-30s",
+          "0.918%",
+          "7 / 0 / 3"
+        ],
+        [
+          "Q4_K",
+          "6-10s",
+          "4.161%",
+          "10 / 0 / 0"
+        ],
+        [
+          "Q8_0",
+          "10-20s",
+          "1.183%",
+          "9 / 0 / 1"
+        ],
+        [
+          "Q8_0",
+          "20-30s",
+          "0.058%",
+          "5 / 0 / 5"
+        ],
+        [
+          "Q8_0",
+          "6-10s",
+          "1.733%",
+          "10 / 0 / 0"
+        ]
+      ]
+    },
+    {
+      "title": "Observed Q4_K repeat regressions",
+      "method": "Four recordings have slower per-input medians in the repeat. Primary differences are shown only as separate context, not pooled. Positive milliseconds indicate slower candidate times.",
+      "headers": [
+        "Recording",
+        "Audio seconds",
+        "Primary median delta ms",
+        "Repeat median delta ms",
+        "Repeat round deltas ms"
+      ],
+      "rows": [
+        [
+          "5233295116612017093.wav",
+          "19.74",
+          "0.921",
+          "0.236",
+          "6.249 / 0.236 / -5.769"
+        ],
+        [
+          "17808260654685775088.wav",
+          "22.62",
+          "4.368",
+          "2.995",
+          "-0.422 / 2.995 / 1.154"
+        ],
+        [
+          "16473122140572748688.wav",
+          "22.86",
+          "2.727",
+          "0.819",
+          "-0.743 / -3.070 / 1.741"
+        ],
+        [
+          "12382486935508330615.wav",
+          "26.04",
+          "-2.608",
+          "1.262",
+          "-0.738 / 1.522 / -0.219"
+        ]
+      ],
+      "notes": [
+        "The 22.62-second input worsens in both blocks and contributes most of the repeat p90 increase. This is a cohort observation, not an identified IPC or kernel mechanism.",
+        "Measured median gains and recurring tail costs support a conditional candidate rather than a claim that every request is faster."
+      ]
     }
-  ]
+  ],
+  "measurement_status": "complete",
+  "latency_repeat": {
+    "scope": "independent_30_input_latency_repeat",
+    "run_sha256": "e2dca7428a2529e15dc46ec1f7c42f2a3c7f2bff9895592ecedad36fcf7952d8",
+    "primary_run_sha256": "20b160921e906552d7c4f8bd4913ce2d2c9f0f53c509f88e4ba75abfd0aaad57",
+    "primary_summary_sha256": "88fab3e52869efd01f9037d2edb606bb15c57bd539869a04397dca5dfd8985c4",
+    "assets_sha256": "e82d03c053c861f4943907d67f28e191431f84706429b324e80368adf6808581",
+    "input_hash": "7196750a6d97b470abbcc6fc45bd3d82572473a5e778200a145fe82dbda03267",
+    "runner_sha256": {
+      "worker.py": "d388b3d480bc45a88b8cabe955526fa10811f0a2914b41a3cf8429ca7edb9be1",
+      "latency-repeat.py": "bc1ceddc8ef6d4b5d7441452e5eea1fd1f76e91b46b87cecb964deac995fef7d",
+      "compare.py": "f638e5c4914231e8957ca05513366b06cb2dfb7914922a276b5affb07e4fcc21"
+    },
+    "driver_source": {
+      "commit": "09cc03857b4af626fd537ee2be85f78c00d31135",
+      "path": "experiments/haas-mac/latency-repeat.py",
+      "sha256": "bc1ceddc8ef6d4b5d7441452e5eea1fd1f76e91b46b87cecb964deac995fef7d"
+    },
+    "conditions": {
+      "name": "Haas on Apple Silicon",
+      "repository": "https://github.com/uchkw/speech.cpp",
+      "tracking_issue": "https://github.com/uchkw/speech.cpp/issues/1",
+      "purpose": "Reduce warm latency for one Japanese voice input of a few seconds to 30 seconds while preserving recognition quality.",
+      "threads": 4,
+      "rounds": 3,
+      "decode_on_cpu": true,
+      "quality_policy": "exact",
+      "latency_count": 30,
+      "quality_count": 0,
+      "latency_definition": "Time from before sending the first PCM16 chunk through receipt of the terminal result. File reading, model loading and warmup are excluded. Each measured input is warmed once per fresh worker.",
+      "aggregation": "Median over rounds for each input, then linearly interpolated p50, p90 and p99 across the measured input medians. RTFx divides total audio duration by summed request time.",
+      "literal_cer": "Total Unicode code-point Levenshtein edits divided by total reference code points, including punctuation, symbols and whitespace.",
+      "repository_cer": "NFKC followed by removing Unicode punctuation, symbols, separators and whitespace; no case folding or alternate-spelling substitutions. Edits and reference lengths are summed before division.",
+      "quality_comparison": "The same quality files on both builds; text and public token/segment text and times are compared exactly. Text from every timestamp-disabled latency round is also compared. A changed CER is not evidence of exact output equality.",
+      "latency_timestamps": false,
+      "quality_timestamps": null,
+      "unobserved_fields": "The worker does not expose raw TDT token IDs, frame indices or duration decisions. These are not claimed to match by this harness.",
+      "limitations": [
+        "The current corpus is FLEURS Japanese test, with inputs from 6.36 to 28.2 seconds.",
+        "The p99 of a small duration-stratified sample is not a precise estimate of production tail latency.",
+        "The repository CER is not the published metric accepting alternative spellings of words.",
+        "Fresh-process load and first-request times do not reset filesystem or system Metal caches."
+      ],
+      "thread_setting_note": "Four CPU threads are an explicit tuned campaign setting, not the runtime default. Unspecified threads (threads=0) use performance cores: 16 on this M2 Ultra. Code gains compare the tuned anchor and do not include the preliminary thread-tuning gain; measure 021 evaluates automatic versus four threads separately.",
+      "hardware": {
+        "chip": "Apple M2 Ultra",
+        "cpu_cores": 24,
+        "performance_cores": 16,
+        "efficiency_cores": 8,
+        "gpu_cores": 76,
+        "memory_gb": 192,
+        "source": "system_profiler SPHardwareDataType SPDisplaysDataType"
+      },
+      "current_machine": {
+        "chip": "Apple M2 Ultra",
+        "cpu_cores": "24",
+        "memory_bytes": "206158430208",
+        "macos": "26.7.2"
+      },
+      "python": "3.9.6",
+      "python_executable": "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+      "runner_sha256": {
+        "compare.py": "f638e5c4914231e8957ca05513366b06cb2dfb7914922a276b5affb07e4fcc21",
+        "worker.py": "d388b3d480bc45a88b8cabe955526fa10811f0a2914b41a3cf8429ca7edb9be1",
+        "campaign.json": "2a03d0e925e3433b437ec908326db42e5576c585abd5da8929f4c2b24b20d840"
+      },
+      "created_utc": "2026-11-06T21:39:35.685103+00:00",
+      "order": "Per type, AB/BA/AB with no anchor, quality or stage workers between blocks; input order shifts by round * 7.",
+      "warmup": "All original 30 inputs once per fresh worker, longest first.",
+      "input_scope": "The original thirty 6-30-second recordings, not the separate six 2/4-second artificial prefixes.",
+      "accuracy_scope": "Compare every timestamp-disabled latency text; no new CER, public timestamp arrays or 650-input quality evaluation.",
+      "pooling": "This independent block is never pooled with the primary or prefix supplement.",
+      "fixed_anchor_measured": false
+    },
+    "status": "exact_text_matched",
+    "pooled_with_primary": false,
+    "types": {
+      "q4_k": {
+        "sides": {
+          "baseline": {
+            "latency": {
+              "p50_ms": 78.30681250000015,
+              "p90_ms": 122.60977889999965,
+              "p99_ms": 146.62760610999925,
+              "count": 30,
+              "rtfx": 174.57771870109582
+            },
+            "strata": {
+              "10-20s": {
+                "p50_ms": 78.30681250000015,
+                "p90_ms": 99.61739969999961,
+                "p99_ms": 106.6467149699998,
+                "count": 10,
+                "rtfx": 172.02312836762653
+              },
+              "20-30s": {
+                "p50_ms": 119.82039600000016,
+                "p90_ms": 140.27077109999934,
+                "p99_ms": 148.71181430999926,
+                "count": 10,
+                "rtfx": 186.44978721722626
+              },
+              "6-10s": {
+                "p50_ms": 57.77206250000022,
+                "p90_ms": 61.241574700000264,
+                "p99_ms": 63.25941996999997,
+                "count": 10,
+                "rtfx": 152.46476127409366
+              }
+            },
+            "rounds": [
+              {
+                "p50_ms": 78.30681250000015,
+                "p90_ms": 121.67189969999939,
+                "p99_ms": 147.20770267999947,
+                "count": 30,
+                "rtfx": 173.3036020307991
+              },
+              {
+                "p50_ms": 78.28766700000011,
+                "p90_ms": 125.63399580000026,
+                "p99_ms": 147.1636568199992,
+                "count": 30,
+                "rtfx": 174.31978390197364
+              },
+              {
+                "p50_ms": 79.48312449999983,
+                "p90_ms": 124.84984199999954,
+                "p99_ms": 146.3491162499997,
+                "count": 30,
+                "rtfx": 174.0346782184741
+              }
+            ],
+            "repeated_text_changes": 0,
+            "literal_cer": null,
+            "repository_cer": null,
+            "peak_memory_bytes": 451855344,
+            "load_ms": 139.600709,
+            "first_request_ms": 162.66054200000002
+          },
+          "candidate": {
+            "latency": {
+              "p50_ms": 77.87933350000009,
+              "p90_ms": 124.8116830000007,
+              "p99_ms": 144.96771939,
+              "count": 30,
+              "rtfx": 177.42032921996318
+            },
+            "strata": {
+              "10-20s": {
+                "p50_ms": 77.87933350000009,
+                "p90_ms": 97.94026249999982,
+                "p99_ms": 106.69140124999994,
+                "count": 10,
+                "rtfx": 174.40997850552327
+              },
+              "20-30s": {
+                "p50_ms": 119.33264600000015,
+                "p90_ms": 141.12123689999984,
+                "p99_ms": 146.22886119000006,
+                "count": 10,
+                "rtfx": 187.9526291450916
+              },
+              "6-10s": {
+                "p50_ms": 55.36666699999992,
+                "p90_ms": 59.9940329999999,
+                "p99_ms": 60.19612799999974,
+                "count": 10,
+                "rtfx": 158.2755083944879
+              }
+            },
+            "rounds": [
+              {
+                "p50_ms": 77.32141650000001,
+                "p90_ms": 121.17328359999979,
+                "p99_ms": 143.18411064000003,
+                "count": 30,
+                "rtfx": 178.666188733301
+              },
+              {
+                "p50_ms": 77.87933350000009,
+                "p90_ms": 124.80117890000066,
+                "p99_ms": 145.14393056999995,
+                "count": 30,
+                "rtfx": 176.8169218081489
+              },
+              {
+                "p50_ms": 78.52337499999985,
+                "p90_ms": 125.49225359999988,
+                "p99_ms": 144.52393500000005,
+                "count": 30,
+                "rtfx": 176.4501496730278
+              }
+            ],
+            "repeated_text_changes": 0,
+            "literal_cer": null,
+            "repository_cer": null,
+            "peak_memory_bytes": 497140864,
+            "load_ms": 144.126584,
+            "first_request_ms": 162.49124999999998
+          }
+        },
+        "comparison": {
+          "count": 30,
+          "median_latency_ratio": 0.9812723922989437,
+          "latency_reduction_percent": 1.8727607701056304,
+          "improved": 26,
+          "equal": 0,
+          "slower": 4,
+          "latency_text_comparisons": 90,
+          "text_changed": 0,
+          "rounds": [
+            {
+              "round": 0,
+              "count": 30,
+              "median_latency_ratio": 0.9769649708909673,
+              "latency_reduction_percent": 2.3035029109032656,
+              "improved": 29,
+              "equal": 0,
+              "slower": 1,
+              "text_changed": 0
+            },
+            {
+              "round": 1,
+              "count": 30,
+              "median_latency_ratio": 0.9798647829296843,
+              "latency_reduction_percent": 2.0135217070315736,
+              "improved": 24,
+              "equal": 0,
+              "slower": 6,
+              "text_changed": 0
+            },
+            {
+              "round": 2,
+              "count": 30,
+              "median_latency_ratio": 0.9821213725118934,
+              "latency_reduction_percent": 1.7878627488106646,
+              "improved": 23,
+              "equal": 0,
+              "slower": 7,
+              "text_changed": 0
+            }
+          ],
+          "strata": {
+            "10-20s": {
+              "count": 10,
+              "median_latency_ratio": 0.9823843892065134,
+              "latency_reduction_percent": 1.7615610793486614,
+              "improved": 9,
+              "equal": 0,
+              "slower": 1
+            },
+            "20-30s": {
+              "count": 10,
+              "median_latency_ratio": 0.9908166102550929,
+              "latency_reduction_percent": 0.9183389744907067,
+              "improved": 7,
+              "equal": 0,
+              "slower": 3
+            },
+            "6-10s": {
+              "count": 10,
+              "median_latency_ratio": 0.9583898070309147,
+              "latency_reduction_percent": 4.16101929690853,
+              "improved": 10,
+              "equal": 0,
+              "slower": 0
+            }
+          }
+        }
+      },
+      "q8_0": {
+        "sides": {
+          "baseline": {
+            "latency": {
+              "p50_ms": 75.34866650000005,
+              "p90_ms": 119.36980000000024,
+              "p99_ms": 140.14093139000033,
+              "count": 30,
+              "rtfx": 183.03722264249635
+            },
+            "strata": {
+              "10-20s": {
+                "p50_ms": 75.34866650000005,
+                "p90_ms": 94.2800207999995,
+                "p99_ms": 102.56345178000022,
+                "count": 10,
+                "rtfx": 179.4993690081243
+              },
+              "20-30s": {
+                "p50_ms": 114.71949999999987,
+                "p90_ms": 135.27147890000018,
+                "p99_ms": 141.73747319000034,
+                "count": 10,
+                "rtfx": 194.56072968620177
+              },
+              "6-10s": {
+                "p50_ms": 54.19693800000003,
+                "p90_ms": 57.68934939999993,
+                "p99_ms": 58.708397439999786,
+                "count": 10,
+                "rtfx": 162.62605551189336
+              }
+            },
+            "rounds": [
+              {
+                "p50_ms": 76.29472950000005,
+                "p90_ms": 120.81032079999973,
+                "p99_ms": 141.64093161000028,
+                "count": 30,
+                "rtfx": 182.7588792376898
+              },
+              {
+                "p50_ms": 75.13745800000015,
+                "p90_ms": 119.36980000000024,
+                "p99_ms": 138.73527907000016,
+                "count": 30,
+                "rtfx": 182.25546554282724
+              },
+              {
+                "p50_ms": 76.54729149999983,
+                "p90_ms": 118.27036280000006,
+                "p99_ms": 140.10448825000014,
+                "count": 30,
+                "rtfx": 182.69393337216434
+              }
+            ],
+            "repeated_text_changes": 0,
+            "literal_cer": null,
+            "repository_cer": null,
+            "peak_memory_bytes": 758039848,
+            "load_ms": 183.172875,
+            "first_request_ms": 157.450333
+          },
+          "candidate": {
+            "latency": {
+              "p50_ms": 74.65335449999988,
+              "p90_ms": 117.62093330000037,
+              "p99_ms": 140.23235532000018,
+              "count": 30,
+              "rtfx": 184.5420384350764
+            },
+            "strata": {
+              "10-20s": {
+                "p50_ms": 74.65335449999988,
+                "p90_ms": 93.36132499999991,
+                "p99_ms": 101.86997000000004,
+                "count": 10,
+                "rtfx": 181.4338356632691
+              },
+              "20-30s": {
+                "p50_ms": 115.54535399999999,
+                "p90_ms": 135.09201219999971,
+                "p99_ms": 141.9177137200003,
+                "count": 10,
+                "rtfx": 194.82607448334753
+              },
+              "6-10s": {
+                "p50_ms": 53.31347900000027,
+                "p90_ms": 56.67840869999971,
+                "p99_ms": 57.32532896999987,
+                "count": 10,
+                "rtfx": 165.87306278608455
+              }
+            },
+            "rounds": [
+              {
+                "p50_ms": 74.45929199999979,
+                "p90_ms": 131.27639200000047,
+                "p99_ms": 154.85251043000014,
+                "count": 30,
+                "rtfx": 178.41615014162952
+              },
+              {
+                "p50_ms": 74.32487500000006,
+                "p90_ms": 117.62093330000037,
+                "p99_ms": 140.23235532000018,
+                "count": 30,
+                "rtfx": 184.11461642573673
+              },
+              {
+                "p50_ms": 79.4997915000002,
+                "p90_ms": 117.41155410000054,
+                "p99_ms": 138.35687811000003,
+                "count": 30,
+                "rtfx": 180.87620885813553
+              }
+            ],
+            "repeated_text_changes": 0,
+            "literal_cer": null,
+            "repository_cer": null,
+            "peak_memory_bytes": 839239000,
+            "load_ms": 191.57695799999996,
+            "first_request_ms": 157.761292
+          }
+        },
+        "comparison": {
+          "count": 30,
+          "median_latency_ratio": 0.9867948273888325,
+          "latency_reduction_percent": 1.3205172611167493,
+          "improved": 24,
+          "equal": 0,
+          "slower": 6,
+          "latency_text_comparisons": 90,
+          "text_changed": 0,
+          "rounds": [
+            {
+              "round": 0,
+              "count": 30,
+              "median_latency_ratio": 0.9897601881314693,
+              "latency_reduction_percent": 1.0239811868530735,
+              "improved": 20,
+              "equal": 0,
+              "slower": 10,
+              "text_changed": 0
+            },
+            {
+              "round": 1,
+              "count": 30,
+              "median_latency_ratio": 0.9868422779666047,
+              "latency_reduction_percent": 1.315772203339527,
+              "improved": 21,
+              "equal": 0,
+              "slower": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 2,
+              "count": 30,
+              "median_latency_ratio": 0.992447217235744,
+              "latency_reduction_percent": 0.7552782764255972,
+              "improved": 21,
+              "equal": 0,
+              "slower": 9,
+              "text_changed": 0
+            }
+          ],
+          "strata": {
+            "10-20s": {
+              "count": 10,
+              "median_latency_ratio": 0.9881714926162022,
+              "latency_reduction_percent": 1.1828507383797815,
+              "improved": 9,
+              "equal": 0,
+              "slower": 1
+            },
+            "20-30s": {
+              "count": 10,
+              "median_latency_ratio": 0.9994189893759022,
+              "latency_reduction_percent": 0.05810106240977664,
+              "improved": 5,
+              "equal": 0,
+              "slower": 5
+            },
+            "6-10s": {
+              "count": 10,
+              "median_latency_ratio": 0.9826702171368414,
+              "latency_reduction_percent": 1.732978286315856,
+              "improved": 10,
+              "equal": 0,
+              "slower": 0
+            }
+          }
+        }
+      }
+    },
+    "primary_side_and_round_text_comparisons_per_type": 180,
+    "primary_side_and_round_text_differences": 0
+  }
 }

@@ -3,7 +3,7 @@
   "measure_id": "005",
   "title": "Combine QKV projections",
   "status": "conditional",
-  "reason": "Promising measure, no adopted implementation. The switch-free production candidate has been measured and is recorded as a separate trial below, with adoption pending because of long-input tail and round variation. The numbers and checks on this parent page preserve the historical switchable prototype checkpoint.",
+  "reason": "Promising measure with a conditionally retained production candidate; measurements are complete. The production trial separately records recurring small Mac median gains, Q4_K tail costs and added memory. No main merge or other-measure baseline switch is made. Numbers and checks on this parent page preserve the historical switchable prototype checkpoint.",
   "checks": [
     {
       "name": "Clean runtime build and frozen runner identity",
