@@ -1,5 +1,6 @@
 """Checks the `speech` command line against the worker, whose protocol worker_smoke.py and worker_recognition_smoke.py
 check, and checks what every subcommand shares: --version, --help, the exit codes and the form of a failure.
+On POSIX it also checks refusal of binary updates and shell installation without fetching anything.
 
 For every model: `speech info` in text, in JSON equal to the model information of the worker's ready (without the
 device and the threads), or for a detection model the worker's refusal, and with --meta, the identity in both as the general keys of --meta give it; `speech devices` in text and JSON; usage errors (exit 2) and a library error
@@ -71,6 +72,7 @@ import sys
 import threading
 import time
 
+from update_smoke import check_source_updates
 from worker_client import (MOST_CER, PARAGRAPH, Worker, cer, dump_requests, heard, joined_transcript, main_speaker, pcm16, read_npy, realtime_speakers, short,
                            speakers_json, speaks_by_sentence)
 
@@ -135,6 +137,11 @@ run("nope", code=2)
 for s in SUBCOMMANDS:
     assert run(s, "--help").stdout.decode().startswith(f"usage: speech {s} "), s
 print(f"{version.strip()}; --help lists the subcommands and each has its own; no or an unknown subcommand exits with 2")
+
+if os.name == "posix":
+    check_source_updates(speech, work)
+else:
+    print("source-only update check is not run: it requires POSIX sh; Windows and PowerShell are not checked")
 
 info = json.loads(run("info", model, "--json").stdout)
 # The worker refuses a detection or diarization model, which its protocol has no messages for.
