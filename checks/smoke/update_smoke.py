@@ -18,7 +18,10 @@ def check_source_updates(speech, work):
     """Runs the source-only entry points with an isolated home and a recording curl substitute on POSIX."""
     if os.name != "posix":
         raise SystemExit("update_smoke.py needs POSIX sh; Windows is not checked")
-    speech = Path(speech).resolve()
+    executable = shutil.which(speech)
+    if executable is None:
+        raise SystemExit(f"cannot find executable {speech!r}; give its path or add its directory to PATH")
+    speech = Path(executable).resolve()
     Path(work).mkdir(parents=True, exist_ok=True)
     folder = Path(tempfile.mkdtemp(prefix="source-updates-", dir=Path(work).resolve()))
     home, fake = folder / "home", folder / "bin"
