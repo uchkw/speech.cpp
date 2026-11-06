@@ -2,6 +2,8 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <iostream>
 #include <optional>
 #include <string>
@@ -36,6 +38,14 @@ using Clock = std::chrono::steady_clock;
 
 /** The protocol of the running worker, which a failure that ends it reports `fatal` through. */
 Protocol * current = nullptr;
+
+/** Reads an opt-in worker experiment before the input thread starts. */
+bool worker_experiment(const char * name) {
+    const char * value = std::getenv(name);
+    if (!value || std::strcmp(value, "0") == 0) return false;
+    if (std::strcmp(value, "1") == 0) return true;
+    throw Failure(speech_status_name(SPEECH_ERROR_INVALID_ARGUMENT), name, std::string(name) + " must be 0 or 1; unset it to disable");
+}
 
 /** The failure an exception is: the library's, or a defect, which the worker reports as internal. */
 Failure failure_of(const std::exception & e) {
@@ -198,6 +208,11 @@ int run_worker(const CommandLine & line, FILE * out) {
     // so the protocol and the inbox it uses are never freed.
     Protocol & protocol = *new Protocol(out);
     current = &protocol;
+    const bool unsync = worker_experiment("SPEECH_HAAS_WORKER_UNSYNC");
+    const bool untie = worker_experiment("SPEECH_HAAS_WORKER_UNTIE");
+    // The protocol uses its own FILE descriptor, and this command reads stdin only through std::cin.
+    if (unsync) std::ios::sync_with_stdio(false);
+    if (untie) std::cin.tie(nullptr);
     const std::string path = model_file(line.args[0]);
     const Loading loading = line.loading(true);
     // The protocol has the messages of synthesis, recognition and enhancement alone.
