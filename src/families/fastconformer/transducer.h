@@ -31,8 +31,8 @@ public:
     virtual std::vector<std::string> matrices() const = 0;
 };
 
-/** The layers of fastconformer.decoder.prediction in the file `m`. */
-std::unique_ptr<PredictionLayers> make_prediction_layers(const ModelFile & m);
+/** The prediction layers; inference prepares their weights, while metadata callers only inspect their names. */
+std::unique_ptr<PredictionLayers> make_prediction_layers(const ModelFile & m, bool for_inference = false);
 
 /**
  * Whether the tensor `name` is one that a decoding reads: the prediction network's and the joint's, but for the joint's

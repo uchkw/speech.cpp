@@ -28,7 +28,8 @@ namespace fastconformer {
  */
 class KdaLayers : public PredictionLayers {
 public:
-    explicit KdaLayers(const ModelFile & m);
+    KdaLayers(const ModelFile & m, bool for_inference);
+    ~KdaLayers() override;
 
     int64_t state_size() const override { return layers_ * layer_state(); }
     ggml_tensor * build(ggml_context * ctx, ggml_tensor * x, ggml_tensor * state, ggml_tensor ** next) const override;
@@ -37,6 +38,9 @@ public:
 private:
     int64_t layer_state() const { return heads_ * head_dim_ * (head_dim_ + 3 * (conv_size_ - 1)); }
 
+    /** The original Q/K/V rows in one additional matrix per layer, on the source weights' buffer type. */
+    struct PackedQkv;
+    std::unique_ptr<PackedQkv> packed_qkv_;
     const ModelFile & m_;
     int layers_;
     int64_t heads_, head_dim_, conv_size_;
