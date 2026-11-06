@@ -67,7 +67,9 @@ only in check executables; the runtime contains no counters, logs or hot timers.
   content, every tree field and every state's score/next vectors. It compares raw plain and boosted token IDs,
   emitted-token encoder frames and durations, graph counts and every WordsText field with uncached execution. It also
   runs the actual family engine off/on through repeated keywords, guard changes, invalid requests followed by a valid
-  retry, empty keywords with timestamps, silence and cancellation. It checks early error category/input attribution
+  retry, empty keywords with timestamps, silence and cancellation of misses and retained hits. A cancelled hit in each
+  decoding pass keeps the same entry, tree fields/payload and construction counts, then completes a repeated request.
+  It checks early error category/input attribution
   and that invalid requests make no progress callback. No test inserts timers or counters into the engine.
 
 Counters observe the production WordsCache/WordsModel path called directly by the check. The separate engine off/on

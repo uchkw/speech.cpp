@@ -117,12 +117,14 @@ void engine_path(const std::string & path, ggml_backend_t backend, const std::ve
         }
     }
     pair(request(kA), audio);
-    for (Engine * engine : {off.get(), cached.get()}) {
-        Progress cancelled(0.75);
-        const auto result = engine->transcribe(audio, request(kB), cancelled);
-        check.expect(cancelled.stopped() && result.text.empty(), "The keyword request did not cancel through the engine.");
+    for (const auto & raw : {kB, kA}) {
+        for (Engine * engine : {off.get(), cached.get()}) {
+            Progress cancelled(0.75);
+            const auto result = engine->transcribe(audio, request(raw), cancelled);
+            check.expect(cancelled.stopped() && result.text.empty(), "The keyword request did not cancel through the engine.");
+        }
+        pair(request(kA), audio);
     }
-    pair(request(kA), audio);
     pair(request("", true, true), audio);
     pair(request(kA), std::vector<float>(audio.size(), 0.0f));
     setting("invalid");
@@ -185,6 +187,30 @@ void raw_path(Recognizer & recognizer, const std::vector<float> & audio, DecodeO
         });
         if (!had_tree && prepared.boosting) ++counts.trees;
         check.expect(cancelled && pending, "The cancelled miss did not stay request-owned.");
+    }
+    for (const double limit : {0.0, 0.5}) {
+        std::unique_ptr<PreparedWords> pending;
+        auto & prepared = prepare(cache, kA, 2.0f, pending, counts);
+        check.expect(!pending && prepared.boosting, "Cancellation did not start from a cached hit.");
+        const auto before = counts;
+        const auto saved_tree = *prepared.boosting;
+        const Vocabulary reference(word_entries(kA), 2.0f);
+        const size_t payload = prepared.tree_bytes();
+        bool cancelled = false;
+        words.recognize(recognizer, prepared, true, audio, projected, name, on, [&](double done) {
+            if (done >= limit) cancelled = true;
+            return !cancelled;
+        });
+        check.expect(cancelled, "The cached hit did not cancel at the selected decoding pass.");
+        vocabulary(prepared.vocabulary, reference, check);
+        tree(*prepared.boosting, saved_tree, check);
+        auto & retry = prepare(cache, kA, 2.0f, pending, counts);
+        check.expect(!pending && &retry == &prepared && retry.tree_bytes() == payload,
+                     "Cancellation replaced or resized the cached entry.");
+        const auto want = words.recognize(recognizer, reference, true, audio, projected, name, on, {});
+        words_text(words.recognize(recognizer, retry, true, audio, projected, name, on, {}), want, check);
+        check.expect(counts.preparations == before.preparations && counts.trees == before.trees &&
+                     counts.publications == before.publications, "A cancelled hit or retry reconstructed the cache.");
     }
     const std::vector<float> silent(audio.size(), 0.0f);
     const auto silence = recognizer.encode(frontend.features(silent), frontend.frames(silent.size()));
