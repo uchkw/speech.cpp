@@ -53,6 +53,11 @@ MODELS = {
 def checkpoint(pin):
     """The local path of a pinned .nemo checkpoint, downloaded on first use and checked against its pin."""
     path = hf_hub_download(pin["repository"], pin["file"], revision=pin["revision"])
+    return verify_checkpoint(path, pin)
+
+
+def verify_checkpoint(path, pin):
+    """Checks a local checkpoint's size and digest without downloading or restoring a model."""
     size = os.path.getsize(path)
     if size != pin["size"]:
         raise SystemExit(f"{path} has {size} bytes, not the pinned {pin['size']}")
