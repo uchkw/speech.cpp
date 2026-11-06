@@ -452,6 +452,12 @@ foreach(stage vocabulary words)
     target_link_libraries(fastconformer-${stage}-check PRIVATE fastconformer)
 endforeach()
 
+add_executable(fastconformer-keyword-cache-check checks/fastconformer/fastconformer-keyword-cache-check.cpp)
+target_link_libraries(fastconformer-keyword-cache-check PRIVATE fastconformer)
+add_executable(fastconformer-keyword-cache-path-check checks/fastconformer/fastconformer-keyword-cache-path-check.cpp)
+target_include_directories(fastconformer-keyword-cache-path-check PRIVATE src/engines)
+target_link_libraries(fastconformer-keyword-cache-path-check PRIVATE speech-static)
+
 # The checks of Qwen3-ASR's stages.
 foreach(stage frontend encoder)
     add_executable(qwen3-asr-${stage}-check checks/qwen3-asr/qwen3-asr-${stage}-check.cpp)

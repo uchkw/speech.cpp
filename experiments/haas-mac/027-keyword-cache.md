@@ -56,11 +56,28 @@ peak memory. No custom allocator, per-spelling map or multi-entry cache is intro
 ## Check and measurement boundary
 
 The dedicated checks are prepared separately from the runtime commit. Their construction/publication counters live
-only in check executables; the runtime contains no counters, logs or hot timers. Planned coverage includes repeated
-A, A/B/A eviction, alpha and guard changes, ordering/duplicate/NFC cases, invalid requests followed by a valid retry,
-empty input, silence, cancellation, independent owners and admission boundaries. Vocabulary content, tree fields and
-every tree state's score/next vectors must agree with uncached preparation. The model path also compares raw plain
-and boosted token IDs, encoder frames and durations, and every WordsText field, using the same weights and audio.
+only in check executables; the runtime contains no counters, logs or hot timers. They have not been built or executed.
+
+- `fastconformer-keyword-cache-check` needs no model or GPU. It exercises the real `WordsCache` ownership and admission
+  with synthetic token forms: repeated A, A/B/A eviction, effective float alpha, raw ordering/duplicates/NFC, abandoned
+  and invalid preparation, independent owners, exact and exceeded raw/entry bounds, exceeded allocated tree payload,
+  and the disabled path. Synthetic trees do not certify SentencePiece or an official reference.
+- `fastconformer-keyword-cache-path-check <model.gguf> <audio.wav> [cpu|gpu|device] [cpu|device]` needs Haas weights and
+  speech audio. It uses the actual SentencePiece/tree path, observes construction/publication, and compares Vocabulary
+  content, every tree field and every state's score/next vectors. It compares raw plain and boosted token IDs,
+  emitted-token encoder frames and durations, graph counts and every WordsText field with uncached execution. It also
+  runs the actual family engine off/on through repeated keywords, guard changes, invalid requests followed by a valid
+  retry, empty keywords with timestamps, silence and cancellation. It checks early error category/input attribution
+  and that invalid requests make no progress callback. No test inserts timers or counters into the engine.
+
+Counters observe the production WordsCache/WordsModel path called directly by the check. The separate engine off/on
+comparison checks observable results and errors; it does not introspect that engine's private cache counters.
+
+For later serialized execution, the CPU F32 case is `fastconformer-keyword-cache-path-check "$F32_MODEL" "$AUDIO" cpu cpu`;
+the quantized CPU decoder of a Metal model is the same command with `"$Q4_MODEL" "$AUDIO" gpu cpu`, and GPU decoding
+uses `gpu device`. The path check fixes CPU threads at four. Its direct family-engine calls do not replace the existing
+C API/worker recognition checks, which also check the request object's retry contract. It observes emitted-token
+durations, not an instrumented trace of every blank/duration decision. Non-Haas selector controls remain unexecuted.
 
 The existing vocabulary/word checks against official dumps remain separate. The words check accepts F32/F16 and
 cannot certify Q4_K or Q8_0 official token identity. Quantized variants need their own same-weight differential check;
