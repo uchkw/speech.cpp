@@ -130,3 +130,38 @@ All builds and GPU work wait for the coordinator's turn allocation and then hold
 5. Present the screen before deciding whether full 30-input/650-quality and short6 measurements are justified.
    Any adoption requires a separate no-switch production patch and comparison with the original runtime. This
    source-only prototype establishes neither a gain nor numerical equivalence on Metal, Vulkan or another Mac.
+
+## Normal encoder check and graph-debug launcher (source only)
+
+`experiments/haas-mac/013-encoder-check.cpp` is the normal encoder check that step 3 above waits for, in the
+style of the family's stage checks. It takes `<model.gguf> [output.bin]`, refuses a file that is not Haas's
+24-layer KDA FastConformer in Q4_K, Q8_0 or F16, and builds the graph exactly as `Recognizer::encode` does:
+`fastconformer::Encoder::build` followed by `Joint::project_encoder`, the final projected tensor the only
+output, no `EncoderStages`, no retained intermediate, no manual aliasing and no kernel or allocation change. One
+ordinary `ggml_gallocr`, freed before the backend, serves the fixed subsampled lengths 1, 31, 32, 33, 171, 172,
+375, 33, 1, so the allocator grows, shrinks and repeats. Feature frames come from inverting the model's own
+subsampling factor and are verified with `Encoder::subsampled_frames()`; the features themselves are one
+fixed-seed xorshift stream of finite values, a pure function of the frame count, so a repeated length re-enters
+the same bytes and the check requires both repeats (33 and 1) to come out byte-identical under the same
+allocator. The device is the ordinary `auto` start with the CPU threads at 4. Each case's dimensions, finiteness
+and nonzero count are checked and printed, and every projected output, with per-case frame and length metadata,
+is written to the output file (default `013-encoder-check.bin`) for the byte-for-byte original/off/on
+comparison. The check initializes no fusion statistics, calls no command-buffer setter and keeps the default
+command-buffer partitioning; it refuses a process that sets `GGML_METAL_FUSION_DEBUG` or
+`GGML_METAL_FUSION_DISABLE`, and it prints the `GGML_METAL_DW_SILU` it runs with. The same helper source is
+compiled against the original and the candidate static libraries of each clean build (`fastconformer` and
+`speechcommon`), with `checks/`, `src/common` and `src/families` on the include path, C++17 and nothing new.
+
+`experiments/haas-mac/013-graph-debug-main.cpp` is a second `main` for the same entry point, for the fusion
+count alone: `013-encoder-check.cpp` is compiled with `SPEECH_013_ENCODER_CHECK_NO_MAIN` defined and linked
+with the launcher, whose only difference is a log sink that forwards every level, Debug included. The ordinary
+binary keeps the default sink, which drops Debug, so `GGML_METAL_GRAPH_DEBUG=1` on it captures no node trace; on
+the launcher it does. The guard above refuses only the two fusion variables, `GGML_METAL_GRAPH_DEBUG` passes
+through untouched, and nothing rewrites the process environment: the launcher interface is the build-time macro
+alone. It adds no counter, retains no output, changes no command-buffer partitioning and sets no fusion-debug
+flag; its logs, flags and times stay out of the primary worker screen, and the runtime gains no sink behavior.
+
+None of this has been compiled or run, and the model file is read only when the check runs. The launcher's
+trace, not any target, gives the observed fusion count, and alias rejection may keep it under 24. Synthetic
+features check allocation and arithmetic stability, never recognition quality or an official reference. No
+adoption is made or implied here.
