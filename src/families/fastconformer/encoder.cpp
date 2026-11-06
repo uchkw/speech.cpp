@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <limits>
 #include <map>
 
@@ -55,6 +56,58 @@ struct Encoder::Positions {
     }
 };
 
+struct Encoder::PackedQkv {
+    std::unique_ptr<ggml_context, decltype(&ggml_free)> context{nullptr, ggml_free};
+    std::unique_ptr<ggml_backend_buffer, decltype(&ggml_backend_buffer_free)> buffer{nullptr, ggml_backend_buffer_free};
+    std::map<std::string, ggml_tensor *> weights;
+
+    /** Selects the measured packing scope without narrowing the types a model file may hold. */
+    static bool applies(const ModelFile & model, ggml_backend_t backend, int layers) {
+        const auto registry = ggml_backend_dev_backend_reg(ggml_backend_get_device(backend));
+        if (std::strcmp(ggml_backend_reg_name(registry), "MTL") != 0 ||
+            model.str("fastconformer.decoder.prediction") != "kda" ||
+            model.str("fastconformer.encoder.attention") != "rel_pos" || model.boolean("fastconformer.encoder.use_bias")) {
+            return false;
+        }
+        for (int layer = 0; layer < layers; ++layer) {
+            const std::string name = "blk." + std::to_string(layer) + ".attn";
+            const auto * q = model.tensor(name + "_q.weight");
+            if (q->type != GGML_TYPE_Q4_K && q->type != GGML_TYPE_Q8_0) return false;
+            for (const char * part : {"q", "k", "v"}) {
+                const auto * source = model.tensor(name + "_" + part + ".weight");
+                if (source->type != q->type || !ggml_are_same_shape(source, q) || !ggml_is_contiguous(source)) return false;
+            }
+        }
+        return true;
+    }
+
+    PackedQkv(const ModelFile & model, ggml_backend_t backend, int layers) {
+        context.reset(ggml_init({ggml_tensor_overhead() * (size_t) layers, nullptr, true}));
+        if (!context) throw Error(Fault::OutOfMemory, "cannot create the packed QKV weight context");
+        for (int layer = 0; layer < layers; ++layer) {
+            const std::string name = "blk." + std::to_string(layer) + ".attn";
+            const auto * q = model.tensor(name + "_q.weight");
+            auto * packed = ggml_new_tensor_2d(context.get(), q->type, q->ne[0], 3 * q->ne[1]);
+            ggml_set_name(packed, (name + "_qkv.weight").c_str());
+            weights.emplace(name, packed);
+        }
+        buffer.reset(ggml_backend_alloc_ctx_tensors(context.get(), backend));
+        if (!buffer) throw Error(Fault::OutOfMemory, "cannot allocate the packed QKV weights");
+        ggml_backend_buffer_set_usage(buffer.get(), GGML_BACKEND_BUFFER_USAGE_WEIGHTS);
+        std::vector<uint8_t> bytes;
+        for (const auto & item : weights) {
+            size_t offset = 0;
+            for (const char * part : {"q", "k", "v"}) {
+                const auto * source = model.tensor(item.first + "_" + part + ".weight");
+                bytes.resize(ggml_nbytes(source));
+                ggml_backend_tensor_get(source, bytes.data(), 0, bytes.size());
+                ggml_backend_tensor_set(item.second, bytes.data(), offset, bytes.size());
+                offset += bytes.size();
+            }
+        }
+    }
+};
+
 Encoder::~Encoder() = default;
 
 Encoder::Encoder(const ModelFile & m, ggml_backend_t backend)
@@ -80,6 +133,7 @@ Encoder::Encoder(const ModelFile & m, ggml_backend_t backend)
     cached_span_ = local_ ? context_ : rows > 0 ? (rows - 1) / 2 : -1;
     sub_layers_ = 0;
     for (uint32_t f = m.u32("fastconformer.encoder.subsampling_factor"); f > 1; f /= 2) sub_layers_++;
+    if (PackedQkv::applies(m, backend, layers_)) packed_qkv_ = std::make_unique<PackedQkv>(m, backend, layers_);
 }
 
 int64_t Encoder::subsampled_frames(int64_t frames) const {
@@ -184,9 +238,24 @@ ggml_tensor * Encoder::attention(Graph & g, ggml_tensor * x, const AttentionInpu
     ggml_context * ctx = g.ctx();
     const int64_t t = x->ne[1], dk = d_model_ / heads_;
     ggml_tensor * h = layer_norm(ctx, x, name + "_norm");
-    ggml_tensor * q = ggml_reshape_3d(ctx, linear(ctx, h, name + "_q", use_bias_), dk, heads_, t);
-    ggml_tensor * k = ggml_reshape_3d(ctx, linear(ctx, h, name + "_k", use_bias_), dk, heads_, t);
-    ggml_tensor * v = ggml_reshape_3d(ctx, linear(ctx, h, name + "_v", use_bias_), dk, heads_, t);
+    ggml_tensor * q;
+    ggml_tensor * k;
+    ggml_tensor * v;
+    if (packed_qkv_) {
+        ggml_tensor * packed = mul_mat(ctx, packed_qkv_->weights.at(name), h);
+        auto part = [&](int i) {
+            // A frame holds Q, K and V in that order, so the frame stride spans all three projections.
+            return ggml_view_3d(ctx, packed, dk, heads_, t, (size_t) dk * sizeof(float), packed->nb[1],
+                                (size_t) i * d_model_ * sizeof(float));
+        };
+        q = part(0);
+        k = part(1);
+        v = part(2);
+    } else {
+        q = ggml_reshape_3d(ctx, linear(ctx, h, name + "_q", use_bias_), dk, heads_, t);
+        k = ggml_reshape_3d(ctx, linear(ctx, h, name + "_k", use_bias_), dk, heads_, t);
+        v = ggml_reshape_3d(ctx, linear(ctx, h, name + "_v", use_bias_), dk, heads_, t);
+    }
     if (local_) return ggml_add(ctx, x, linear(ctx, local_attention(g, q, k, v, in, name), name + "_out", use_bias_));
 
     auto heads = [&](ggml_tensor * y, int64_t n) {
@@ -203,7 +272,8 @@ ggml_tensor * Encoder::attention(Graph & g, ggml_tensor * x, const AttentionInpu
     ggml_tensor * qu = heads(ggml_add(ctx, q, m_.tensor(name + "_pos_bias_u")), t);
     ggml_tensor * qv = heads(ggml_add(ctx, q, m_.tensor(name + "_pos_bias_v")), t);
 
-    ggml_tensor * ac = mul_mat(ctx, heads(k, t), qu);
+    ggml_tensor * kh = packed_qkv_ ? ggml_permute(ctx, k, 0, 2, 1, 3) : heads(k, t);
+    ggml_tensor * ac = mul_mat(ctx, kh, qu);
     ggml_tensor * bd = mul_mat(ctx, p, qv);
     bd = ggml_view_3d(ctx, bd, t, t, heads_, (size_t) (2 * t - 2) * sizeof(float), bd->nb[2], (size_t) (t - 1) * sizeof(float));
     ggml_tensor * scores = ggml_add(ctx, ac, bd);

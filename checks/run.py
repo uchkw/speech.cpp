@@ -375,7 +375,8 @@ def nemotron_transcribe(model, devices, ctx):
 
 def fastconformer(model, devices, ctx):
     out = os.path.join(ctx.reference, "fastconformer", "out")
-    runs = []
+    # QKV packing uses paired synthetic inputs and needs no official dumps.
+    runs = [runs_on(device, "fastconformer-qkv-check", model, []) for device in devices]
     # Haas-ASR's custom vocabulary takes no model.
     if model is ctx.first.get("fastconformer"):
         cases = os.path.join(out, "vocabulary-cases.json")
