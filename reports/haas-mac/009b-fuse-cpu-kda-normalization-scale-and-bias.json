@@ -1,0 +1,1561 @@
+{
+  "schema_version": 1,
+  "measure_id": "009b",
+  "parent_measure_id": "009",
+  "title": "Fuse CPU KDA normalization scale and bias",
+  "status": "rejected",
+  "reason": "Reject the CPU NORM/MUL/ADD dispatcher variant after its nine-input CPU4 screen. Median paired reductions are +1.153% for Q4_K, -0.423% for Q8_0 and +1.458% for F16. Q8_0 is slower in every round and F16 changes sign across rounds; no stable benefit across types or gain over the separate fixed anchor is established. All 81 latency texts and 27 timestamped public results match. The candidate remains unadopted; full 650-input and short-prefix evaluation are not run.",
+  "scope": "screen",
+  "conditions": {
+    "name": "Haas on Apple Silicon",
+    "repository": "https://github.com/uchkw/speech.cpp",
+    "tracking_issue": "https://github.com/uchkw/speech.cpp/issues/1",
+    "purpose": "Reduce warm latency for one Japanese voice input of a few seconds to 30 seconds while preserving recognition quality.",
+    "threads": 4,
+    "rounds": 3,
+    "decode_on_cpu": true,
+    "quality_policy": "exact",
+    "latency_count": 9,
+    "quality_count": 9,
+    "latency_definition": "Time from before sending the first PCM16 chunk through receipt of the terminal result. File reading, model loading and warmup are excluded. Each measured input is warmed once per fresh worker.",
+    "aggregation": "Median over rounds for each input, then linearly interpolated p50, p90 and p99 across the measured input medians. RTFx divides total audio duration by summed request time.",
+    "literal_cer": "Total Unicode code-point Levenshtein edits divided by total reference code points, including punctuation, symbols and whitespace.",
+    "repository_cer": "NFKC followed by removing Unicode punctuation, symbols, separators and whitespace; no case folding or alternate-spelling substitutions. Edits and reference lengths are summed before division.",
+    "quality_comparison": "The same quality files on both builds; text and public token/segment text and times are compared exactly. Text from every timestamp-disabled latency round is also compared. A changed CER is not evidence of exact output equality.",
+    "latency_timestamps": false,
+    "quality_timestamps": true,
+    "unobserved_fields": "The worker does not expose raw TDT token IDs, frame indices or duration decisions. These are not claimed to match by this harness.",
+    "limitations": [
+      "The current corpus is FLEURS Japanese test, with inputs from 6.36 to 28.2 seconds.",
+      "The p99 of a small duration-stratified sample is not a precise estimate of production tail latency.",
+      "The repository CER is not the published metric accepting alternative spellings of words.",
+      "Fresh-process load and first-request times do not reset filesystem or system Metal caches.",
+      "No stable gain common to all three weight types was established. Q4_K has a small positive paired signal; Q8_0 is slower in every round; F16 changes sign across rounds. Full evaluation was not run after the screen rejection.",
+      "No improvement over the fixed anchor was established. Anchor build uses implicit SDK selection while the new matched original/candidate builds use explicit SDKROOT; this limits the independent anchor comparison, not the primary same-binary off/on comparison.",
+      "The p99 of nine duration-stratified inputs is not a production-tail estimate. Fresh-process load and first-request times do not reset filesystem or Metal caches.",
+      "Official F32 references for the changed KDA/prediction path and Windows Vulkan execution remain unverified. Existing frontend/encoder reference tensors are not evidence for the changed decoder operations.",
+      "CPU4 is the explicit M2 Ultra campaign condition. Automatic thread defaults and other devices are separate experiments.",
+      "The original restricted Metal attempt and its skipped cases remain in raw evidence and are excluded from valid coverage. One direct strided-input case remains unsupported even in the authorized Metal runs.",
+      "This result concerns the small CPU NORM/MUL/ADD dispatcher variant 009b. It does not alter the rejected 009a projection variant or prove every possible small-operation optimization ineffective.",
+      "The source manifest is a frozen pre-execution identity record; its prepared-not-executed status is historical. Evaluation is complete at the separate recorded evaluation commit, with unchanged runtime source.",
+      "The dedicated check matrix has 15 conditions and 45 original/OFF/ON runs. The 9390 assertions are not 9390 distinct shapes. There are 34 normal DecoderStep computations per run, 1530 in total; gross trace-event counts also include separate controls.",
+      "Direct CPU tests use their hardware-derived CPU thread count; -j1 serializes test cases and does not mean a one-thread backend. Stateful checks explicitly use CPU1, CPU4 or Metal. Request measurements explicitly use CPU4.",
+      "Direct Metal has 20 supported cases per configuration and one unsupported strided input. The initial restricted attempt skipped every Metal direct case despite exit 0 and failed before synthetic Metal inference; those attempts are excluded, not passes.",
+      "Nine unique type/input pairs cover ordinary real-audio TDT paths. The 108 comparisons additionally count three original/OFF/ON pairings and controlled boost, cancellation and recovery on the first recording per type; they are not 108 unique recordings.",
+      "Private TDT IDs, frames and durations are observed only by the separate diagnostic helper. The screen worker exposes public text/token times and segments, not those private steps.",
+      "Three F16 C API runs use automatic threads (16 on this host); three worker smoke runs explicitly use CPU decoding with four threads. Their expected text fixtures come from the original runtime, not official reference text.",
+      "The same-binary comparison keeps the build fixed. Original and candidate builds match recorded Release/native/Metal/SDK configuration; no claim is made that all compiler or linker command bytes match the independent anchor.",
+      "No default, fixed baseline, prior 009a result or cumulative campaign gain is changed by this rejected variant."
+    ],
+    "thread_setting_note": "Four CPU threads are an explicit tuned campaign setting, not the runtime default. Unspecified threads (threads=0) use performance cores: 16 on this M2 Ultra. Code gains compare the tuned anchor and do not include the preliminary thread-tuning gain; measure 021 evaluates automatic versus four threads separately.",
+    "hardware": {
+      "chip": "Apple M2 Ultra",
+      "cpu_cores": 24,
+      "performance_cores": 16,
+      "efficiency_cores": 8,
+      "gpu_cores": 76,
+      "memory_gb": 192,
+      "source": "system_profiler SPHardwareDataType SPDisplaysDataType"
+    },
+    "current_machine": {
+      "chip": "Apple M2 Ultra",
+      "cpu_cores": "24",
+      "memory_bytes": "206158430208",
+      "macos": "26.7.2"
+    },
+    "python": "3.9.6",
+    "python_executable": "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+    "runner_sha256": {
+      "compare.py": "0dd151c6f9d1cdab67796c0920c458f140e7b6805bb798a31ff5b172c05ae81e",
+      "worker.py": "1b89b9c51b55557f4bd6d5f413eeda427949711954dda6020fe3d865634f50ba",
+      "campaign.json": "2a03d0e925e3433b437ec908326db42e5576c585abd5da8929f4c2b24b20d840"
+    },
+    "created_utc": "2026-11-06T22:59:05.469277+00:00",
+    "comparison_reference": "Relative: the same verified binary with GGML_CPU_NORM_MUL_ADD_FUSION=1 against 0, both TRACE=0. Cumulative: a direct comparison with the explicitly specified fixed anchor, not an adopted or compounded campaign gain."
+  },
+  "types": {
+    "q4_k": {
+      "sides": {
+        "baseline": {
+          "latency": {
+            "p50_ms": 80.11516699999999,
+            "p90_ms": 127.25075839999982,
+            "p99_ms": 150.30698863999982,
+            "count": 9,
+            "rtfx": 170.64062994674293
+          },
+          "strata": {
+            "10-20s": {
+              "p50_ms": 80.11516699999999,
+              "p90_ms": 106.08210059999999,
+              "p99_ms": 111.92466065999999,
+              "count": 3,
+              "rtfx": 167.50407695486467
+            },
+            "20-30s": {
+              "p50_ms": 120.84624999999983,
+              "p90_ms": 146.4642835999998,
+              "p99_ms": 152.22834115999981,
+              "count": 3,
+              "rtfx": 183.0153414015339
+            },
+            "6-10s": {
+              "p50_ms": 58.27966699999987,
+              "p90_ms": 62.30593339999988,
+              "p99_ms": 63.21184333999988,
+              "count": 3,
+              "rtfx": 147.38646856467903
+            }
+          },
+          "rounds": [
+            {
+              "p50_ms": 80.56041699999983,
+              "p90_ms": 126.33935819999995,
+              "p99_ms": 146.42339892000012,
+              "count": 9,
+              "rtfx": 173.23232144953417
+            },
+            {
+              "p50_ms": 80.11516699999999,
+              "p90_ms": 130.03019199999997,
+              "p99_ms": 150.5849319999998,
+              "count": 9,
+              "rtfx": 169.40621871888874
+            },
+            {
+              "p50_ms": 79.84024999999994,
+              "p90_ms": 127.71714159999986,
+              "p99_ms": 152.45235135999997,
+              "count": 9,
+              "rtfx": 170.29878180838807
+            }
+          ],
+          "quality": {
+            "literal_edits": 40,
+            "literal_characters": 532,
+            "repository_edits": 22,
+            "repository_characters": 493,
+            "literal_cer": 0.07518796992481203,
+            "repository_cer": 0.04462474645030426
+          },
+          "stages": {
+            "1321491767934942997": {
+              "core_total_ms": 32.9845,
+              "frontend_ms": 1.9988,
+              "encoder_build_ms": 0.2886,
+              "encoder_compute_ms": 26.5667,
+              "encoder_read_ms": 0.0128,
+              "decoder_ms": 3.7015
+            },
+            "2330237947966115273": {
+              "core_total_ms": 45.2105,
+              "frontend_ms": 3.5996,
+              "encoder_build_ms": 1.3033,
+              "encoder_compute_ms": 36.2087,
+              "encoder_read_ms": 0.0178,
+              "decoder_ms": 4.403
+            },
+            "8675814957598723431": {
+              "core_total_ms": 66.9677,
+              "frontend_ms": 6.0672,
+              "encoder_build_ms": 2.1197,
+              "encoder_compute_ms": 49.9096,
+              "encoder_read_ms": 0.0337,
+              "decoder_ms": 8.9541
+            }
+          },
+          "stage_status": "measured",
+          "peak_memory_bytes": 451675192,
+          "load_ms": 148.14520899999997,
+          "first_request_ms": 170.25124999999997,
+          "repeated_text_changes": 0
+        },
+        "candidate": {
+          "latency": {
+            "p50_ms": 81.19245900000016,
+            "p90_ms": 127.66650800000012,
+            "p99_ms": 149.1339380000001,
+            "count": 9,
+            "rtfx": 172.01648123811432
+          },
+          "strata": {
+            "10-20s": {
+              "p50_ms": 81.19245900000016,
+              "p90_ms": 104.30922460000001,
+              "p99_ms": 109.51049685999998,
+              "count": 3,
+              "rtfx": 169.10183296105856
+            },
+            "20-30s": {
+              "p50_ms": 121.70333300000013,
+              "p90_ms": 145.55603300000007,
+              "p99_ms": 150.92289050000008,
+              "count": 3,
+              "rtfx": 183.90193442945653
+            },
+            "6-10s": {
+              "p50_ms": 57.78316699999997,
+              "p90_ms": 61.62246700000007,
+              "p99_ms": 62.4863095000001,
+              "count": 3,
+              "rtfx": 149.32856358371828
+            }
+          },
+          "rounds": [
+            {
+              "p50_ms": 79.52162499999993,
+              "p90_ms": 129.00227519999993,
+              "p99_ms": 149.26751472000004,
+              "count": 9,
+              "rtfx": 173.1866397817249
+            },
+            {
+              "p50_ms": 81.19245900000016,
+              "p90_ms": 127.7082580000001,
+              "p99_ms": 149.32598799999997,
+              "count": 9,
+              "rtfx": 171.48147165190215
+            },
+            {
+              "p50_ms": 83.9732499999999,
+              "p90_ms": 126.23298279999986,
+              "p99_ms": 146.59032327999998,
+              "count": 9,
+              "rtfx": 171.99319389031677
+            }
+          ],
+          "quality": {
+            "literal_edits": 40,
+            "literal_characters": 532,
+            "repository_edits": 22,
+            "repository_characters": 493,
+            "literal_cer": 0.07518796992481203,
+            "repository_cer": 0.04462474645030426
+          },
+          "stages": {
+            "1321491767934942997": {
+              "core_total_ms": 31.5201,
+              "frontend_ms": 1.9801,
+              "encoder_build_ms": 0.2826,
+              "encoder_compute_ms": 26.598,
+              "encoder_read_ms": 0.0093,
+              "decoder_ms": 2.6524
+            },
+            "2330237947966115273": {
+              "core_total_ms": 45.5147,
+              "frontend_ms": 3.5793,
+              "encoder_build_ms": 1.3969,
+              "encoder_compute_ms": 36.0947,
+              "encoder_read_ms": 0.0187,
+              "decoder_ms": 4.3864
+            },
+            "8675814957598723431": {
+              "core_total_ms": 67.0973,
+              "frontend_ms": 6.1539,
+              "encoder_build_ms": 2.1474,
+              "encoder_compute_ms": 49.9142,
+              "encoder_read_ms": 0.0329,
+              "decoder_ms": 8.807
+            }
+          },
+          "stage_status": "measured",
+          "peak_memory_bytes": 445154336,
+          "load_ms": 152.065542,
+          "first_request_ms": 170.6415,
+          "repeated_text_changes": 0
+        },
+        "anchor": {
+          "latency": {
+            "p50_ms": 80.12933299999992,
+            "p90_ms": 127.5725922,
+            "p99_ms": 149.53487172000007,
+            "count": 9,
+            "rtfx": 171.92841838540417
+          },
+          "strata": {
+            "10-20s": {
+              "p50_ms": 80.12933299999992,
+              "p90_ms": 103.12433299999996,
+              "p99_ms": 108.29820799999997,
+              "count": 3,
+              "rtfx": 169.57240256755873
+            },
+            "20-30s": {
+              "p50_ms": 121.47195899999997,
+              "p90_ms": 145.87449180000007,
+              "p99_ms": 151.36506168000008,
+              "count": 3,
+              "rtfx": 183.51067875440785
+            },
+            "6-10s": {
+              "p50_ms": 57.567959,
+              "p90_ms": 62.880791799999976,
+              "p99_ms": 64.07617917999997,
+              "count": 3,
+              "rtfx": 149.06695586607094
+            }
+          },
+          "rounds": [
+            {
+              "p50_ms": 80.12933299999992,
+              "p90_ms": 130.4784082000001,
+              "p99_ms": 149.96847772000004,
+              "count": 9,
+              "rtfx": 171.32897544758697
+            },
+            {
+              "p50_ms": 81.60120799999993,
+              "p90_ms": 126.8846254,
+              "p99_ms": 146.37022444000013,
+              "count": 9,
+              "rtfx": 172.34532911524886
+            },
+            {
+              "p50_ms": 78.69787500000002,
+              "p90_ms": 126.04255780000001,
+              "p99_ms": 149.38186828000008,
+              "count": 9,
+              "rtfx": 171.7007689775709
+            }
+          ],
+          "quality": {
+            "literal_edits": 40,
+            "literal_characters": 532,
+            "repository_edits": 22,
+            "repository_characters": 493,
+            "literal_cer": 0.07518796992481203,
+            "repository_cer": 0.04462474645030426
+          },
+          "stages": {
+            "1321491767934942997": {
+              "core_total_ms": 31.8026,
+              "frontend_ms": 1.9759,
+              "encoder_build_ms": 0.2688,
+              "encoder_compute_ms": 26.7166,
+              "encoder_read_ms": 0.011,
+              "decoder_ms": 2.723
+            },
+            "2330237947966115273": {
+              "core_total_ms": 46.6228,
+              "frontend_ms": 3.7793,
+              "encoder_build_ms": 1.555,
+              "encoder_compute_ms": 36.1403,
+              "encoder_read_ms": 0.0244,
+              "decoder_ms": 5.1657
+            },
+            "8675814957598723431": {
+              "core_total_ms": 68.946,
+              "frontend_ms": 6.0651,
+              "encoder_build_ms": 2.062,
+              "encoder_compute_ms": 49.8616,
+              "encoder_read_ms": 0.0321,
+              "decoder_ms": 10.7997
+            }
+          },
+          "stage_status": "measured",
+          "peak_memory_bytes": 453051544,
+          "load_ms": 150.594917,
+          "first_request_ms": 170.329542,
+          "repeated_text_changes": 0
+        }
+      },
+      "comparisons": {
+        "relative": {
+          "text_changed": 0,
+          "public_tokens_changed": 0,
+          "segments_changed": 0,
+          "literal_better": 0,
+          "literal_worse": 0,
+          "literal_equal": 9,
+          "repository_better": 0,
+          "repository_worse": 0,
+          "repository_equal": 9,
+          "count": 9,
+          "median_latency_ratio": 0.9884666061204377,
+          "latency_rounds": [
+            {
+              "round": 0,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 1,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 2,
+              "count": 9,
+              "text_changed": 0
+            }
+          ],
+          "latency_text_changed": 0,
+          "latency_text_comparisons": 27,
+          "latency_reduction_percent": 1.1533393879562315
+        },
+        "cumulative": {
+          "text_changed": 0,
+          "public_tokens_changed": 0,
+          "segments_changed": 0,
+          "literal_better": 0,
+          "literal_worse": 0,
+          "literal_equal": 9,
+          "repository_better": 0,
+          "repository_worse": 0,
+          "repository_equal": 9,
+          "count": 9,
+          "median_latency_ratio": 1.0019047523552342,
+          "latency_rounds": [
+            {
+              "round": 0,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 1,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 2,
+              "count": 9,
+              "text_changed": 0
+            }
+          ],
+          "latency_text_changed": 0,
+          "latency_text_comparisons": 27,
+          "latency_reduction_percent": -0.19047523552342405
+        }
+      }
+    },
+    "q8_0": {
+      "sides": {
+        "baseline": {
+          "latency": {
+            "p50_ms": 75.44762500000002,
+            "p90_ms": 124.20499159999996,
+            "p99_ms": 144.21061135999997,
+            "count": 9,
+            "rtfx": 178.94743886710387
+          },
+          "strata": {
+            "10-20s": {
+              "p50_ms": 75.44762500000002,
+              "p90_ms": 99.69255860000001,
+              "p99_ms": 105.14766866000001,
+              "count": 3,
+              "rtfx": 177.1026561702551
+            },
+            "20-30s": {
+              "p50_ms": 118.64787499999996,
+              "p90_ms": 140.87634139999997,
+              "p99_ms": 145.87774633999996,
+              "count": 3,
+              "rtfx": 189.43261728118273
+            },
+            "6-10s": {
+              "p50_ms": 54.32225000000002,
+              "p90_ms": 59.3334172,
+              "p99_ms": 60.460929820000004,
+              "count": 3,
+              "rtfx": 157.31642072249423
+            }
+          },
+          "rounds": [
+            {
+              "p50_ms": 76.33270900000011,
+              "p90_ms": 124.91438279999988,
+              "p99_ms": 148.30391327999996,
+              "count": 9,
+              "rtfx": 178.55521650637087
+            },
+            {
+              "p50_ms": 75.44762500000002,
+              "p90_ms": 125.03212519999995,
+              "p99_ms": 144.29332471999996,
+              "count": 9,
+              "rtfx": 178.43258594638004
+            },
+            {
+              "p50_ms": 75.34583300000008,
+              "p90_ms": 123.96679999999996,
+              "p99_ms": 143.11492999999996,
+              "count": 9,
+              "rtfx": 179.50601707941476
+            }
+          ],
+          "quality": {
+            "literal_edits": 39,
+            "literal_characters": 532,
+            "repository_edits": 21,
+            "repository_characters": 493,
+            "literal_cer": 0.07330827067669173,
+            "repository_cer": 0.04259634888438134
+          },
+          "stages": {
+            "1321491767934942997": {
+              "core_total_ms": 29.6908,
+              "frontend_ms": 1.9863,
+              "encoder_build_ms": 0.2792,
+              "encoder_compute_ms": 23.8183,
+              "encoder_read_ms": 0.0118,
+              "decoder_ms": 3.8043
+            },
+            "2330237947966115273": {
+              "core_total_ms": 44.2277,
+              "frontend_ms": 3.6372,
+              "encoder_build_ms": 1.471,
+              "encoder_compute_ms": 32.4271,
+              "encoder_read_ms": 0.0208,
+              "decoder_ms": 6.6428
+            },
+            "8675814957598723431": {
+              "core_total_ms": 66.4957,
+              "frontend_ms": 6.3265,
+              "encoder_build_ms": 2.5177,
+              "encoder_compute_ms": 45.0677,
+              "encoder_read_ms": 0.0264,
+              "decoder_ms": 11.9518
+            }
+          },
+          "stage_status": "measured",
+          "peak_memory_bytes": 756319504,
+          "load_ms": 189.50958300000005,
+          "first_request_ms": 167.94179200000002,
+          "repeated_text_changes": 0
+        },
+        "candidate": {
+          "latency": {
+            "p50_ms": 76.88195799999997,
+            "p90_ms": 124.71517540000013,
+            "p99_ms": 144.74920564000004,
+            "count": 9,
+            "rtfx": 178.0318577353308
+          },
+          "strata": {
+            "10-20s": {
+              "p50_ms": 76.88195799999997,
+              "p90_ms": 101.21925799999981,
+              "p99_ms": 106.69515049999977,
+              "count": 3,
+              "rtfx": 175.42393737289692
+            },
+            "20-30s": {
+              "p50_ms": 119.15016700000014,
+              "p90_ms": 141.41020060000005,
+              "p99_ms": 146.41870816000005,
+              "count": 3,
+              "rtfx": 188.57478223279824
+            },
+            "6-10s": {
+              "p50_ms": 54.385000000000126,
+              "p90_ms": 59.60216719999996,
+              "p99_ms": 60.77602981999992,
+              "count": 3,
+              "rtfx": 157.34060056192035
+            }
+          },
+          "rounds": [
+            {
+              "p50_ms": 77.0687080000001,
+              "p90_ms": 126.08734199999999,
+              "p99_ms": 146.26057199999983,
+              "count": 9,
+              "rtfx": 177.61013966094043
+            },
+            {
+              "p50_ms": 76.88195799999997,
+              "p90_ms": 123.48504179999993,
+              "p99_ms": 144.62619228000003,
+              "count": 9,
+              "rtfx": 177.5976632039229
+            },
+            {
+              "p50_ms": 76.65062499999964,
+              "p90_ms": 124.46541700000009,
+              "p99_ms": 143.6003169999999,
+              "count": 9,
+              "rtfx": 178.5397869685774
+            }
+          ],
+          "quality": {
+            "literal_edits": 39,
+            "literal_characters": 532,
+            "repository_edits": 21,
+            "repository_characters": 493,
+            "literal_cer": 0.07330827067669173,
+            "repository_cer": 0.04259634888438134
+          },
+          "stages": {
+            "1321491767934942997": {
+              "core_total_ms": 28.6767,
+              "frontend_ms": 1.9764,
+              "encoder_build_ms": 0.2683,
+              "encoder_compute_ms": 24.0572,
+              "encoder_read_ms": 0.0276,
+              "decoder_ms": 2.5633
+            },
+            "2330237947966115273": {
+              "core_total_ms": 41.9809,
+              "frontend_ms": 3.5971,
+              "encoder_build_ms": 1.3567,
+              "encoder_compute_ms": 32.5853,
+              "encoder_read_ms": 0.0187,
+              "decoder_ms": 4.4292
+            },
+            "8675814957598723431": {
+              "core_total_ms": 64.3926,
+              "frontend_ms": 6.1386,
+              "encoder_build_ms": 2.159,
+              "encoder_compute_ms": 44.9235,
+              "encoder_read_ms": 0.032,
+              "decoder_ms": 11.0401
+            }
+          },
+          "stage_status": "measured",
+          "peak_memory_bytes": 764069184,
+          "load_ms": 193.47470799999994,
+          "first_request_ms": 164.81933300000006,
+          "repeated_text_changes": 0
+        },
+        "anchor": {
+          "latency": {
+            "p50_ms": 76.57033300000026,
+            "p90_ms": 124.11624999999992,
+            "p99_ms": 145.1982999999999,
+            "count": 9,
+            "rtfx": 178.08973593357246
+          },
+          "strata": {
+            "10-20s": {
+              "p50_ms": 76.57033300000026,
+              "p90_ms": 101.38530020000013,
+              "p99_ms": 106.96866782000008,
+              "count": 3,
+              "rtfx": 175.62622695378303
+            },
+            "20-30s": {
+              "p50_ms": 118.26012499999993,
+              "p90_ms": 141.6846249999999,
+              "p99_ms": 146.9551374999999,
+              "count": 3,
+              "rtfx": 189.08709077934907
+            },
+            "6-10s": {
+              "p50_ms": 54.52849999999998,
+              "p90_ms": 60.686966400000124,
+              "p99_ms": 62.07262134000016,
+              "count": 3,
+              "rtfx": 156.3225145895091
+            }
+          },
+          "rounds": [
+            {
+              "p50_ms": 76.96145799999998,
+              "p90_ms": 122.96631660000008,
+              "p99_ms": 142.45650636000022,
+              "count": 9,
+              "rtfx": 178.50126865702214
+            },
+            {
+              "p50_ms": 76.52887499999994,
+              "p90_ms": 125.34931640000013,
+              "p99_ms": 145.3216066399999,
+              "count": 9,
+              "rtfx": 177.36200992397767
+            },
+            {
+              "p50_ms": 76.57033300000026,
+              "p90_ms": 124.41095819999998,
+              "p99_ms": 146.55395772000008,
+              "count": 9,
+              "rtfx": 177.83262628520097
+            }
+          ],
+          "quality": {
+            "literal_edits": 39,
+            "literal_characters": 532,
+            "repository_edits": 21,
+            "repository_characters": 493,
+            "literal_cer": 0.07330827067669173,
+            "repository_cer": 0.04259634888438134
+          },
+          "stages": {
+            "1321491767934942997": {
+              "core_total_ms": 28.0937,
+              "frontend_ms": 1.9765,
+              "encoder_build_ms": 0.2813,
+              "encoder_compute_ms": 23.4726,
+              "encoder_read_ms": 0.0107,
+              "decoder_ms": 2.4725
+            },
+            "2330237947966115273": {
+              "core_total_ms": 41.7791,
+              "frontend_ms": 3.5667,
+              "encoder_build_ms": 1.3861,
+              "encoder_compute_ms": 32.6795,
+              "encoder_read_ms": 0.0175,
+              "decoder_ms": 4.2607
+            },
+            "8675814957598723431": {
+              "core_total_ms": 66.1506,
+              "frontend_ms": 6.105,
+              "encoder_build_ms": 2.1664,
+              "encoder_compute_ms": 45.3014,
+              "encoder_read_ms": 0.0609,
+              "decoder_ms": 12.4509
+            }
+          },
+          "stage_status": "measured",
+          "peak_memory_bytes": 755762424,
+          "load_ms": 195.01654199999996,
+          "first_request_ms": 164.31354200000004,
+          "repeated_text_changes": 0
+        }
+      },
+      "comparisons": {
+        "relative": {
+          "text_changed": 0,
+          "public_tokens_changed": 0,
+          "segments_changed": 0,
+          "literal_better": 0,
+          "literal_worse": 0,
+          "literal_equal": 9,
+          "repository_better": 0,
+          "repository_worse": 0,
+          "repository_equal": 9,
+          "count": 9,
+          "median_latency_ratio": 1.0042334681510325,
+          "latency_rounds": [
+            {
+              "round": 0,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 1,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 2,
+              "count": 9,
+              "text_changed": 0
+            }
+          ],
+          "latency_text_changed": 0,
+          "latency_text_comparisons": 27,
+          "latency_reduction_percent": -0.4233468151032538
+        },
+        "cumulative": {
+          "text_changed": 0,
+          "public_tokens_changed": 0,
+          "segments_changed": 0,
+          "literal_better": 0,
+          "literal_worse": 0,
+          "literal_equal": 9,
+          "repository_better": 0,
+          "repository_worse": 0,
+          "repository_equal": 9,
+          "count": 9,
+          "median_latency_ratio": 1.0040697877074625,
+          "latency_rounds": [
+            {
+              "round": 0,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 1,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 2,
+              "count": 9,
+              "text_changed": 0
+            }
+          ],
+          "latency_text_changed": 0,
+          "latency_text_comparisons": 27,
+          "latency_reduction_percent": -0.4069787707462469
+        }
+      }
+    },
+    "f16": {
+      "sides": {
+        "baseline": {
+          "latency": {
+            "p50_ms": 75.49820900000003,
+            "p90_ms": 126.06360800000007,
+            "p99_ms": 147.09129799999994,
+            "count": 9,
+            "rtfx": 177.63077203824625
+          },
+          "strata": {
+            "10-20s": {
+              "p50_ms": 75.49820900000003,
+              "p90_ms": 100.89617540000032,
+              "p99_ms": 106.61071784000036,
+              "count": 3,
+              "rtfx": 176.32474561181888
+            },
+            "20-30s": {
+              "p50_ms": 120.2225830000001,
+              "p90_ms": 143.58668299999997,
+              "p99_ms": 148.84360549999994,
+              "count": 3,
+              "rtfx": 186.4619739865817
+            },
+            "6-10s": {
+              "p50_ms": 54.109874999999974,
+              "p90_ms": 59.203842199999805,
+              "p99_ms": 60.34998481999977,
+              "count": 3,
+              "rtfx": 158.56866565062197
+            }
+          },
+          "rounds": [
+            {
+              "p50_ms": 74.26604100000023,
+              "p90_ms": 122.05285800000034,
+              "p99_ms": 140.85664800000035,
+              "count": 9,
+              "rtfx": 181.59546419271337
+            },
+            {
+              "p50_ms": 75.49820900000003,
+              "p90_ms": 126.06360800000007,
+              "p99_ms": 147.09129799999994,
+              "count": 9,
+              "rtfx": 177.42705665774847
+            },
+            {
+              "p50_ms": 76.30012499999994,
+              "p90_ms": 126.97651700000011,
+              "p99_ms": 147.92977700000023,
+              "count": 9,
+              "rtfx": 175.73712350664454
+            }
+          ],
+          "quality": {
+            "literal_edits": 39,
+            "literal_characters": 532,
+            "repository_edits": 21,
+            "repository_characters": 493,
+            "literal_cer": 0.07330827067669173,
+            "repository_cer": 0.04259634888438134
+          },
+          "stages": {
+            "1321491767934942997": {
+              "core_total_ms": 28.139,
+              "frontend_ms": 1.9802,
+              "encoder_build_ms": 0.2759,
+              "encoder_compute_ms": 22.9587,
+              "encoder_read_ms": 0.0073,
+              "decoder_ms": 2.9125
+            },
+            "2330237947966115273": {
+              "core_total_ms": 41.2908,
+              "frontend_ms": 3.5963,
+              "encoder_build_ms": 1.3879,
+              "encoder_compute_ms": 29.9521,
+              "encoder_read_ms": 0.0178,
+              "decoder_ms": 6.4106
+            },
+            "8675814957598723431": {
+              "core_total_ms": 61.7805,
+              "frontend_ms": 6.0433,
+              "encoder_build_ms": 2.0573,
+              "encoder_compute_ms": 41.535,
+              "encoder_read_ms": 0.0321,
+              "decoder_ms": 11.8099
+            }
+          },
+          "stage_status": "measured",
+          "peak_memory_bytes": 1338836720,
+          "load_ms": 285.4621669999999,
+          "first_request_ms": 165.44691700000013,
+          "repeated_text_changes": 0
+        },
+        "candidate": {
+          "latency": {
+            "p50_ms": 76.30508399999991,
+            "p90_ms": 123.18198320000002,
+            "p99_ms": 141.31737272000024,
+            "count": 9,
+            "rtfx": 179.96954226765706
+          },
+          "strata": {
+            "10-20s": {
+              "p50_ms": 76.30508399999991,
+              "p90_ms": 99.8067503999999,
+              "p99_ms": 105.09462533999988,
+              "count": 3,
+              "rtfx": 177.6619922044921
+            },
+            "20-30s": {
+              "p50_ms": 118.14437499999997,
+              "p90_ms": 138.2948078000002,
+              "p99_ms": 142.82865518000023,
+              "count": 3,
+              "rtfx": 191.65323663152026
+            },
+            "6-10s": {
+              "p50_ms": 54.94695799999994,
+              "p90_ms": 59.76105800000005,
+              "p99_ms": 60.844230500000066,
+              "count": 3,
+              "rtfx": 156.6495660888216
+            }
+          },
+          "rounds": [
+            {
+              "p50_ms": 73.80333300000031,
+              "p90_ms": 123.18874139999983,
+              "p99_ms": 142.24366163999986,
+              "count": 9,
+              "rtfx": 180.77437272697597
+            },
+            {
+              "p50_ms": 76.30508399999991,
+              "p90_ms": 123.04229159999998,
+              "p99_ms": 140.67479136,
+              "count": 9,
+              "rtfx": 179.58591797377284
+            },
+            {
+              "p50_ms": 77.69650000000006,
+              "p90_ms": 123.35278319999993,
+              "p99_ms": 141.33445272000023,
+              "count": 9,
+              "rtfx": 179.84307737548764
+            }
+          ],
+          "quality": {
+            "literal_edits": 39,
+            "literal_characters": 532,
+            "repository_edits": 21,
+            "repository_characters": 493,
+            "literal_cer": 0.07330827067669173,
+            "repository_cer": 0.04259634888438134
+          },
+          "stages": {
+            "1321491767934942997": {
+              "core_total_ms": 28.1392,
+              "frontend_ms": 1.9234,
+              "encoder_build_ms": 0.2651,
+              "encoder_compute_ms": 22.94,
+              "encoder_read_ms": 0.0089,
+              "decoder_ms": 3.1955
+            },
+            "2330237947966115273": {
+              "core_total_ms": 39.5775,
+              "frontend_ms": 3.3422,
+              "encoder_build_ms": 1.3658,
+              "encoder_compute_ms": 29.7722,
+              "encoder_read_ms": 0.0175,
+              "decoder_ms": 5.1595
+            },
+            "8675814957598723431": {
+              "core_total_ms": 61.4522,
+              "frontend_ms": 6.0932,
+              "encoder_build_ms": 2.132,
+              "encoder_compute_ms": 41.9389,
+              "encoder_read_ms": 0.0573,
+              "decoder_ms": 11.6042
+            }
+          },
+          "stage_status": "measured",
+          "peak_memory_bytes": 1346602736,
+          "load_ms": 294.38400000000007,
+          "first_request_ms": 164.29350000000008,
+          "repeated_text_changes": 0
+        },
+        "anchor": {
+          "latency": {
+            "p50_ms": 76.76229199999973,
+            "p90_ms": 123.75514200000009,
+            "p99_ms": 142.31440199999983,
+            "count": 9,
+            "rtfx": 179.9188311056326
+          },
+          "strata": {
+            "10-20s": {
+              "p50_ms": 76.76229199999973,
+              "p90_ms": 99.51549120000003,
+              "p99_ms": 104.63496102000008,
+              "count": 3,
+              "rtfx": 177.68829999334235
+            },
+            "20-30s": {
+              "p50_ms": 118.59979200000015,
+              "p90_ms": 139.2211919999999,
+              "p99_ms": 143.86100699999986,
+              "count": 3,
+              "rtfx": 190.94260339470702
+            },
+            "6-10s": {
+              "p50_ms": 54.59979100000023,
+              "p90_ms": 59.12255820000017,
+              "p99_ms": 60.14018082000015,
+              "count": 3,
+              "rtfx": 157.74709374566322
+            }
+          },
+          "rounds": [
+            {
+              "p50_ms": 77.36699999999996,
+              "p90_ms": 124.99431660000015,
+              "p99_ms": 143.35770635999992,
+              "count": 9,
+              "rtfx": 178.7848173196947
+            },
+            {
+              "p50_ms": 76.76229199999973,
+              "p90_ms": 123.60208360000011,
+              "p99_ms": 141.61033335999997,
+              "count": 9,
+              "rtfx": 179.44528998140396
+            },
+            {
+              "p50_ms": 74.89791699999992,
+              "p90_ms": 122.14187479999997,
+              "p99_ms": 142.15307527999985,
+              "count": 9,
+              "rtfx": 181.33493067857316
+            }
+          ],
+          "quality": {
+            "literal_edits": 39,
+            "literal_characters": 532,
+            "repository_edits": 21,
+            "repository_characters": 493,
+            "literal_cer": 0.07330827067669173,
+            "repository_cer": 0.04259634888438134
+          },
+          "stages": {
+            "1321491767934942997": {
+              "core_total_ms": 28.2132,
+              "frontend_ms": 1.9803,
+              "encoder_build_ms": 0.2929,
+              "encoder_compute_ms": 22.8983,
+              "encoder_read_ms": 0.0135,
+              "decoder_ms": 3.2051
+            },
+            "2330237947966115273": {
+              "core_total_ms": 39.5653,
+              "frontend_ms": 3.4179,
+              "encoder_build_ms": 1.3855,
+              "encoder_compute_ms": 29.5247,
+              "encoder_read_ms": 0.0186,
+              "decoder_ms": 5.044
+            },
+            "8675814957598723431": {
+              "core_total_ms": 61.6135,
+              "frontend_ms": 6.0224,
+              "encoder_build_ms": 2.1683,
+              "encoder_compute_ms": 41.4998,
+              "encoder_read_ms": 0.0345,
+              "decoder_ms": 11.7472
+            }
+          },
+          "stage_status": "measured",
+          "peak_memory_bytes": 1344161448,
+          "load_ms": 288.5857909999999,
+          "first_request_ms": 163.598625,
+          "repeated_text_changes": 0
+        }
+      },
+      "comparisons": {
+        "relative": {
+          "text_changed": 0,
+          "public_tokens_changed": 0,
+          "segments_changed": 0,
+          "literal_better": 0,
+          "literal_worse": 0,
+          "literal_equal": 9,
+          "repository_better": 0,
+          "repository_worse": 0,
+          "repository_equal": 9,
+          "count": 9,
+          "median_latency_ratio": 0.9854213224297399,
+          "latency_rounds": [
+            {
+              "round": 0,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 1,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 2,
+              "count": 9,
+              "text_changed": 0
+            }
+          ],
+          "latency_text_changed": 0,
+          "latency_text_comparisons": 27,
+          "latency_reduction_percent": 1.4578677570260101
+        },
+        "cumulative": {
+          "text_changed": 0,
+          "public_tokens_changed": 0,
+          "segments_changed": 0,
+          "literal_better": 0,
+          "literal_worse": 0,
+          "literal_equal": 9,
+          "repository_better": 0,
+          "repository_worse": 0,
+          "repository_equal": 9,
+          "count": 9,
+          "median_latency_ratio": 1.001255584349381,
+          "latency_rounds": [
+            {
+              "round": 0,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 1,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 2,
+              "count": 9,
+              "text_changed": 0
+            }
+          ],
+          "latency_text_changed": 0,
+          "latency_text_comparisons": 27,
+          "latency_reduction_percent": -0.12555843493808894
+        }
+      }
+    }
+  },
+  "builds": {
+    "baseline": {
+      "source_commit": "711ac954089593d00c1d9bc67c44107dbf09c3e0",
+      "source_tree": "3af88a0f34db497b2f63c9cc47c53c795c3287d3",
+      "source_verified": true,
+      "ggml_commit": "21027944523aabaac5e15b44a8adaeeb28857ff0",
+      "created_utc": "2026-11-06T22:49:03.167746+00:00",
+      "build_flags": {
+        "configure": [
+          "-DCMAKE_BUILD_TYPE=Release",
+          "-DGGML_NATIVE=ON",
+          "-DGGML_METAL=ON"
+        ],
+        "build": [
+          "--target",
+          "speech-cli",
+          "fastconformer-timing",
+          "-j4"
+        ]
+      },
+      "cmake_cache_sha256": "cda3d9f9d5748cc36644347056461252514ff15139dd583aab7baebed23fa244",
+      "build_log_sha256": "fc79e3a5592ae454db53b47ea92530fca081e707933541e5ca58caec10ea87f3",
+      "stage_threads_argument": true,
+      "speech": {
+        "sha256": "ceda165c9da9114329999b49ef3818e833a02d7e8c14451153db73d5be7e9178",
+        "artifact_path": "builds/009b-candidate/speech"
+      },
+      "stage_tool": {
+        "sha256": "3f458cdea26230873673b4fc8ec30e568975c8cbfdfe633535cdd0bd0a4c455d",
+        "artifact_path": "builds/009b-candidate/fastconformer-timing"
+      }
+    },
+    "candidate": {
+      "source_commit": "711ac954089593d00c1d9bc67c44107dbf09c3e0",
+      "source_tree": "3af88a0f34db497b2f63c9cc47c53c795c3287d3",
+      "source_verified": true,
+      "ggml_commit": "21027944523aabaac5e15b44a8adaeeb28857ff0",
+      "created_utc": "2026-11-06T22:49:03.167746+00:00",
+      "build_flags": {
+        "configure": [
+          "-DCMAKE_BUILD_TYPE=Release",
+          "-DGGML_NATIVE=ON",
+          "-DGGML_METAL=ON"
+        ],
+        "build": [
+          "--target",
+          "speech-cli",
+          "fastconformer-timing",
+          "-j4"
+        ]
+      },
+      "cmake_cache_sha256": "cda3d9f9d5748cc36644347056461252514ff15139dd583aab7baebed23fa244",
+      "build_log_sha256": "fc79e3a5592ae454db53b47ea92530fca081e707933541e5ca58caec10ea87f3",
+      "stage_threads_argument": true,
+      "speech": {
+        "sha256": "ceda165c9da9114329999b49ef3818e833a02d7e8c14451153db73d5be7e9178",
+        "artifact_path": "builds/009b-candidate/speech"
+      },
+      "stage_tool": {
+        "sha256": "3f458cdea26230873673b4fc8ec30e568975c8cbfdfe633535cdd0bd0a4c455d",
+        "artifact_path": "builds/009b-candidate/fastconformer-timing"
+      }
+    },
+    "anchor": {
+      "source_commit": "f976ebd8e2fca1f15ddc2e6fc9f99e7090b0f9ea",
+      "source_tree": "dee6405fbb3c50eb5f3113f76e6745f59c21b919",
+      "source_verified": true,
+      "ggml_commit": "e1a9ac12edbb57402618fd6936598603f5ee6266",
+      "created_utc": "2026-11-06T17:35:25.712263+00:00",
+      "cmake_cache_sha256": "c3af3223b29cbc28d05f6c379b935c738fc1ccd8b53e553bb0d9d5a88829a171",
+      "build_log_sha256": "c13da50cb07e637c4858e256fb0eff3c80a4f1be693e01093cfda3ac589943e8",
+      "stage_threads_argument": true,
+      "speech": {
+        "sha256": "d493b968e7a94e45f93054bc899c9d20802bb781a19f8dc76cfd4fa6dd91413f",
+        "artifact_path": "builds/campaign-anchor/speech"
+      },
+      "stage_tool": {
+        "sha256": "3dc5c6f19a78153b5f8d0bbd3f08f6106825e5ebd9d9465283b6ebd01553f768",
+        "artifact_path": "builds/campaign-anchor/fastconformer-timing"
+      },
+      "build_flags": {
+        "configure": [
+          "-DCMAKE_BUILD_TYPE=Release",
+          "-DGGML_NATIVE=ON",
+          "-DGGML_METAL=ON"
+        ],
+        "build": [
+          "--target",
+          "speech-cli",
+          "fastconformer-timing",
+          "-j4"
+        ]
+      }
+    }
+  },
+  "execution_environments": {
+    "baseline": {
+      "GGML_CPU_NORM_MUL_ADD_FUSION": "0",
+      "GGML_CPU_NORM_MUL_ADD_FUSION_TRACE": "0"
+    },
+    "candidate": {
+      "GGML_CPU_NORM_MUL_ADD_FUSION": "1",
+      "GGML_CPU_NORM_MUL_ADD_FUSION_TRACE": "0"
+    },
+    "anchor": {
+      "GGML_CPU_NORM_MUL_ADD_FUSION": "0",
+      "GGML_CPU_NORM_MUL_ADD_FUSION_TRACE": "0"
+    }
+  },
+  "models": {
+    "q4_k": {
+      "type": "q4_k",
+      "sha256": "d24d53f29b75214a933ff482b0de1217e0a800f4118cca39ad6cf03609a89d6f",
+      "size": 351901216,
+      "revision": "6b965d5007ba780585de51549d57a8c1c0d67c7e"
+    },
+    "q8_0": {
+      "type": "q8_0",
+      "sha256": "cd5f60b2f1c411404b83fca4a65e3ce30a26d9e951b6a346529e65f22758afeb",
+      "size": 656381472,
+      "revision": "6b965d5007ba780585de51549d57a8c1c0d67c7e"
+    },
+    "f16": {
+      "type": "f16",
+      "sha256": "f752e02f68c1dfff795900e40aa82e5302976fb5360080fcbd330d8b3c992cd8",
+      "size": 1233128832,
+      "revision": "6b965d5007ba780585de51549d57a8c1c0d67c7e"
+    }
+  },
+  "fixed_anchor": {
+    "measured_side": "anchor",
+    "source_commit": "f976ebd8e2fca1f15ddc2e6fc9f99e7090b0f9ea",
+    "speech_sha256": "d493b968e7a94e45f93054bc899c9d20802bb781a19f8dc76cfd4fa6dd91413f",
+    "environment": {
+      "GGML_CPU_NORM_MUL_ADD_FUSION": "0",
+      "GGML_CPU_NORM_MUL_ADD_FUSION_TRACE": "0"
+    },
+    "build_manifest_sha256": "47ff498e173967caf11c67571f38a6a0efe67e3d649bbfafb2738089951cd553"
+  },
+  "assets_sha256": "e82d03c053c861f4943907d67f28e191431f84706429b324e80368adf6808581",
+  "input_hash": "7196750a6d97b470abbcc6fc45bd3d82572473a5e778200a145fe82dbda03267",
+  "evidence": {
+    "directory": "009b",
+    "run_manifest_sha256": "85111f9dd4b49ab4cd5ca0347eab045afac3b60b78aa76aa275f8114786f0991",
+    "paths_relative_to": "External campaign artifact directory.",
+    "evaluation_sha256": "5720ac85f83fd9e351e9338cf94d8f1b5a6b853c548d529d0ca851408bf45731",
+    "checks_sha256": "c6106e8570d1edf288d05e9c07f906bd7aa413b41e96beed544569ad259c4ee3",
+    "evidence_manifest_sha256": "c7ab3a49c6d03433aeef9264687e5840690e1fd77fec0d22f5f9a716b18c7e92",
+    "owner_manifest_files": 760,
+    "owner_manifest_bytes": 440406625,
+    "independent_manifest_path": "report-imports/009b/independent-evidence-sha256.json",
+    "independent_manifest_sha256": "5127c58903ce49413c6b6b963f168e012183c58a37b177709e793927148bcfbe",
+    "independently_verified_local_files": 760,
+    "independently_verified_external_files": 56,
+    "shared_input_symlinks_verified_by_target": 3,
+    "shared_input_contents_rehashed": false,
+    "request_audit_path": "report-imports/009b/request-audit.json",
+    "request_audit_sha256": "c8309f719c230b20f1a1b4300c2957041e832587d648853763e66e82aeec3de1",
+    "check_audit_path": "report-imports/009b/check-audit.json",
+    "check_audit_sha256": "1f6cb10a6497f9f743fd3c66808fea26b2cf7b3372dbc2ea8d609e13c1f7d7be",
+    "data_import_method": "Existing compare.record and render.py; local structured-data import without new renderer or helper code. No real measurements are transmitted to an external coding service."
+  },
+  "checks": [
+    {
+      "name": "Direct CPU dispatcher cases",
+      "status": "passed",
+      "required": true,
+      "scope": "mac",
+      "reason": "21 supported cases on each of original, switch off and switch on. Widths 1, 639, 640, 641 and 1025 plus output, fanout, view, alias, swapped-operand, multi-row and scalar-bias controls. The test executable uses its hardware-derived CPU threads; -j1 serializes cases.",
+      "evidence": "009b/checks/summary.json"
+    },
+    {
+      "name": "Direct Metal controls",
+      "status": "passed",
+      "required": true,
+      "scope": "mac",
+      "reason": "20 supported cases passed on each of original, off and on; strided_input is unsupported on Metal and is not counted as executed coverage.",
+      "evidence": "009b/checks-authorized/summary.json"
+    },
+    {
+      "name": "Stateful KDA strict differential checks",
+      "status": "passed",
+      "required": true,
+      "scope": "mac",
+      "reason": "15 conditions (synthetic F32 and Q4_K/Q8_0/F16/F32 weights, each CPU1, CPU4 and Metal) across original/off/on: 45 runs, 9390 assertions, zero failures. Inputs, states, prediction vectors, logits, direct outputs and decisions are finite and byte-identical. Maximum absolute difference 0; zero noise, hence infinite SNR.",
+      "evidence": "009b/checks-authorized/summary.json"
+    },
+    {
+      "name": "Actual fusion and history controls",
+      "status": "passed",
+      "required": true,
+      "scope": "mac",
+      "reason": "34 normal DecoderStep computations per run, 1530 in total. CPU on records three fusions per normal step; original/off/Metal record zero. Two interleaved histories, retained intermediates, abort callback, use_ref and recovery controls are checked separately. Total trace events include control graphs and are not the number of normal steps.",
+      "evidence": "009b/checks-authorized/summary.json"
+    },
+    {
+      "name": "Real audio raw TDT and public worker paths",
+      "status": "passed",
+      "required": true,
+      "scope": "mac",
+      "reason": "Three real stage recordings across Q4_K/Q8_0/F16 and original/off/on. All 108 pairwise raw comparisons, 27 public comparisons and nine metadata comparisons match. The ordinary raw paths cover nine unique type/input pairs. Cancellation before first step and after one/two steps, controlled boosting and recovery are included in raw comparisons.",
+      "evidence": "009b/audio-paths/result.json"
+    },
+    {
+      "name": "Existing C API and worker contracts",
+      "status": "passed",
+      "required": true,
+      "scope": "mac",
+      "reason": "F16 original/off/on: all three C API runs and all three worker smoke runs pass. Worker uses CPU decoder4 and verifies cancellation while collecting, waiting and running followed by recovery. C API uses automatic threads (16 on this M2 Ultra); its expected text fixtures are differential original-runtime expectations, not official reference text.",
+      "evidence": "009b/api-contracts/result.json"
+    },
+    {
+      "name": "Screen recognition equality",
+      "status": "passed",
+      "required": true,
+      "scope": "mac",
+      "reason": "Nine public quality inputs per side and type have identical text, public tokens and segments. All 27 latency text comparisons per type match for same-binary and fixed-anchor comparisons. Three types, nine duration-stratified latency inputs and three rounds; no full campaign run.",
+      "evidence": "009b/screen/summary.json"
+    },
+    {
+      "name": "Initial restricted Metal attempt",
+      "status": "failed",
+      "required": false,
+      "scope": "mac",
+      "reason": "The first restricted process saw no Metal device. Direct Metal returned success while skipping every case, and synthetic Metal failed before inference. Those logs remain unchanged and are not counted as passing coverage. Authorized Metal re-execution supplies the coverage reported above.",
+      "evidence": "009b/checks/coverage-audit.json"
+    },
+    {
+      "name": "Unsupported direct Metal strided input",
+      "status": "skipped",
+      "required": false,
+      "scope": "mac",
+      "reason": "One strided_input case remains unsupported in each authorized Metal configuration; it is excluded from the 20 executed cases.",
+      "evidence": "009b/checks-authorized/summary.json"
+    },
+    {
+      "name": "Official changed-stage KDA/prediction reference",
+      "status": "unavailable",
+      "required": true,
+      "scope": "reference",
+      "reason": "Synthetic and actual F32 weight differential checks are not an official KDA/prediction reference. Existing frontend/encoder tensors do not cover the changed decoder operations.",
+      "evidence": "009b/checks-evaluation.json"
+    },
+    {
+      "name": "Windows Vulkan execution",
+      "status": "unavailable",
+      "required": true,
+      "scope": "vulkan",
+      "reason": "No Windows Vulkan correctness or performance execution is recorded.",
+      "evidence": "009b/checks-evaluation.json"
+    },
+    {
+      "name": "Full 650-input and short-prefix evaluation",
+      "status": "skipped",
+      "required": false,
+      "scope": "mac",
+      "reason": "No full or short run follows the approved screen rejection. The nine-input CER is not a full-corpus estimate.",
+      "evidence": "009b/evaluation.json"
+    }
+  ],
+  "updated_utc": "2026-11-06T23:31:10.427474+00:00",
+  "adopted": false,
+  "evaluation_completed": true,
+  "full_quality_executed": false,
+  "short_prefix_executed": false,
+  "variant_scope": "CPU NORM -> MUL -> ADD dispatcher fusion for row operations. The separate projection packing variant is 009a.",
+  "implementation_checkpoint": {
+    "measured_source_commit": "711ac954089593d00c1d9bc67c44107dbf09c3e0",
+    "evaluation_commit": "39b8d24545d1ae30c0849d5b9b50bae54cba1d80",
+    "ggml_commit": "21027944523aabaac5e15b44a8adaeeb28857ff0",
+    "original_source_commit": "3f3655a05ccc14838f2832f549401ba3ef9779ac",
+    "original_ggml_commit": "4bbef873bb6fb0e741244bb5804abf1c742c3198",
+    "runner_commit": "a7e227c2b9067ee0b73a4582acf2e453cff5f179",
+    "runtime_unchanged_by_evaluation_notes": true,
+    "integrated": false,
+    "switch": "GGML_CPU_NORM_MUL_ADD_FUSION=0/1",
+    "diagnostic_switch": "GGML_CPU_NORM_MUL_ADD_FUSION_TRACE=1 only for separate diagnostic checks; primary TRACE=0",
+    "source_manifest": "009b/source-manifest.json",
+    "matched_build_conditions": "009b/build-conditions.json"
+  },
+  "diagnostics": [
+    {
+      "title": "Paired screen reductions by round",
+      "method": "Each input is reduced to its median across three rounds before the median ON/OFF ratio is computed. Positive means faster. Per-round ratios are reported separately and are not pooled with other trials.",
+      "headers": [
+        "Type",
+        "Combined paired reduction",
+        "Round 1",
+        "Round 2",
+        "Round 3",
+        "Inputs faster / slower",
+        "Fixed anchor comparison"
+      ],
+      "rows": [
+        [
+          "Q4_K",
+          "1.153%",
+          "0.036%",
+          "0.963%",
+          "0.857%",
+          "7 / 2",
+          "-0.190%"
+        ],
+        [
+          "Q8_0",
+          "-0.423%",
+          "-0.962%",
+          "-0.529%",
+          "-0.333%",
+          "2 / 7",
+          "-0.407%"
+        ],
+        [
+          "F16",
+          "1.458%",
+          "-0.913%",
+          "-0.246%",
+          "2.310%",
+          "5 / 4",
+          "-0.126%"
+        ]
+      ],
+      "notes": [
+        "Q4_K has a small positive paired signal. Q8_0 is slower in every round; F16 changes direction. The independent anchor comparison has a build-environment limitation.",
+        "The aggregate p50 change and median paired reduction are different statistics. The nine-input p99 is not a precise production-tail estimate."
+      ]
+    },
+    {
+      "title": "Paired reductions by duration",
+      "method": "The same nine files supply three recordings in each duration stratum. Positive means lower latency.",
+      "headers": [
+        "Type",
+        "6-10 seconds",
+        "10-20 seconds",
+        "20-30 seconds"
+      ],
+      "rows": [
+        [
+          "Q4_K",
+          "1.153%",
+          "1.614%",
+          "0.883%"
+        ],
+        [
+          "Q8_0",
+          "-0.116%",
+          "-1.465%",
+          "-0.423%"
+        ],
+        [
+          "F16",
+          "-1.407%",
+          "1.458%",
+          "1.900%"
+        ]
+      ],
+      "notes": [
+        "No full 650-input or separate 2/4-second prefix evaluation follows this screen rejection."
+      ]
+    },
+    {
+      "title": "Correctness coverage and excluded attempts",
+      "method": "Correctness and dispatch diagnostics are separate from the TRACE=0 request measurement. Original, candidate OFF and candidate ON are distinct diagnostic configurations.",
+      "headers": [
+        "Coverage",
+        "Executed evidence",
+        "Result / limitation"
+      ],
+      "rows": [
+        [
+          "Direct CPU dispatcher",
+          "21 supported cases per configuration",
+          "Pass; hardware-derived backend threads, cases serialized with -j1"
+        ],
+        [
+          "Direct Metal controls",
+          "20 supported cases per configuration",
+          "Pass; one strided input unsupported and excluded"
+        ],
+        [
+          "Stateful KDA differential",
+          "15 conditions; 45 runs; 9390 assertions",
+          "Zero failures; synthetic and actual Q4_K/Q8_0/F16/F32 weights on CPU1/CPU4/Metal"
+        ],
+        [
+          "Normal prediction dispatch",
+          "34 computations/run; 1530 total",
+          "CPU ON: three fusions per normal step; original/OFF/Metal: zero"
+        ],
+        [
+          "Ordinary real audio",
+          "Nine unique type/input pairs; 108 pairwise raw comparisons including controls",
+          "Exact IDs/frames/durations/text; cancellation and recovery controls on the first recording per type"
+        ],
+        [
+          "Public and metadata diagnostics",
+          "27 timestamped public comparisons; nine metadata comparisons",
+          "Exact"
+        ],
+        [
+          "Existing entry-point checks",
+          "Three F16 C API runs; three worker smoke runs",
+          "Pass; automatic API threads versus explicit worker CPU4"
+        ],
+        [
+          "Initial restricted Metal attempt",
+          "Zero valid Metal execution",
+          "Preserved environment failure; excluded from coverage"
+        ],
+        [
+          "Official changed KDA/prediction and Windows Vulkan",
+          "Not run",
+          "Unavailable; differential F32 does not replace official reference"
+        ]
+      ],
+      "notes": [
+        "All retained floating outputs are reported finite and byte-identical: maximum absolute difference zero and zero noise. Their stored payload hashes independently match. Infinite SNR here is an arithmetic consequence of zero noise, not an official-reference result.",
+        "Total trace events include retained-intermediate, abort, use_ref and recovery controls; they are not the normal prediction-step count."
+      ]
+    }
+  ]
+}

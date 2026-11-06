@@ -2,8 +2,10 @@
   "schema_version": 1,
   "measure_id": "009",
   "title": "Fuse CPU KDA projections and small operations",
-  "status": "conditional",
-  "reason": "The packed KDA projection variant 009a is rejected because its bounded CPU4 screen shows no clear request speed benefit. No implementation is adopted. CPU small-operation fusion is a separate candidate and remains untested; this result does not reject the whole measure.",
+  "status": "rejected",
+  "reason": "Evaluation of the tested variants is complete: packed KDA projections (009a) and CPU normalization/scale/bias dispatcher fusion (009b) are rejected after bounded request screens. Neither implementation is adopted. This verdict covers those two variants and does not rule out every other small-operation design.",
   "checks": [],
-  "updated_utc": "2026-11-06T22:06:00.447070+00:00"
+  "updated_utc": "2026-11-06T23:32:07.755685+00:00",
+  "evaluation_completed": true,
+  "adopted": false
 }
