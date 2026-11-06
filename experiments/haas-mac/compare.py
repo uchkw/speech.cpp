@@ -332,6 +332,7 @@ def run_comparison(args):
                                    'chip': ['sysctl', '-n', 'machdep.cpu.brand_string'], 'cpu_cores': ['sysctl', '-n', 'hw.ncpu'],
                                    'memory_bytes': ['sysctl', '-n', 'hw.memsize'], 'macos': ['sw_vers', '-productVersion']}.items()},
                                'python': platform.python_version(),
+                               'python_executable': sys.executable,
                                'runner_sha256': {name: sha(HERE / name) for name in ['compare.py', 'worker.py', 'campaign.json']},
                                'created_utc': datetime.now(timezone.utc).isoformat()}}
     write(directory / 'run.json', manifest)

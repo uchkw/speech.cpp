@@ -33,6 +33,24 @@ it cannot support acceptance. A fixed anchor is rerun when it differs from the i
 paired measurements, not compounded percentages. The stage tool uses three PCM-derived `audio.npy` inputs with
 explicit threads; these files are benchmark audio, not tensors from the official implementation.
 
+For a promising candidate with a completed primary run, prepare a separate six-input latency supplement:
+
+```sh
+/usr/bin/python3 -B experiments/haas-mac/short.py prepare --assets "$ARTIFACTS/assets/assets.json" --out "$ARTIFACTS/short-prefixes"
+/usr/bin/python3 -B experiments/haas-mac/short.py run --primary-run "$ARTIFACTS/003/full" \
+  --inputs "$ARTIFACTS/short-prefixes/inputs.json" --out "$ARTIFACTS/003/short"
+```
+
+These are two- and four-second prefixes of the three existing stage recordings, with original and derived PCM hashes
+and exact sample boundaries. They are not naturally completed short utterances. The full-recording labels are not
+prefix references: both CER fields remain null. The supplement compares every latency text with the baseline over
+three alternating rounds and reports six-input and duration-stratum latency, separately from the primary result.
+It inherits the primary binaries, models, environment and thread setting and requires the same recorded Python
+version and executable. New primary manifests record `sys.executable`; old manifests are refused, not backfilled.
+Use `/usr/bin/python3` for the campaign's primary runs. The supplement freezes its runner files, uses the shared lock,
+and never changes the primary dataset, result or verdict. Its JSON can be shown as a separate diagnostic in the trial
+report; it cannot establish short-utterance CER or adoption on its own.
+
 `--screen` selects the shortest, middle and longest of the existing inputs in each duration stratum: nine inputs over
 three rounds, plus nine separate quality requests. It is useful for rejecting an unpromising variant before the full
 run, and cannot support acceptance. `--smoke` and `--screen` are mutually exclusive. Without `--anchor`, the report

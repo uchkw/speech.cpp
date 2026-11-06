@@ -139,6 +139,8 @@ def main():
     assert compare.percentile([1., 4., 9.], .9) == 8.
     with tempfile.TemporaryDirectory(prefix='haas-campaign-check-') as temporary:
         review_regressions(Path(temporary))
+        from short_check import check as check_short_inputs
+        check_short_inputs(Path(temporary) / 'short-prefixes')
     campaign = compare.read(compare.HERE / 'campaign.json')
     html = render.report_html({'measure_id': '999', 'title': '<script>bad()</script>', 'status': 'pending', 'reason': '<b>not markup</b>'}, '999.json', campaign)
     assert '<script>' not in html and '&lt;script&gt;' in html
