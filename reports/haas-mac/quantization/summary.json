@@ -780,7 +780,8 @@
       11
     ],
     "keyword_boosting": false,
-    "application_scope": "Voimem defaults to haas-ja-v1.0:q4_k, auto model device and four threads. Its model setting exposes no decoder override. On this Mac the four quantized formats select CPU decoding and F16 selects Metal decoding. The timer covers the speech worker. Microphone capture, application VAD, configured keyword boosts and postprocessing are outside it."
+    "application_scope": "Voimem defaults to haas-ja-v1.0:q4_k, auto model device and four threads. Its model setting exposes no decoder override. On this Mac the four quantized formats select CPU decoding and F16 selects Metal decoding. The timer covers the speech worker. Microphone capture, application VAD, configured keyword boosts and postprocessing are outside it.",
+    "apply_model": "In Voimem, open Settings, choose Recognition, enter the fully qualified model in Model, then select Save settings. Save writes the preference. Select Prepare to load it immediately, or start the next recording to load it before capture. The next file import that contains speech also prepares the selected model. The app can remain open."
   },
   "f16_placement_public_output": {
     "inputs": 650,
