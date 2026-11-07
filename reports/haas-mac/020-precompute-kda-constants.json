@@ -2,7 +2,8 @@
   "schema_version": 1,
   "measure_id": "020",
   "title": "Precompute KDA constants",
-  "status": "pending",
-  "reason": "Not evaluated.",
-  "checks": []
+  "status": "in_progress",
+  "reason": "The general CPU/Metal preparation variant 020a failed the Q4_K Metal exact check and is rejected. CPU-only prediction preparation (020b) is a distinct candidate awaiting evaluation. No measured speedup is recorded.",
+  "checks": [],
+  "updated_utc": "2026-11-07T06:17:06.616789+00:00"
 }
