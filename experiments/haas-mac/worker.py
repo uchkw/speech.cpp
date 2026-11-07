@@ -24,7 +24,8 @@ BINARY_EXPERIMENT_ENVIRONMENT = {'SPEECH_HAAS_CPU_REPACK', 'SPEECH_HAAS_FFN_F16'
                                  'GGML_CPU_NORM_MUL_ADD_FUSION', 'SPEECH_HAAS_WORKER_UNSYNC', 'SPEECH_HAAS_WORKER_UNTIE',
                                  'SPEECH_HAAS_TDT_DEVICE_ARGMAX', 'SPEECH_HAAS_REL_FA', 'SPEECH_HAAS_KEYWORD_CACHE',
                                  'SPEECH_HAAS_RAW_MEL_PREFIX', 'GGML_METAL_BIND_CACHE',
-                                 'SPEECH_HAAS_KDA_PREFIX_CACHE'} | DIAGNOSTIC_EXPERIMENT_ENVIRONMENT
+                                 'SPEECH_HAAS_KDA_PREFIX_CACHE',
+                                 'GGML_METAL_MM_GLU', 'SPEECH_HAAS_KEYWORD_PREFIX'} | DIAGNOSTIC_EXPERIMENT_ENVIRONMENT
 EXPERIMENT_ENVIRONMENT = BINARY_EXPERIMENT_ENVIRONMENT | {'GGML_METAL_MM_TILE_N'}
 
 # The decoder placement shared by every side of one run: the worker's --device value and its decode-on-CPU argument.
