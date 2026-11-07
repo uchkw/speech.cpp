@@ -452,6 +452,22 @@ foreach(stage vocabulary words)
     target_link_libraries(fastconformer-${stage}-check PRIVATE fastconformer)
 endforeach()
 
+# The keyword prediction prefix of TDT decoding, against the ordinary plain and boosted decodings of the same
+# inputs: the all-F32 two-KDA-layer fixture that 003-state-fixture.h writes, or a model's own weights with
+# synthetic frames. Its observer of the graphs the backend computes reads ggml's backend internals.
+add_executable(fastconformer-keyword-prefix-check checks/fastconformer/fastconformer-keyword-prefix-check.cpp)
+target_include_directories(fastconformer-keyword-prefix-check PRIVATE checks ggml/src)
+target_link_libraries(fastconformer-keyword-prefix-check PRIVATE fastconformer)
+
+# The same keyword prefix through the normal production path, WordsModel::recognize on a real file and non-silent
+# speech, watched by the same check-side observer and writing the artifact that compares an original-base build with
+# this one, its prefix off and on (experiments/haas-mac/028_compare_keyword_prefix.py). The tool uses only the APIs
+# the original base already had, so the same source and target build there unchanged; it is a prototype of the
+# experiment alone and nothing released installs it.
+add_executable(fastconformer-keyword-prefix-normal-check checks/fastconformer/fastconformer-keyword-prefix-normal-check.cpp)
+target_include_directories(fastconformer-keyword-prefix-normal-check PRIVATE checks ggml/src)
+target_link_libraries(fastconformer-keyword-prefix-normal-check PRIVATE fastconformer)
+
 # The checks of Qwen3-ASR's stages.
 foreach(stage frontend encoder)
     add_executable(qwen3-asr-${stage}-check checks/qwen3-asr/qwen3-asr-${stage}-check.cpp)
