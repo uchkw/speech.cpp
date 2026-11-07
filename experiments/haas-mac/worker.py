@@ -56,8 +56,8 @@ def require_evaluation_build(build):
         raise ValueError('A build marked performance_evaluation_eligible=false cannot run an evaluation; use the dedicated pgo_train driver.')
 
 
-# The opt-in synthetic keyword experiment: request_options on individual warmup and measured records only. The flat
-# wire fields below are strictly allowlisted and validated pre-launch; raw keyword text is never coerced or logged.
+# The opt-in synthetic keyword experiment: request_options on warmup and measured records only; the flat wire fields below are the strict allowlist.
+# Normal console progress does not print keyword values; exact sent options including keyword text are retained in local opt-in request provenance.
 KEYWORD_REQUEST_OPTIONS = ('keywords', 'keywords_alpha', 'keywords_guard')
 
 
