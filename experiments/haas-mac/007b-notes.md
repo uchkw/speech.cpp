@@ -1,91 +1,81 @@
-# Trial 007b: tile content attention with a dynamic relative-score mask
+# Trial 007b stopped evaluation, tile content attention with a dynamic relative-score mask
 
-This source-only experiment starts from speech.cpp `114c514430c8aa1455c077819f8e72e674a48b75` and unchanged ggml
-`e1a9ac12edbb57402618fd6936598603f5ee6266`. It has not been compiled or run. It is independent of rejected trial 007a,
-which fused ADD and softmax without tiling QK or PV. No speed or accuracy result is claimed here.
+The candidate is rejected. On its first enabled Q4_K input, T=1 or 7 frontend feature frames, the enabled encoder
+failed the preregistered requirement that its ordinary and retained projected outputs agree bit for bit. This is
+a failed internal consistency gate, not a measured recognition or performance outcome. Neither was run and no
+relaxed tolerance was applied.
 
-## Scope
+The evaluation ran on Apple M2 Ultra, macOS 26.7.2, Release/arm64 with a matching SDK, GGML_NATIVE and
+GGML_METAL enabled, 4 threads, Haas ja v1.0 Q4_K, with sides original unset, candidate OFF literal 0 and
+candidate ON literal 1 under `SPEECH_HAAS_REL_FA`. Both enabled graphs ran with 24 FA graph nodes, graph node
+counts and not GPU dispatch counts, and all 24 retained masks were finite with maximum absolute value 24.875 and
+no zero or subnormal entries. The helper checked equality before saving its outputs, so the failed ON run left no
+raw tensor and exited 1 without a successful terminal. Original and candidate OFF covered all 16 synthetic
+lengths with 16 normal and 16 retained graphs per side, zero FA nodes and bit-exact ordinary versus retained
+projected bytes, and their 448 F32 files per side matched in SHA256 and extents. This is not a completed
+three-side raw comparison, because the ON side saved none.
 
-`SPEECH_HAAS_REL_FA=1` enables the graph variant for Haas-ja-v1.0 only: global relative attention, 24 unbiased layers,
-width 1024, eight heads of 128, KDA prediction, on Metal, and 1 to 384 subsampled frames. An unset switch or `0`
-keeps the original graph. Any other switch value, another model, another backend, an out-of-range input or a backend
-that cannot compute the constructed FA_EXT throws a named error. Enabling the trial never silently selects the old
-graph. The switch is read when an encoder is constructed; use fresh processes for the paired campaign.
+## Failure-only diagnostic
 
-Each layer still computes the projected positions and the dense positional product `(q + v) P^T`, of shape
-`[2T - 1, T, 8]`. The original relative shift is the same view: query `i`, key `j` reads position index
-`T - 1 - i + j`. The view becomes a contiguous F32 copy, is multiplied by `1/sqrt(128)`, and is cast to a contiguous
-F16 mask `[T, T, 8, 1]`. It is recomputed from that layer's queries, not cached as a static positional mask.
+The independently compiled failure-only helper `36e6ce8df02179d526b8352ca3c779abc116172c` used the exact same
+runtime speech `566d2c5e141183daae681c0af29325d7f19a1bc7` and ggml `e1a9ac12edbb57402618fd6936598603f5ee6266`,
+the same flags, graph and tensor markings, and saved the two already computed host outputs in the same failure
+branch without changing the original runtime or adding graphs, outputs or node markings. The rerun exited 1
+without a successful terminal and produced two F32 outputs of 2,560 bytes each with actual shape one frame by
+640 channels. 602 of 640 elements differ in raw representation, a count of changed F32 elements and not of
+flipped bits. The first differing index is 0, the maximum absolute difference is 3.933906555175781e-6, and both
+sides were finite.
 
-FA_EXT receives `(q + u)`, K and V as F32 tensors `[128, T, 8, 1]`, the mask above, scale `1/sqrt(128)`, max_bias 0,
-and logit_softcap 0. K and V each have an explicit CONT into this canonical layout, without a type conversion.
-The two copies and their dispatches remain part of the measured variant cost. Thus every query sees every real key, the two query biases remain distinct, and no ALiBi slope,
-causal mask, local window, sink or sparse-key hint is introduced. Its output `[128, 8, T, 1]` already has the layout
-the output projection takes. The old content-score tensor, separate softmax, transposed V copy and PV product are
-absent from the enabled graph.
+The retained graph keeps the subsampling, layer, encoded and projected tensors plus 24 F16-to-F32 mask readouts,
+so retention can change live ranges, allocation placement and fusion. The location and cause of the difference
+and its effect on recognition are undetermined, and this report does not ascribe it to F16 rounding, tail
+padding, a bad FA kernel, nondeterminism or model accuracy. No further localization or repeated attempt was made
+beyond this single diagnostic.
 
-This is tiled QK/online-softmax/PV with a dense positional prepass. It is not fully fused relative-position attention
-and does not make all attention memory linear: the dense positional product, F32 preparation and F16 mask remain
-quadratic in T. FA_EXT also scans mask blocks and pads the final K/V block when T does not fill one. A later fully
-tiled positional kernel would need a query-dependent relative-position gather; concatenating one static P with K
-cannot express it.
+## Variant, selector and checks
 
-At 16 kHz with the model's hop of 160 and subsampling of eight, exactly 30 seconds is 480000 samples,
-3000 feature frames and 375 encoder frames. `NemoFrontend::frames()` drops the extra centered-STFT frame before
-three ceiling halvings. The experimental bound of 384 also covers neighboring tail fixtures, including T=376.
-The existing Q4_K file's metadata confirms these constants; no weights were read to establish the bound.
+The dense query-dependent relative-position prepass remains. Each layer computes the projected positions and the
+dense positional product $(q+v)P^T$ of shape $[2T-1, T, 8]$, where query $i$ and key $j$ read position index
+$T-1-i+j$ through the relative shift, then copies to contiguous F32, scales by $1/\sqrt{128}$ and casts to a
+per-layer contiguous F16 mask $[T, T, 8, 1]$. FA_EXT receives $(q+u)$, K and V as F32 tensors $[128, T, 8, 1]$
+with that mask, scale $1/\sqrt{128}$, max_bias 0 and logit_softcap 0, and tiles QK, online softmax and PV. K and
+V each take an explicit CONT into this canonical contiguous F32 layout, and the old content-score tensor,
+separate softmax, transposed V copy and PV product are absent. The ggml e1a9 source is retained, the independent
+noncontiguous K/V pad fix d27e2a6b was not applied, and at T=1 each canonical K/V row is 512 bytes.
 
-The pinned FA tail-padding source copies a K/V time stride instead of only the logical channel row. For the
-encoder's original permuted layout these differ. That source finding has not been reproduced here and does not
-establish an impact on the original Haas graph, which does not use FA. The backend cause is being investigated
-separately; choosing a canonical contiguous FA layout here does not claim to fix ggml. Production review must
-include that investigation.
+The potential arithmetic differences were not localized as the failure cause. The original rounds
+`(AC + BD) * scale` in F32, while FA_EXT rounds `AC * scale + F16(BD * scale)`, and distributing the scale
+changes rounding even before the mask cast. The pinned Metal F32 FA kernels stage Q in half while reading K and
+V in F32, whereas ordinary large-batch GEMMs stage both operands in half (`mul_mm.metal`). Online maxima,
+exponential sums, rescaling and reduction order also differ from the old separate softmax and GEMM.
 
-## Arithmetic changes to measure
+`SPEECH_HAAS_REL_FA=1` enables the variant for global Haas ja v1.0 on Metal only, with 24 unbiased layers, width
+1024, eight heads of 128, KDA prediction and 1 to 384 subsampled frames. An unset switch or literal 0 keeps the
+original graph, and any other value, another model, another backend or an out-of-range input throws a named
+error, so enabling never silently selects the old graph. Actual invalid-value, empty, CPU ON and T385 negative
+controls were rejected. The wrong-model guard is source only, no alternate public FastConformer model was
+available, and unsupported-op denial was not observed on this supporting M2.
 
-- The original logits round `(AC + BD) * scale` in F32. FA_EXT rounds `AC * scale + F16(BD * scale)`. Distributing the
-  scale changes rounding even before the mask cast. Q is not prescaled in this variant.
-- The two explicit K/V CONT operations preserve F32 values; they change memory layout and incur a copy cost.
-  There is no explicit K/V cast. The pinned Metal F32 FA kernels stage Q in half, while reading K and V in F32
-  (`fa_f32.metal:23-29` and `fa_vec_f32.metal:13-19`). The ordinary large-batch GEMMs stage both operands in half
-  (`mul_mm.metal`), so K, V and softmax probabilities do not have the same rounding in the two paths. Small batches
-  also cross the original mat-vec/MMA dispatch boundaries; they require their own checks.
-- FA uses online maxima, exponential sums, output rescaling and a different reduction order. Its non-vector F32
-  kernel keeps probabilities and output accumulation in F32. This differs from the old separate softmax followed by
-  a GEMM whose operands are staged in half. `ggml_prec_set_acc(F32)` does not undo these differences.
-- For fewer than 20 queries Metal uses its vector FA kernel. Otherwise M2 uses the simdgroup kernel, not the M5
-  tensor API. Both path families and partial query/key tiles need coverage. F16 mask overflow, underflow and finite
-  range must be recorded on real inputs; no clamp or accuracy fallback is added.
-- The positional product and its projection/cache have the original arithmetic. No q/v sharing, position reversal,
-  windowing, or change to the scale/head count is part of the trial.
+CPU and Metal each passed all 20 independent direct fixtures with per-head masks exact against the scalar
+relative index. The worst NMSE was 1.11627716e-13 on CPU and 1.15624144e-13 on Metal, both strictly below the
+pinned 5e-4 bound, while the shared-head control at 0.00875775384 and the reversed-position control at
+0.983672817 both exceeded it. This direct CPU synthetic check is distinct from the family's intentional CPU ON
+rejection.
 
-## Validation gate, after a compute lease
+None of the planned official 90 dB CPU and 25 dB Metal encoder checks were run. No public TDT, API, worker or
+CLI recognition, 9x3 screen, 650-input quality set or short timing was run, and M5 and Vulkan are untested.
+Speed, RTFx, memory effect and CER are unmeasured, with no 0 percent or other value claimed.
 
-1. Compile original and candidate with identical flags and link the same diagnostic source separately against each.
-   Keep original, candidate OFF and candidate ON as separate fresh processes. Verify OFF against original first.
-2. Run `007b-encoder-check` with expected FA counts 0, 0 and 24. It checks the actual graph's F32 Q/K/V and
-   contiguous F32 K/V and head-specific F16 mask, saves ordinary projected output and retained subsampling/layer/encoder/projected tensors,
-   records every retained mask's finite range, zero and F16-subnormal counts, and requires ordinary and retained
-   projected bytes to agree within each side. Synthetic T values are
-   `1,16,17,19,20,31,32,33,63,64,65,171,172,375,376,384`; real `features.npy` files can replace the synthetic inputs.
-   Its channel argmax is an activation diagnostic, not a vocabulary or duration decision.
-3. Compare every saved tensor with original: finite values, exact-byte count, max absolute/relative difference, NMSE,
-   SNR and frame-wise channel argmax. Run `007b-attention-check` on CPU and Metal: it uses asymmetric dyadic Q/K/V/P with distinct
-   u/v biases, an independent scalar formula and explicit shared-head/reversed-position negative controls. It checks
-   every F16 mask entry against the scalar relative index and uses the pinned ggml FA_EXT NMSE bound of `5e-4`.
-   It includes the T=19/20 vector-kernel boundary, partial tiles, T=376 and larger finite logits. The direct CPU FA
-   fixture is not a CPU execution of the family variant, which deliberately rejects CPU ON.
-4. Keep the official encoder thresholds unchanged: CPU F32 90 dB with the variant OFF, and Metal F32/F16 25 dB with
-   OFF and ON, through `fastconformer-encoder-check`. Capture every layer's SNR as well as the final pass/fail. The
-   CPU ON rejection is intentional. The check does not admit Q4_K/Q8_0 by loosening its existing type gate.
-5. Capture raw TDT ids, frames and durations with the existing 007a stage-path diagnostic, compiled against all
-   three runtime sides. It uses only unchanged family interfaces. Compare full public text/tokens/times and both
-   literal and repository-normalized CER on the same 650 quality inputs for Q4_K, Q8_0 and F16. Investigate all
-   changed decisions; tensor SNR alone cannot approve a recognition regression.
-6. Check invalid switch values, CPU ON, another model, T=385 and backend support rejection before timing. Run the
-   ordinary non-instrumented end-to-end screen and alternating stage measurements only after numerical checks.
-   Report warm latency p50/p90/p99, RTFx, first request, load time and peak memory. Escalate to the full/short-prefix
-   campaign only for a stable gain beyond round noise. Vulkan and M5 are untested by this Mac experiment.
+## Evidence
 
-Raw artifacts belong under `outputs/haas-mac-campaign/007b/`, not in Git. The coordinator owns compute allocation,
-publication, later evaluation reports and any decision to replace this experiment with production code.
+Tested revisions are candidate speech `566d2c5e141183daae681c0af29325d7f19a1bc7`, original speech
+`114c514430c8aa1455c077819f8e72e674a48b75`, ggml `e1a9ac12edbb57402618fd6936598603f5ee6266` shared by both
+sides, failure-only helper `36e6ce8df02179d526b8352ca3c779abc116172c`, offline triplet comparator
+`82938006b1dd807d60c10db7a6c449679c25a03f` and prepared runner `dfe7f1ded3cfbadbe07d80560effba1c07a179bf`. The
+failure-only result carries SHA256 `6ed40e8647280aee69f234c0dd00bb6961ca4a893aabfe088053ed395e95bd28`.
+
+Local artifacts live under `outputs/haas-mac-campaign/007b/`. The first failure is recorded at
+`execution/normal-retained-first-failure.json`, the failure-only run at `retained-diagnostic-t1/result.json`, the
+raw manifest at `evidence-raw.json` and the selector checks at `selector-checks/result.json`. The raw manifest
+covers 973 local files of 489,686,509 bytes plus 11 separately retained files of 9,875,822 bytes, with full
+SHA256 `a8a0e5c2c2a84b90802c789337bbb5a6dc72141307d3c0555eba0632002d6b53`.
