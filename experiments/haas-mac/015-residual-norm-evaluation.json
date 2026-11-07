@@ -1,0 +1,279 @@
+{
+  "trial": "015",
+  "experiment": "residual-norm",
+  "decision": "rejected",
+  "reason": "The current prototype did not show a stable whole-request improvement across rounds and model types. No production adoption or default change. No full or short6 expansion.",
+  "documents": {
+    "design": "experiments/haas-mac/015-residual-norm.md",
+    "report": "experiments/haas-mac/015-residual-norm-evaluation.md"
+  },
+  "numerical_source": "approved-facts.json, the outer coordinator's sanitized aggregate",
+  "identities": {
+    "source_commit": "5bb4531bfd9608ad61bb1573f8cc9b6f95d0fd3d",
+    "ggml_candidate": "eb97e21752e680fa92f402cc80a84a4700e60cea",
+    "ggml_original_identical_cases": "8f5f4e2932255663d46f3fedbc180464b2db4ea6",
+    "product_control_parent": "114c514430c8aa1455c077819f8e72e674a48b75",
+    "product_control_ggml": "e1a9ac12edbb57402618fd6936598603f5ee6266",
+    "frozen_runner": "bc9198776ba66074d6fca55fa2c0a79be7690876",
+    "frozen_anchor": "f976ebd8e2fca1f15ddc2e6fc9f99e7090b0f9ea",
+    "selector": "GGML_METAL_RESIDUAL_NORM=0|1, default OFF"
+  },
+  "conditions": {
+    "hardware": "Apple M2 Ultra, 24 CPU cores, 76 GPU cores, 192 GB RAM, macOS 26.7.2",
+    "python": "3.9.6",
+    "build": "Clean Release/native/Metal arm64 with explicit SDK, -j4; 74 flags.make and 74 link.txt match the retained original after normalizing only source/build paths. Initial build without explicit -arch arm64 was preserved and excluded."
+  },
+  "direct": {
+    "logical_cases_per_build": 71,
+    "poisoned_restored_executions_per_build": 284,
+    "complete_original_candidate_dump_equal": true,
+    "regressions_per_build": 158,
+    "regression_operations": ["ADD", "NORM", "NORM_MUL_ADD"]
+  },
+  "normal": {
+    "model_types": ["Q4_K", "Q8_0", "F16", "F32"],
+    "inputs_per_type": 14,
+    "three_stage_inputs_and_official_audio_inputs": [3, 11],
+    "variants": ["original", "candidate OFF", "candidate ON"],
+    "graph_executions": 168,
+    "final_joint_projected_f32_bytes_all_equal": true,
+    "observed_new_add_norm_affine_fusions_per_input": 24,
+    "dispatch_reduction_per_input": 24,
+    "local_encoder_index_sequences": 2,
+    "same_sequence_boundaries_on_all_sides": true,
+    "first_q4_dispatches_off_on": [958, 934],
+    "fusion_statistics_initialized": false,
+    "interpretation": "Two local index sequences and their boundaries are observed in graph logs. n_cb=1 is inferred from the existing source mapping; it is not an independent runtime counter measurement."
+  },
+  "official": {
+    "scope": "Retained official F32 features-to-encoder stage check. Not an official full KDA/TDT check.",
+    "inputs": 11,
+    "variants": 3,
+    "devices": ["CPU", "Metal"],
+    "case_runs": 66,
+    "exits_all_zero": true,
+    "minimum_printed_encoder_snr_db": {
+      "CPU": 104.4,
+      "Metal": 56.4
+    },
+    "preserved_threshold_db": {
+      "CPU": 90,
+      "Metal": 25
+    },
+    "invalid_first_cli_attempt": "The initial case-directory invocation completed zero cases and made no tensor comparison. The correct reference root is dumps-converter-lock; six correct invocations each enumerated all eleven inputs."
+  },
+  "screen": {
+    "inputs_per_type": 9,
+    "rounds": 3,
+    "same_candidate_binary_off_on": true,
+    "fixed_anchor_separate": true,
+    "decode": "CPU, four threads",
+    "all_input_warmup": true,
+    "quality": "Exact public text, tokens/segments and times; 9 timestamp-enabled comparisons plus 27 latency text comparisons per type. Raw TDT IDs/frames/duration decisions were not exposed.",
+    "metrics": {
+      "q4_k": {
+        "paired_median_latency_reduction_percent": 1.4186090624057512,
+        "faster_inputs": 7,
+        "total_inputs": 9,
+        "round_paired_median_reduction_percent": [
+          -0.06709623139518062,
+          1.8863800820469345,
+          1.4561934317276481
+        ],
+        "round_faster_inputs": [4, 8, 7],
+        "strata": {
+          "10-20s": {
+            "paired_median_reduction_percent": 1.9254458796072682,
+            "inputs": 3
+          },
+          "20-30s": {
+            "paired_median_reduction_percent": 1.0299690009194729,
+            "inputs": 3
+          },
+          "6-10s": {
+            "paired_median_reduction_percent": 1.7072995715069261,
+            "inputs": 3
+          }
+        },
+        "quality_inputs": 9,
+        "latency_text_comparisons": 27,
+        "changed_text": 0,
+        "changed_public_tokens": 0,
+        "changed_segments": 0,
+        "changed_latency_text": 0,
+        "off": {
+          "latency": {
+            "p50_ms": 82.66054200000016,
+            "p90_ms": 126.86289140000004,
+            "p99_ms": 147.65400164000008,
+            "count": 9,
+            "rtfx": 170.17468712791853
+          },
+          "load_ms": 150.46754199999998,
+          "first_request_ms": 168.67329199999998,
+          "peak_memory_bytes": 454083688,
+          "stage_encoder_compute_ms_in_short_medium_long_order": [
+            26.866,
+            36.2043,
+            49.3183
+          ]
+        },
+        "on": {
+          "latency": {
+            "p50_ms": 81.06895800000014,
+            "p90_ms": 127.25270820000001,
+            "p99_ms": 146.30285772,
+            "count": 9,
+            "rtfx": 172.05737337398327
+          },
+          "load_ms": 152.150917,
+          "first_request_ms": 169.66620799999998,
+          "peak_memory_bytes": 452166688,
+          "stage_encoder_compute_ms_in_short_medium_long_order": [
+            26.3956,
+            36.4131,
+            50.2383
+          ]
+        }
+      },
+      "q8_0": {
+        "paired_median_latency_reduction_percent": -0.7237005713546241,
+        "faster_inputs": 3,
+        "total_inputs": 9,
+        "round_paired_median_reduction_percent": [
+          -1.182362967977335,
+          -0.18331930956005937,
+          -0.8180707132202647
+        ],
+        "round_faster_inputs": [4, 3, 4],
+        "strata": {
+          "10-20s": {
+            "paired_median_reduction_percent": 0.47814231872745916,
+            "inputs": 3
+          },
+          "20-30s": {
+            "paired_median_reduction_percent": -1.0493678920013405,
+            "inputs": 3
+          },
+          "6-10s": {
+            "paired_median_reduction_percent": -1.2845404354076662,
+            "inputs": 3
+          }
+        },
+        "quality_inputs": 9,
+        "latency_text_comparisons": 27,
+        "changed_text": 0,
+        "changed_public_tokens": 0,
+        "changed_segments": 0,
+        "changed_latency_text": 0,
+        "off": {
+          "latency": {
+            "p50_ms": 77.54845899999995,
+            "p90_ms": 125.33823360000012,
+            "p99_ms": 143.7020733599999,
+            "count": 9,
+            "rtfx": 177.10083007454222
+          },
+          "load_ms": 196.90025,
+          "first_request_ms": 166.35566699999993,
+          "peak_memory_bytes": 755287360,
+          "stage_encoder_compute_ms_in_short_medium_long_order": [
+            23.8662,
+            32.4983,
+            44.7432
+          ]
+        },
+        "on": {
+          "latency": {
+            "p50_ms": 77.17766699999996,
+            "p90_ms": 126.12767499999994,
+            "p99_ms": 145.15745499999994,
+            "count": 9,
+            "rtfx": 175.33608862985176
+          },
+          "load_ms": 196.03945799999994,
+          "first_request_ms": 161.10225,
+          "peak_memory_bytes": 758449400,
+          "stage_encoder_compute_ms_in_short_medium_long_order": [
+            23.9609,
+            32.4413,
+            45.0462
+          ]
+        }
+      },
+      "f16": {
+        "paired_median_latency_reduction_percent": -1.6302026476149312,
+        "faster_inputs": 3,
+        "total_inputs": 9,
+        "round_paired_median_reduction_percent": [
+          0.39602236411521163,
+          -3.5889322476693186,
+          -1.2699422679870231
+        ],
+        "round_faster_inputs": [5, 2, 3],
+        "strata": {
+          "10-20s": {
+            "paired_median_reduction_percent": -1.9916760124680577,
+            "inputs": 3
+          },
+          "20-30s": {
+            "paired_median_reduction_percent": -2.959192114345721,
+            "inputs": 3
+          },
+          "6-10s": {
+            "paired_median_reduction_percent": 0.10756377428723374,
+            "inputs": 3
+          }
+        },
+        "quality_inputs": 9,
+        "latency_text_comparisons": 27,
+        "changed_text": 0,
+        "changed_public_tokens": 0,
+        "changed_segments": 0,
+        "changed_latency_text": 0,
+        "off": {
+          "latency": {
+            "p50_ms": 79.46770899999977,
+            "p90_ms": 124.66351639999979,
+            "p99_ms": 146.31322663999998,
+            "count": 9,
+            "rtfx": 176.034291520808
+          },
+          "load_ms": 290.41241700000006,
+          "first_request_ms": 164.53149999999994,
+          "peak_memory_bytes": 1354024664,
+          "stage_encoder_compute_ms_in_short_medium_long_order": [
+            23.0443,
+            29.5879,
+            41.2646
+          ]
+        },
+        "on": {
+          "latency": {
+            "p50_ms": 79.29583400000028,
+            "p90_ms": 128.09643340000002,
+            "p99_ms": 148.83849363999988,
+            "count": 9,
+            "rtfx": 173.24182648169685
+          },
+          "load_ms": 293.671459,
+          "first_request_ms": 166.899916,
+          "peak_memory_bytes": 1344489152,
+          "stage_encoder_compute_ms_in_short_medium_long_order": [
+            22.8648,
+            29.5527,
+            41.8629
+          ]
+        }
+      }
+    }
+  },
+  "stage_times": "Separate diagnostic, not additive to worker gains. Stage inputs are 7.98, 14.52 and 24.72 seconds.",
+  "scope_limits": [
+    "No full 30-input / 650-quality run",
+    "No short6 supplement",
+    "No Windows/Vulkan or other Apple generation",
+    "No production implementation, no default or threshold change"
+  ],
+  "evidence": "Underlying local evidence is referenced at outputs/haas-mac-campaign/015: execution/gates.json, execution/screen-assessment.json, execution/result.json, execution/raw-freeze.json, and screen/summary.json."
+}

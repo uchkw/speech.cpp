@@ -1,8 +1,16 @@
 # 015: Residual addition fused with affine layer normalization
 
-Status: source-only prototype. No build, shader compilation, model execution, timing,
-or numerical result is available. The expected 24 fusions in an ordinary Haas
-encoder graph have not been observed. This branch is not an adoption candidate.
+Status: source-only prototype, evaluated and closed as rejected. The checks,
+builds and runs planned below were executed after this checkpoint: every
+correctness gate held (the original/candidate differential byte checks exact
+for the checked output, the official F32 stage checks passing their unchanged
+SNR thresholds), and the expected 24 fusions were observed per ordinary
+encoder input, but the request-speed screen showed no stable whole-request
+improvement across rounds and model types. The current prototype
+is therefore not adopted, with no default change. The design is preserved below
+as written; the completed evaluation is recorded in
+`015-residual-norm-evaluation.md` and `015-residual-norm-evaluation.json`
+beside this note.
 
 The parent starts at `114c514430c8aa1455c077819f8e72e674a48b75`, with ggml
 `e1a9ac12edbb57402618fd6936598603f5ee6266`. The ggml cases are committed before the
@@ -21,8 +29,9 @@ immediately applies `out_norm` after `ff2`. The normalization is already a Metal
 `NORM+MUL+ADD` fusion. This experiment adds only the preceding residual ADD.
 The residuals before attention, convolution and the second feed-forward network
 also feed their skip branches, so the existing consumer and output checks must
-keep those values. The 24 final block residuals are structural candidates, not a
-measured fusion count.
+keep those values. The 24 final block residuals were structural candidates at
+the source checkpoint; the ordinary-graph runs later observed exactly 24 new
+fusions per input.
 
 `GGML_METAL_RESIDUAL_NORM=0|1` defaults to zero and rejects other values. The new
 pattern requires an M2 Ultra without the tensor API, contiguous F32 activations
@@ -43,16 +52,18 @@ Only the source loads in steps 1 and 2 become F32 residual sums. Their small
 helper uses `METAL fp math_mode(safe)` and `contract(off)` to keep the separate
 ADD's rounding boundary. These pragmas are scoped to that helper. The remaining
 arithmetic, including the existing affine expression's compiler contraction
-policy, is unchanged. This is a source-level argument; emitted shader arithmetic
-and bitwise equality still require execution. No tolerance will be enlarged to
-make the prototype pass.
+policy, is unchanged. This was a source-level argument when written; the
+executed checks later confirmed the argued bitwise equality without enlarging
+any tolerance. No tolerance will be enlarged to make the prototype pass.
 
 The original pipeline selects `_4` for width 1024. Its `ne00_t` is 256; the
 dispatch loop doubles 32 to 64, 128 and 256, then caps by the pipeline maximum
 and the 256-element row. The new kernel dispatches exactly 256 threads, or eight
 SIMDgroups, only when both original and new pipeline limits are at least 256.
-If either limit is lower, this pattern is not dispatched. Actual limits have
-not been queried. Both kernels use 32 floats of threadgroup scratch.
+If either limit is lower, this pattern is not dispatched. Actual limits were
+not queried at the source checkpoint; the ordinary-graph runs later observed
+the new pattern dispatching in all 24 eligible blocks per input. Both kernels
+use 32 floats of threadgroup scratch.
 
 This can remove one residual ADD dispatch per eligible block. It recomputes
 the residual sum on both read passes; it does not change the normalization
@@ -83,7 +94,7 @@ the existing Metal-buffer range test and additionally compares host ranges
 only when both buffers are shared. Private buffers use synthetic addresses,
 so those addresses are never compared as host memory.
 
-## Prepared checks and pending execution
+## Prepared checks and measurement plan
 
 `test-backend-ops -o RESIDUAL_NORM` has 71 backend-reference cases. Shapes include
 T=1,31,32,33,100,171,172,375, with asymmetric inputs, half-ULP residual addends,
@@ -94,7 +105,7 @@ Positive physical layouts include the residual ADD overwriting A or B, with
 the final affine output either separate or sharing the same input, at T=1,33,375.
 
 The serial Metal helper runs each case with two deterministic input generations
-and OFF/ON: 284 planned executions. It poisons intermediate/output storage
+and OFF/ON: 284 executions per build. It poisons intermediate/output storage
 before every execution and restores all four inputs afterward. Exact input
 aliases necessarily restore finite output bytes as well, so those cases also
 require the result to differ from the restored input. Each result must be finite,
@@ -120,19 +131,24 @@ Compare original/OFF/ON outputs and dispatch logs, and verify the expected 24
 new fusions at the normal command-buffer count. Retained intermediate checks
 are separate diagnostics because their allocation and fusion behavior differ.
 
-After these checks pass, measure Q4_K, Q8_0 and F16 with the frozen common runner,
-CPU decoding with four threads, all-clip warmup, alternating rounds and the
-fixed campaign anchor. Record load, first request and peak memory separately.
-Start with the nine-clip screen; broader timing and quality runs need evidence
-of a stable request benefit. Use the shared performance lock and build with
-`-j4`. No such execution is authorized by this source checkpoint.
+The measurement later ran as planned: Q4_K, Q8_0 and F16 with the frozen common
+runner, CPU decoding with four threads, all-input warmup, alternating rounds and
+the fixed campaign anchor, under the shared performance lock and the `-j4`
+Release build, recording load, first request and peak memory separately. The
+nine-input screen did not show a stable request benefit, so the broader timing
+and quality runs were not executed. Numbers and conditions are recorded in
+`015-residual-norm-evaluation.md`.
 
-Official Haas F32 stage dumps and Vulkan validation are unavailable. M5 and
-other devices are outside the experimental gate and unmeasured. These are not
-passes. No ADR or production behavior is settled by this prototype.
+The official F32 features-to-encoder stage check later ran on CPU and Metal
+with all-zero exits. The full official KDA/TDT check and Vulkan validation
+remain unavailable. M5 and other devices are outside the experimental gate and
+unmeasured. Those gaps are not passes. No ADR or production behavior is settled
+by this prototype.
 
 Static checks performed: `git diff --check`; all new fusion call signatures and
 call sites reviewed; unchanged original NORM template/pipeline/dispatch bodies
 compared with e1a9; specialized reduction and affine statements compared with
-the original F=3 body after substituting its two residual loads. No compilation
-or runtime check is represented by these source comparisons.
+the original F=3 body after substituting its two residual loads. These source
+comparisons were the complete verification at the checkpoint; the compilation
+and runtime checks came later and are recorded in
+`015-residual-norm-evaluation.md`.
