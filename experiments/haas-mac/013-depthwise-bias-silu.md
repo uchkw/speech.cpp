@@ -1,7 +1,12 @@
 # Trial 013: depthwise convolution, bias and SiLU stores
 
-Status: source preparation only. No build, device check or timing has run. This is an experimental branch,
-not an adopted speed-up. The tracking issue is https://github.com/uchkw/speech.cpp/issues/1.
+Status: evaluated and rejected for the tested normal allocation path. Direct checks pass, but the normal
+encoder activates no depthwise fusion. No primary timing or public ASR corpus evaluation ran.
+See [the evaluation](013-results.md) for measured scope and retained evidence. The tracking issue is
+https://github.com/uchkw/speech.cpp/issues/1.
+
+The preparation record below is preserved as written before execution. Its pending checks and targets are
+not current results; the evaluation records their actual outcomes and limitations.
 
 ## Source boundary
 
