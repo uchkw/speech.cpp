@@ -1,0 +1,738 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>021 · Tune CPU decoder threads</title><style>
+:root{color-scheme:light;font:16px/1.55 system-ui,sans-serif;color:#172738;background:#f3f6f9}
+*{box-sizing:border-box}body{margin:0}main{max-width:1180px;margin:auto;padding:34px 22px 64px}
+a{color:#075ca8;text-underline-offset:3px}a:focus-visible,summary:focus-visible{outline:3px solid #c36b00;outline-offset:4px}
+h1{font-size:clamp(1.8rem,4vw,2.7rem);line-height:1.18;margin:12px 0 18px}h2{font-size:1.35rem;margin:30px 0 12px}
+h3{font-size:1.05rem;margin:22px 0 10px}p{max-width:90ch}small,.muted{color:#506174}.eyebrow{font-size:.8rem;letter-spacing:.12em;text-transform:uppercase;color:#506174}
+.panel{background:white;border:1px solid #d5dfe8;border-radius:10px;padding:20px;margin:18px 0}.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}th,td{text-align:left;vertical-align:top;padding:11px 10px;border-bottom:1px solid #dce4eb}th{font-size:.85rem;background:#f2f6fa}td.num,th.num{text-align:right;white-space:nowrap}
+caption{text-align:left;font-weight:600;padding:8px 0}code{font: .87em ui-monospace,monospace;overflow-wrap:anywhere}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.83rem}
+.status{display:inline-block;border:1px solid;border-radius:5px;padding:2px 8px;font-size:.8rem;font-weight:650;text-transform:uppercase}
+.pending,.not_applicable{color:#405269;background:#edf1f5}.in_progress{color:#174c7b;background:#e8f2ff}.accepted,.validated_mac{color:#16572f;background:#e7f5eb}.rejected{color:#8a2631;background:#fff0f0}.conditional,.pending_official_reference{color:#754700;background:#fff4d8}.blocked{color:#663c83;background:#f4eafa}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}.metric strong{display:block;font-size:1.55rem;line-height:1.2}.metric span{font-size:.85rem;color:#506174}
+details{margin:14px 0}summary{cursor:pointer;font-weight:600}.warning{border-left:4px solid #bc7600;padding-left:15px}svg{max-width:100%;height:auto;display:block}footer{margin-top:36px;font-size:.85rem;color:#506174}
+@media(max-width:600px){main{padding:22px 12px}.panel{padding:14px}th,td{padding:9px 7px}h1{overflow-wrap:anywhere}}
+</style></head><body><main><nav><a href="index.html">← All measures</a></nav><p class="eyebrow">Haas on Apple Silicon</p><h1>021 · Tune CPU decoder threads</h1><span class="status conditional">conditional</span><p>On the M2 Ultra, resolving omitted threads to four instead of sixteen shortened median paired requests by 6.27% on Q4_K, 7.49% on Q8_0 and 6.63% on F16. The current application already requests four threads. Changing the public automatic-thread contract still requires a compatibility decision.</p><p class="warning">The earlier thread comparison and this measured configuration change receive no additional credit for an application that already explicitly requests four threads.</p><p><a href="021-tune-cpu-decoder-threads.json">Machine-readable report JSON</a> · <a href="https://github.com/uchkw/speech.cpp/issues/1">Tracking issue</a></p><p><strong>Measured scope:</strong> 9 inputs × 3 latency rounds per side; 9 quality inputs per side. CPU decoding with 16 (original automatic) or 4 (prototype automatic) threads.</p><p class="muted">The main tables compare two omitted-thread requests. Both run a Metal encoder and CPU decoder. The explicit-thread sweep and the independent Q4_K quality run appear below.</p><section class="panel"><h2>Q4_K</h2><svg viewBox="0 0 520 121" role="img" aria-label="Median warm request latency in milliseconds, lower is faster"><title>Median warm request latency, lower is faster</title><text x="0" y="39" fill="#172738" font-size="13">baseline</text><rect x="110" y="22" width="300.0" height="24" rx="3" fill="#637d94"/><text x="420.0" y="39" fill="#172738" font-size="13">88.65 ms</text><text x="0" y="77" fill="#172738" font-size="13">candidate</text><rect x="110" y="60" width="277.2" height="24" rx="3" fill="#1765a5"/><text x="397.2" y="77" fill="#172738" font-size="13">81.92 ms</text></svg><div class="scroll" tabindex="0" role="region" aria-label="Warm latency and recognition error"><table><caption>Warm latency and recognition error</caption><thead><tr><th scope="col">Build</th><th scope="col">p50 ms</th><th scope="col">p90 ms</th><th scope="col">p99 ms</th><th scope="col">Literal CER</th><th scope="col">Repository CER</th><th scope="col">Peak GiB</th></tr></thead><tbody><tr><td>baseline</td><td>88.65</td><td>140.08</td><td>163.14</td><td>7.5188%</td><td>4.4625%</td><td>0.428</td></tr><tr><td>candidate</td><td>81.92</td><td>129.71</td><td>150.50</td><td>7.5188%</td><td>4.4625%</td><td>0.422</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="Relative compares the newly timed original with omitted threads (16) to the prototype with omitted threads and selector ON (4). The fixed campaign performance anchor was outside this sweep."><table><caption>Relative compares the newly timed original with omitted threads (16) to the prototype with omitted threads and selector ON (4). The fixed campaign performance anchor was outside this sweep.</caption><thead><tr><th scope="col">Reference</th><th scope="col">Median paired reduction</th><th scope="col">Quality texts changed</th><th scope="col">Latency texts changed / requests</th><th scope="col">Tokens/times changed</th><th scope="col">Segments changed</th><th scope="col">Literal better / worse</th><th scope="col">Repository better / worse</th></tr></thead><tbody><tr><td>relative</td><td>6.27%</td><td>0</td><td>0 / 27</td><td>0</td><td>0</td><td>0 / 0</td><td>0 / 0</td></tr></tbody></table></div><p class="muted">For each input, first take each build’s median latency over rounds, then divide candidate by baseline. Subtract the median of these paired ratios from one and express it as a percentage: positive is faster. This differs from comparing the aggregate p50 values above. A cumulative gain appears only for an explicitly specified anchor. Gains are direct paired comparisons, not added percentages. A matching CER does not mean matching transcripts.</p><details><summary>Text equality for every latency round (timestamps disabled)</summary><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Reference</th><th scope="col">Round</th><th scope="col">Requests compared</th><th scope="col">Texts changed</th></tr></thead><tbody><tr><td>relative</td><td>0</td><td>9</td><td>0</td></tr><tr><td>relative</td><td>1</td><td>9</td><td>0</td></tr><tr><td>relative</td><td>2</td><td>9</td><td>0</td></tr></tbody></table></div></details><div class="scroll" tabindex="0" role="region" aria-label="Latency by input length"><table><caption>Latency by input length</caption><thead><tr><th scope="col">Build</th><th scope="col">Audio length</th><th scope="col">p50 ms</th><th scope="col">p90 ms</th><th scope="col">p99 ms</th><th scope="col">Inputs</th></tr></thead><tbody><tr><td>baseline</td><td>6-10s</td><td>61.82</td><td>67.52</td><td>68.80</td><td>3</td></tr><tr><td>baseline</td><td>10-20s</td><td>88.65</td><td>113.91</td><td>119.60</td><td>3</td></tr><tr><td>baseline</td><td>20-30s</td><td>133.67</td><td>159.30</td><td>165.06</td><td>3</td></tr><tr><td>candidate</td><td>6-10s</td><td>58.26</td><td>63.72</td><td>64.95</td><td>3</td></tr><tr><td>candidate</td><td>10-20s</td><td>81.92</td><td>106.73</td><td>112.31</td><td>3</td></tr><tr><td>candidate</td><td>20-30s</td><td>123.93</td><td>147.03</td><td>152.23</td><td>3</td></tr></tbody></table></div><details><summary>Load, first request and stage timings</summary><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Build</th><th scope="col">Load to ready ms</th><th scope="col">First request ms</th><th scope="col">RTFx</th><th scope="col">Stage evidence</th></tr></thead><tbody><tr><td>baseline</td><td>153.26</td><td>182.14</td><td>157.42</td><td>Stage timing was outside the thread sweep.</td></tr><tr><td>candidate</td><td>147.95</td><td>169.22</td><td>169.28</td><td>Stage timing was outside the thread sweep.</td></tr></tbody></table></div></details></section><section class="panel"><h2>Q8_0</h2><svg viewBox="0 0 520 121" role="img" aria-label="Median warm request latency in milliseconds, lower is faster"><title>Median warm request latency, lower is faster</title><text x="0" y="39" fill="#172738" font-size="13">baseline</text><rect x="110" y="22" width="300.0" height="24" rx="3" fill="#637d94"/><text x="420.0" y="39" fill="#172738" font-size="13">84.90 ms</text><text x="0" y="77" fill="#172738" font-size="13">candidate</text><rect x="110" y="60" width="272.5" height="24" rx="3" fill="#1765a5"/><text x="392.5" y="77" fill="#172738" font-size="13">77.11 ms</text></svg><div class="scroll" tabindex="0" role="region" aria-label="Warm latency and recognition error"><table><caption>Warm latency and recognition error</caption><thead><tr><th scope="col">Build</th><th scope="col">p50 ms</th><th scope="col">p90 ms</th><th scope="col">p99 ms</th><th scope="col">Literal CER</th><th scope="col">Repository CER</th><th scope="col">Peak GiB</th></tr></thead><tbody><tr><td>baseline</td><td>84.90</td><td>135.43</td><td>155.77</td><td>7.3308%</td><td>4.2596%</td><td>0.714</td></tr><tr><td>candidate</td><td>77.11</td><td>123.86</td><td>144.41</td><td>7.3308%</td><td>4.2596%</td><td>0.708</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="Relative compares the newly timed original with omitted threads (16) to the prototype with omitted threads and selector ON (4). The fixed campaign performance anchor was outside this sweep."><table><caption>Relative compares the newly timed original with omitted threads (16) to the prototype with omitted threads and selector ON (4). The fixed campaign performance anchor was outside this sweep.</caption><thead><tr><th scope="col">Reference</th><th scope="col">Median paired reduction</th><th scope="col">Quality texts changed</th><th scope="col">Latency texts changed / requests</th><th scope="col">Tokens/times changed</th><th scope="col">Segments changed</th><th scope="col">Literal better / worse</th><th scope="col">Repository better / worse</th></tr></thead><tbody><tr><td>relative</td><td>7.49%</td><td>0</td><td>0 / 27</td><td>0</td><td>0</td><td>0 / 0</td><td>0 / 0</td></tr></tbody></table></div><p class="muted">For each input, first take each build’s median latency over rounds, then divide candidate by baseline. Subtract the median of these paired ratios from one and express it as a percentage: positive is faster. This differs from comparing the aggregate p50 values above. A cumulative gain appears only for an explicitly specified anchor. Gains are direct paired comparisons, not added percentages. A matching CER does not mean matching transcripts.</p><details><summary>Text equality for every latency round (timestamps disabled)</summary><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Reference</th><th scope="col">Round</th><th scope="col">Requests compared</th><th scope="col">Texts changed</th></tr></thead><tbody><tr><td>relative</td><td>0</td><td>9</td><td>0</td></tr><tr><td>relative</td><td>1</td><td>9</td><td>0</td></tr><tr><td>relative</td><td>2</td><td>9</td><td>0</td></tr></tbody></table></div></details><div class="scroll" tabindex="0" role="region" aria-label="Latency by input length"><table><caption>Latency by input length</caption><thead><tr><th scope="col">Build</th><th scope="col">Audio length</th><th scope="col">p50 ms</th><th scope="col">p90 ms</th><th scope="col">p99 ms</th><th scope="col">Inputs</th></tr></thead><tbody><tr><td>baseline</td><td>6-10s</td><td>59.59</td><td>65.19</td><td>66.45</td><td>3</td></tr><tr><td>baseline</td><td>10-20s</td><td>84.90</td><td>109.64</td><td>115.20</td><td>3</td></tr><tr><td>baseline</td><td>20-30s</td><td>129.78</td><td>152.38</td><td>157.47</td><td>3</td></tr><tr><td>candidate</td><td>6-10s</td><td>54.23</td><td>59.44</td><td>60.61</td><td>3</td></tr><tr><td>candidate</td><td>10-20s</td><td>77.11</td><td>101.44</td><td>106.91</td><td>3</td></tr><tr><td>candidate</td><td>20-30s</td><td>118.15</td><td>140.98</td><td>146.12</td><td>3</td></tr></tbody></table></div><details><summary>Load, first request and stage timings</summary><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Build</th><th scope="col">Load to ready ms</th><th scope="col">First request ms</th><th scope="col">RTFx</th><th scope="col">Stage evidence</th></tr></thead><tbody><tr><td>baseline</td><td>193.29</td><td>175.27</td><td>164.12</td><td>Stage timing was outside the thread sweep.</td></tr><tr><td>candidate</td><td>194.32</td><td>162.27</td><td>178.09</td><td>Stage timing was outside the thread sweep.</td></tr></tbody></table></div></details></section><section class="panel"><h2>F16</h2><svg viewBox="0 0 520 121" role="img" aria-label="Median warm request latency in milliseconds, lower is faster"><title>Median warm request latency, lower is faster</title><text x="0" y="39" fill="#172738" font-size="13">baseline</text><rect x="110" y="22" width="300.0" height="24" rx="3" fill="#637d94"/><text x="420.0" y="39" fill="#172738" font-size="13">83.52 ms</text><text x="0" y="77" fill="#172738" font-size="13">candidate</text><rect x="110" y="60" width="274.3" height="24" rx="3" fill="#1765a5"/><text x="394.3" y="77" fill="#172738" font-size="13">76.36 ms</text></svg><div class="scroll" tabindex="0" role="region" aria-label="Warm latency and recognition error"><table><caption>Warm latency and recognition error</caption><thead><tr><th scope="col">Build</th><th scope="col">p50 ms</th><th scope="col">p90 ms</th><th scope="col">p99 ms</th><th scope="col">Literal CER</th><th scope="col">Repository CER</th><th scope="col">Peak GiB</th></tr></thead><tbody><tr><td>baseline</td><td>83.52</td><td>133.12</td><td>154.85</td><td>7.3308%</td><td>4.2596%</td><td>1.254</td></tr><tr><td>candidate</td><td>76.36</td><td>123.98</td><td>144.55</td><td>7.3308%</td><td>4.2596%</td><td>1.246</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="Relative compares the newly timed original with omitted threads (16) to the prototype with omitted threads and selector ON (4). The fixed campaign performance anchor was outside this sweep."><table><caption>Relative compares the newly timed original with omitted threads (16) to the prototype with omitted threads and selector ON (4). The fixed campaign performance anchor was outside this sweep.</caption><thead><tr><th scope="col">Reference</th><th scope="col">Median paired reduction</th><th scope="col">Quality texts changed</th><th scope="col">Latency texts changed / requests</th><th scope="col">Tokens/times changed</th><th scope="col">Segments changed</th><th scope="col">Literal better / worse</th><th scope="col">Repository better / worse</th></tr></thead><tbody><tr><td>relative</td><td>6.63%</td><td>0</td><td>0 / 27</td><td>0</td><td>0</td><td>0 / 0</td><td>0 / 0</td></tr></tbody></table></div><p class="muted">For each input, first take each build’s median latency over rounds, then divide candidate by baseline. Subtract the median of these paired ratios from one and express it as a percentage: positive is faster. This differs from comparing the aggregate p50 values above. A cumulative gain appears only for an explicitly specified anchor. Gains are direct paired comparisons, not added percentages. A matching CER does not mean matching transcripts.</p><details><summary>Text equality for every latency round (timestamps disabled)</summary><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Reference</th><th scope="col">Round</th><th scope="col">Requests compared</th><th scope="col">Texts changed</th></tr></thead><tbody><tr><td>relative</td><td>0</td><td>9</td><td>0</td></tr><tr><td>relative</td><td>1</td><td>9</td><td>0</td></tr><tr><td>relative</td><td>2</td><td>9</td><td>0</td></tr></tbody></table></div></details><div class="scroll" tabindex="0" role="region" aria-label="Latency by input length"><table><caption>Latency by input length</caption><thead><tr><th scope="col">Build</th><th scope="col">Audio length</th><th scope="col">p50 ms</th><th scope="col">p90 ms</th><th scope="col">p99 ms</th><th scope="col">Inputs</th></tr></thead><tbody><tr><td>baseline</td><td>6-10s</td><td>59.82</td><td>64.51</td><td>65.56</td><td>3</td></tr><tr><td>baseline</td><td>10-20s</td><td>83.52</td><td>108.34</td><td>113.92</td><td>3</td></tr><tr><td>baseline</td><td>20-30s</td><td>127.08</td><td>151.23</td><td>156.66</td><td>3</td></tr><tr><td>candidate</td><td>6-10s</td><td>55.69</td><td>60.29</td><td>61.32</td><td>3</td></tr><tr><td>candidate</td><td>10-20s</td><td>76.36</td><td>101.56</td><td>107.23</td><td>3</td></tr><tr><td>candidate</td><td>20-30s</td><td>118.27</td><td>141.12</td><td>146.26</td><td>3</td></tr></tbody></table></div><details><summary>Load, first request and stage timings</summary><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Build</th><th scope="col">Load to ready ms</th><th scope="col">First request ms</th><th scope="col">RTFx</th><th scope="col">Stage evidence</th></tr></thead><tbody><tr><td>baseline</td><td>287.87</td><td>175.19</td><td>165.67</td><td>Stage timing was outside the thread sweep.</td></tr><tr><td>candidate</td><td>288.21</td><td>168.71</td><td>177.77</td><td>Stage timing was outside the thread sweep.</td></tr></tbody></table></div></details></section><h2>Omitted and explicit thread controls</h2><p>Each percentage pairs the same nine original inputs. The original automatic setting used 16 threads. The original explicit setting used four. Signed changes among identical thread counts show run-to-run variation.</p><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">GGUF</th><th scope="col">Prototype auto 4 vs original auto 16</th><th scope="col">Round 1</th><th scope="col">Round 2</th><th scope="col">Round 3</th><th scope="col">Prototype auto 4 vs original explicit 4</th><th scope="col">Prototype explicit 4 vs original explicit 4</th></tr></thead><tbody><tr><td>Q4_K</td><td>+6.267%</td><td>+5.215%</td><td>+7.755%</td><td>+6.329%</td><td>-0.714%</td><td>+0.047%</td></tr><tr><td>Q8_0</td><td>+7.486%</td><td>+5.658%</td><td>+8.290%</td><td>+7.674%</td><td>+1.246%</td><td>+1.197%</td></tr><tr><td>F16</td><td>+6.631%</td><td>+6.894%</td><td>+6.503%</td><td>+6.629%</td><td>+1.752%</td><td>+1.051%</td></tr></tbody></table></div><ul><li>The application already supplies four threads. Its thread count is identical under both settings and receives zero additional runtime gain credit. The measured same-count controls remain visible in the table.</li></ul><h2>Q4_K thread sweep</h2><p>Each condition used three timed workers and one quality worker. Load and first warmup are startup observations. Peak is the maximum process footprint across the four workers. Both original-binary conditions received selector 0, which the original binary does not read.</p><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Binary</th><th scope="col">Selector</th><th scope="col">Requested</th><th scope="col">Ready threads</th><th scope="col">p50 ms</th><th scope="col">p90 ms</th><th scope="col">p99 ms</th><th scope="col">RTFx</th><th scope="col">Load ms</th><th scope="col">First warmup ms</th><th scope="col">Peak MiB</th><th scope="col">Paired vs original auto 16</th></tr></thead><tbody><tr><td>original</td><td>0 (ignored)</td><td>omitted</td><td>16</td><td>88.65</td><td>140.08</td><td>163.14</td><td>157.42</td><td>153.26</td><td>182.14</td><td>438.6</td><td>+0.000%</td></tr><tr><td>original</td><td>0 (ignored)</td><td>4</td><td>4</td><td>79.69</td><td>131.82</td><td>152.98</td><td>169.05</td><td>149.76</td><td>170.78</td><td>436.9</td><td>+6.419%</td></tr><tr><td>prototype</td><td>OFF</td><td>omitted</td><td>16</td><td>88.89</td><td>140.60</td><td>163.04</td><td>157.62</td><td>149.13</td><td>183.68</td><td>427.8</td><td>-0.265%</td></tr><tr><td>prototype</td><td>ON</td><td>omitted</td><td>4</td><td>81.92</td><td>129.71</td><td>150.50</td><td>169.28</td><td>147.95</td><td>169.22</td><td>432.6</td><td>+6.267%</td></tr><tr><td>prototype</td><td>ON</td><td>1</td><td>1</td><td>84.05</td><td>134.45</td><td>154.86</td><td>163.73</td><td>148.37</td><td>174.94</td><td>430.0</td><td>+3.663%</td></tr><tr><td>prototype</td><td>ON</td><td>2</td><td>2</td><td>81.97</td><td>131.50</td><td>151.81</td><td>168.00</td><td>149.10</td><td>171.55</td><td>433.4</td><td>+5.846%</td></tr><tr><td>prototype</td><td>ON</td><td>4</td><td>4</td><td>79.65</td><td>129.67</td><td>149.86</td><td>168.92</td><td>147.68</td><td>171.45</td><td>434.5</td><td>+6.960%</td></tr><tr><td>prototype</td><td>ON</td><td>8</td><td>8</td><td>83.09</td><td>133.14</td><td>153.95</td><td>165.87</td><td>147.11</td><td>171.98</td><td>438.3</td><td>+5.343%</td></tr><tr><td>prototype</td><td>ON</td><td>16</td><td>16</td><td>88.50</td><td>140.21</td><td>161.25</td><td>156.99</td><td>152.28</td><td>179.82</td><td>438.9</td><td>-0.518%</td></tr></tbody></table></div><ul></ul><h2>Q8_0 thread sweep</h2><p>Each condition used three timed workers and one quality worker. Load and first warmup are startup observations. Peak is the maximum process footprint across the four workers. Both original-binary conditions received selector 0, which the original binary does not read.</p><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Binary</th><th scope="col">Selector</th><th scope="col">Requested</th><th scope="col">Ready threads</th><th scope="col">p50 ms</th><th scope="col">p90 ms</th><th scope="col">p99 ms</th><th scope="col">RTFx</th><th scope="col">Load ms</th><th scope="col">First warmup ms</th><th scope="col">Peak MiB</th><th scope="col">Paired vs original auto 16</th></tr></thead><tbody><tr><td>original</td><td>0 (ignored)</td><td>omitted</td><td>16</td><td>84.90</td><td>135.43</td><td>155.77</td><td>164.12</td><td>193.29</td><td>175.27</td><td>731.1</td><td>+0.000%</td></tr><tr><td>original</td><td>0 (ignored)</td><td>4</td><td>4</td><td>79.44</td><td>125.30</td><td>146.32</td><td>175.69</td><td>198.08</td><td>164.79</td><td>738.2</td><td>+6.434%</td></tr><tr><td>prototype</td><td>OFF</td><td>omitted</td><td>16</td><td>84.98</td><td>134.01</td><td>154.96</td><td>165.26</td><td>190.05</td><td>173.55</td><td>720.5</td><td>+0.758%</td></tr><tr><td>prototype</td><td>ON</td><td>omitted</td><td>4</td><td>77.11</td><td>123.86</td><td>144.41</td><td>178.09</td><td>194.32</td><td>162.27</td><td>725.1</td><td>+7.486%</td></tr><tr><td>prototype</td><td>ON</td><td>1</td><td>1</td><td>80.11</td><td>128.97</td><td>149.92</td><td>172.10</td><td>193.00</td><td>169.65</td><td>719.3</td><td>+4.861%</td></tr><tr><td>prototype</td><td>ON</td><td>2</td><td>2</td><td>77.12</td><td>124.33</td><td>147.02</td><td>176.16</td><td>186.05</td><td>163.84</td><td>723.0</td><td>+5.921%</td></tr><tr><td>prototype</td><td>ON</td><td>4</td><td>4</td><td>75.66</td><td>124.26</td><td>144.62</td><td>178.28</td><td>187.66</td><td>163.69</td><td>729.8</td><td>+7.532%</td></tr><tr><td>prototype</td><td>ON</td><td>8</td><td>8</td><td>78.94</td><td>126.94</td><td>146.22</td><td>175.04</td><td>188.98</td><td>163.95</td><td>723.7</td><td>+6.316%</td></tr><tr><td>prototype</td><td>ON</td><td>16</td><td>16</td><td>83.38</td><td>134.27</td><td>153.50</td><td>165.32</td><td>190.26</td><td>175.38</td><td>725.2</td><td>+0.656%</td></tr></tbody></table></div><ul></ul><h2>F16 thread sweep</h2><p>Each condition used three timed workers and one quality worker. Load and first warmup are startup observations. Peak is the maximum process footprint across the four workers. Both original-binary conditions received selector 0, which the original binary does not read.</p><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Binary</th><th scope="col">Selector</th><th scope="col">Requested</th><th scope="col">Ready threads</th><th scope="col">p50 ms</th><th scope="col">p90 ms</th><th scope="col">p99 ms</th><th scope="col">RTFx</th><th scope="col">Load ms</th><th scope="col">First warmup ms</th><th scope="col">Peak MiB</th><th scope="col">Paired vs original auto 16</th></tr></thead><tbody><tr><td>original</td><td>0 (ignored)</td><td>omitted</td><td>16</td><td>83.52</td><td>133.12</td><td>154.85</td><td>165.67</td><td>287.87</td><td>175.19</td><td>1284.5</td><td>+0.000%</td></tr><tr><td>original</td><td>0 (ignored)</td><td>4</td><td>4</td><td>79.48</td><td>127.62</td><td>147.99</td><td>174.80</td><td>292.28</td><td>169.83</td><td>1290.4</td><td>+5.568%</td></tr><tr><td>prototype</td><td>OFF</td><td>omitted</td><td>16</td><td>84.71</td><td>134.18</td><td>154.36</td><td>163.97</td><td>285.49</td><td>176.23</td><td>1284.0</td><td>-1.422%</td></tr><tr><td>prototype</td><td>ON</td><td>omitted</td><td>4</td><td>76.36</td><td>123.98</td><td>144.55</td><td>177.77</td><td>288.21</td><td>168.71</td><td>1276.3</td><td>+6.631%</td></tr><tr><td>prototype</td><td>ON</td><td>1</td><td>1</td><td>81.79</td><td>133.82</td><td>154.60</td><td>167.09</td><td>286.07</td><td>179.08</td><td>1283.9</td><td>+1.622%</td></tr><tr><td>prototype</td><td>ON</td><td>2</td><td>2</td><td>79.29</td><td>126.55</td><td>146.72</td><td>173.82</td><td>287.06</td><td>169.62</td><td>1276.8</td><td>+4.877%</td></tr><tr><td>prototype</td><td>ON</td><td>4</td><td>4</td><td>76.17</td><td>127.43</td><td>148.01</td><td>176.83</td><td>288.71</td><td>165.05</td><td>1286.5</td><td>+7.123%</td></tr><tr><td>prototype</td><td>ON</td><td>8</td><td>8</td><td>78.02</td><td>128.55</td><td>148.01</td><td>173.23</td><td>287.71</td><td>168.88</td><td>1291.2</td><td>+4.507%</td></tr><tr><td>prototype</td><td>ON</td><td>16</td><td>16</td><td>83.74</td><td>135.11</td><td>154.76</td><td>165.09</td><td>292.32</td><td>176.17</td><td>1293.2</td><td>-0.425%</td></tr></tbody></table></div><ul></ul><h2>Tradeoffs among explicit thread counts</h2><p>The performance frontier includes an explicit count when no measured alternative has equal or better p50, p90, p99 and RTFx on every measure and a better result on at least one. The second frontier adds lower peak process footprint as a fifth objective.</p><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">GGUF</th><th scope="col">Performance frontier (threads)</th><th scope="col">Performance and peak footprint frontier (threads)</th><th scope="col">Lowest p50 and highest RTFx (threads)</th></tr></thead><tbody><tr><td>Q4_K</td><td>4</td><td>1/2/4</td><td>4</td></tr><tr><td>Q8_0</td><td>4</td><td>1/2/4/8</td><td>4</td></tr><tr><td>F16</td><td>2/4</td><td>2/4</td><td>4</td></tr></tbody></table></div><ul><li>On F16, two threads reached p90 126.55 ms compared with 127.43 ms at four.</li></ul><h2>Separate Q4_K full-corpus quality run</h2><p>Each condition transcribed the same 650 public FLEURS inputs once after nine warmups. Each of the three condition pairs was checked. These runs contribute quality evidence only.</p><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Conditions</th><th scope="col">Inputs per condition</th><th scope="col">Public tokens per condition</th><th scope="col">Public segments per condition</th><th scope="col">Literal edits / characters</th><th scope="col">Literal CER</th><th scope="col">Normalized edits / characters</th><th scope="col">Normalized CER</th></tr></thead><tbody><tr><td>Original auto 16, original explicit 4, prototype auto 4</td><td>650</td><td>28,405</td><td>744</td><td>2,608 / 34,928</td><td>7.46679%</td><td>1,520 / 32,648</td><td>4.65572%</td></tr></tbody></table></div><ul><li>All three conditions returned identical text and public token/segment text and times. Public exactness was checked directly as well as by corpus-level CER.</li></ul><h2>Build identity</h2><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Build</th><th scope="col">Source commit</th><th scope="col">ggml commit</th><th scope="col">Binary SHA-256</th><th scope="col">Explicit environment</th><th scope="col">Build flags</th></tr></thead><tbody><tr><td>baseline</td><td><a href="https://github.com/uchkw/speech.cpp/commit/114c514430c8aa1455c077819f8e72e674a48b75"><code>114c514430c8</code></a></td><td><code>e1a9ac12edbb57402618fd6936598603f5ee6266</code></td><td><code>4fccde1a19f26d91bd92d0296c19eb5ae75895c73684dc61017b81b90f9b0e61</code></td><td><code>{&quot;SPEECH_HAAS_AUTO_THREADS&quot;: &quot;0&quot;}</code></td><td><code>{&quot;configure&quot;: [&quot;-DCMAKE_BUILD_TYPE=Release&quot;, &quot;-DGGML_NATIVE=ON&quot;, &quot;-DGGML_METAL=ON&quot;], &quot;build&quot;: [&quot;--target&quot;, &quot;speech-cli&quot;, &quot;fastconformer-timing&quot;, &quot;-j4&quot;]}</code></td></tr><tr><td>candidate</td><td><a href="https://github.com/uchkw/speech.cpp/commit/37f41cebe928336af11fbd7cac2a3ccfbb067225"><code>37f41cebe928</code></a></td><td><code>e1a9ac12edbb57402618fd6936598603f5ee6266</code></td><td><code>9274cb77b23de553e8f65e67e640635d2a14023a2c0965384f1c8b100c49de79</code></td><td><code>{&quot;SPEECH_HAAS_AUTO_THREADS&quot;: &quot;1&quot;}</code></td><td><code>{&quot;configure&quot;: [&quot;-DCMAKE_BUILD_TYPE=Release&quot;, &quot;-DGGML_NATIVE=ON&quot;, &quot;-DGGML_METAL=ON&quot;], &quot;build&quot;: [&quot;--target&quot;, &quot;speech-cli&quot;, &quot;fastconformer-timing&quot;, &quot;-j4&quot;]}</code></td></tr></tbody></table></div><h2>Checks</h2><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Check</th><th scope="col">Required</th><th scope="col">Status</th><th scope="col">Evidence</th></tr></thead><tbody><tr><td>C API thread selection</td><td>yes</td><td>passed</td><td>021/api-contracts/thread-{q4,f16}.json<br>Q4_K and F16 each ran 12 selector cases. Unset and OFF chose 16, ON chose four and every explicit count was preserved. Ineligible CPU loads ignored the invalid selector. Q8_0 was checked through all nine real worker configurations.</td></tr><tr><td>Public API, worker and request options</td><td>yes</td><td>passed</td><td>021/execution/contract-execution.log<br>All 14 contract commands passed. The F16 C API and worker each cancelled a running request under OFF and ON, then completed the next request. Q4_K plain and valid keyword requests exercised both guard values. Each fresh measured worker confirmed the selected thread count before processing PCM.</td></tr><tr><td>Screen output identity</td><td>yes</td><td>passed</td><td>021/evaluation.json<br>The 81 latency workers produced 729 measured texts. The 27 timestamp-enabled quality workers produced 243 measured results. All matched both original configurations within the same weight type across the nine public inputs, including public token and segment values in the quality phase.</td></tr><tr><td>Q4_K full public quality</td><td>yes</td><td>passed</td><td>021/full-q4-auto-on/execution.json<br>The original auto 16, original explicit four and prototype auto four runs matched on every reference, transcript, token text/time and segment text/time for all 650 public inputs. Both CERs were scored separately against the references.</td></tr><tr><td>Normalized original and candidate build recipes</td><td>yes</td><td>passed</td><td>021/input-provenance.json<br>All 74 shared compiler flag files and 74 linker recipes matched after source/build directory normalization. The original binary was rehashed at preflight and reused. All fresh workers recorded their binary, resolved model, runner, placement and selected thread count.</td></tr><tr><td>Q8_0 and F16 full quality, full latency and other platforms</td><td>no</td><td>skipped</td><td><br>Q8_0 and F16 used the nine-input quality screen. Full latency, short prefixes and Windows/Vulkan were not evaluated.</td></tr></tbody></table></div><h2>Conditions and limitations</h2><p>The worker timer starts before preparing and sending the first PCM chunk and ends after receiving the terminal response. Workers loaded and warmed all nine inputs before the measured requests.</p><p>For each recording, take the median of three rounds before computing p50, p90 and p99. Paired reduction is one minus the median of candidate/original per-recording ratios. RTFx divides total audio duration by the sum of these per-recording median times.</p><p><strong>Literal CER:</strong> Total Unicode code-point Levenshtein edits divided by total reference code points, including punctuation, symbols and whitespace.</p><p><strong>Repository CER:</strong> NFKC followed by removing Unicode punctuation, symbols, separators and whitespace; no case folding or alternate-spelling substitutions. Edits and reference lengths are summed before division.</p><ul><li>The same nine public Japanese FLEURS inputs were used for all three weight types and every thread setting. Tail percentiles are interpolated from nine input medians. The separate 650-input quality run covered Q4_K only.</li><li>No 30-input latency run, two- or four-second prefix test, other Mac, Windows or Vulkan performance test was run. Wall-clock performance of other model families and the hidden TDT IDs, frames, durations and logits were outside this trial.</li><li>The process peak is the maximum macOS footprint over the three timed workers and the separate timestamp-enabled quality worker for that configuration. Load to ready and first warmup request use the medians of the three timed workers. Filesystem and system Metal caches were retained.</li><li>The original 114c514 was measured again on the same public inputs. Its normalized compile flags and link recipes matched the candidate on 74 files each. An earlier campaign anchor was not timed in this sweep.</li></ul><details><summary>Reproduction metadata and local evidence paths</summary><p>Large logs, models and audio are not included in the versioned report.</p><pre>{
+  &quot;scope&quot;: &quot;screen_with_separate_q4_full_quality&quot;,
+  &quot;conditions&quot;: {
+    &quot;rounds&quot;: 3,
+    &quot;decode_on_cpu&quot;: true,
+    &quot;quality_policy&quot;: &quot;exact&quot;,
+    &quot;latency_definition&quot;: &quot;The worker timer starts before preparing and sending the first PCM chunk and ends after receiving the terminal response. Workers loaded and warmed all nine inputs before the measured requests.&quot;,
+    &quot;aggregation&quot;: &quot;For each recording, take the median of three rounds before computing p50, p90 and p99. Paired reduction is one minus the median of candidate/original per-recording ratios. RTFx divides total audio duration by the sum of these per-recording median times.&quot;,
+    &quot;literal_cer&quot;: &quot;Total Unicode code-point Levenshtein edits divided by total reference code points, including punctuation, symbols and whitespace.&quot;,
+    &quot;repository_cer&quot;: &quot;NFKC followed by removing Unicode punctuation, symbols, separators and whitespace; no case folding or alternate-spelling substitutions. Edits and reference lengths are summed before division.&quot;,
+    &quot;quality_comparison&quot;: &quot;The same quality files on both builds; text and public token/segment text and times are compared exactly. Text from every timestamp-disabled latency round is also compared. A changed CER is not evidence of exact output equality.&quot;,
+    &quot;latency_timestamps&quot;: false,
+    &quot;quality_timestamps&quot;: true,
+    &quot;unobserved_fields&quot;: &quot;The worker does not expose raw TDT token IDs, frame indices or duration decisions. These are not claimed to match by this harness.&quot;,
+    &quot;limitations&quot;: [
+      &quot;The same nine public Japanese FLEURS inputs were used for all three weight types and every thread setting. Tail percentiles are interpolated from nine input medians. The separate 650-input quality run covered Q4_K only.&quot;,
+      &quot;No 30-input latency run, two- or four-second prefix test, other Mac, Windows or Vulkan performance test was run. Wall-clock performance of other model families and the hidden TDT IDs, frames, durations and logits were outside this trial.&quot;,
+      &quot;The process peak is the maximum macOS footprint over the three timed workers and the separate timestamp-enabled quality worker for that configuration. Load to ready and first warmup request use the medians of the three timed workers. Filesystem and system Metal caches were retained.&quot;,
+      &quot;The original 114c514 was measured again on the same public inputs. Its normalized compile flags and link recipes matched the candidate on 74 files each. An earlier campaign anchor was not timed in this sweep.&quot;
+    ],
+    &quot;threads&quot;: &quot;16 (original automatic) or 4 (prototype automatic)&quot;,
+    &quot;latency_count&quot;: 9,
+    &quot;quality_count&quot;: 9,
+    &quot;thread_setting_note&quot;: &quot;The main tables compare two omitted-thread requests. Both run a Metal encoder and CPU decoder. The explicit-thread sweep and the independent Q4_K quality run appear below.&quot;,
+    &quot;comparison_reference&quot;: &quot;Relative compares the newly timed original with omitted threads (16) to the prototype with omitted threads and selector ON (4). The fixed campaign performance anchor was outside this sweep.&quot;,
+    &quot;current_machine&quot;: {
+      &quot;chip&quot;: &quot;Apple M2 Ultra&quot;,
+      &quot;macos&quot;: &quot;26.7.2&quot;,
+      &quot;build&quot;: &quot;25G332&quot;,
+      &quot;cpu_cores&quot;: 24,
+      &quot;performance_cores&quot;: 16,
+      &quot;gpu_cores&quot;: 76,
+      &quot;unified_memory_gb&quot;: 192
+    },
+    &quot;python&quot;: &quot;3.9.6&quot;,
+    &quot;python_executable&quot;: &quot;/usr/bin/python3&quot;,
+    &quot;runner_sha256&quot;: {
+      &quot;compare.py&quot;: &quot;f638e5c4914231e8957ca05513366b06cb2dfb7914922a276b5affb07e4fcc21&quot;,
+      &quot;worker.py&quot;: &quot;46483a7bde5bf3d09f0898224b71e99288f17acec33912a4b09752b0acc09c9b&quot;,
+      &quot;campaign.json&quot;: &quot;2a03d0e925e3433b437ec908326db42e5576c585abd5da8929f4c2b24b20d840&quot;
+    },
+    &quot;created_utc&quot;: &quot;2026-11-07T06:14:39.176Z&quot;
+  },
+  &quot;models&quot;: {
+    &quot;q4_k&quot;: {
+      &quot;type&quot;: &quot;q4_k&quot;,
+      &quot;sha256&quot;: &quot;d24d53f29b75214a933ff482b0de1217e0a800f4118cca39ad6cf03609a89d6f&quot;,
+      &quot;size&quot;: 351901216,
+      &quot;revision&quot;: &quot;6b965d5007ba780585de51549d57a8c1c0d67c7e&quot;
+    },
+    &quot;q8_0&quot;: {
+      &quot;type&quot;: &quot;q8_0&quot;,
+      &quot;sha256&quot;: &quot;cd5f60b2f1c411404b83fca4a65e3ce30a26d9e951b6a346529e65f22758afeb&quot;,
+      &quot;size&quot;: 656381472,
+      &quot;revision&quot;: &quot;6b965d5007ba780585de51549d57a8c1c0d67c7e&quot;
+    },
+    &quot;f16&quot;: {
+      &quot;type&quot;: &quot;f16&quot;,
+      &quot;sha256&quot;: &quot;f752e02f68c1dfff795900e40aa82e5302976fb5360080fcbd330d8b3c992cd8&quot;,
+      &quot;size&quot;: 1233128832,
+      &quot;revision&quot;: &quot;6b965d5007ba780585de51549d57a8c1c0d67c7e&quot;
+    }
+  },
+  &quot;builds&quot;: {
+    &quot;baseline&quot;: {
+      &quot;source_commit&quot;: &quot;114c514430c8aa1455c077819f8e72e674a48b75&quot;,
+      &quot;source_tree&quot;: &quot;c431379c55311f35f7d7d2faff92526b48cb3cac&quot;,
+      &quot;source_verified&quot;: true,
+      &quot;ggml_commit&quot;: &quot;e1a9ac12edbb57402618fd6936598603f5ee6266&quot;,
+      &quot;created_utc&quot;: &quot;2026-11-07T00:35:05.690522+00:00&quot;,
+      &quot;build_flags&quot;: {
+        &quot;configure&quot;: [
+          &quot;-DCMAKE_BUILD_TYPE=Release&quot;,
+          &quot;-DGGML_NATIVE=ON&quot;,
+          &quot;-DGGML_METAL=ON&quot;
+        ],
+        &quot;build&quot;: [
+          &quot;--target&quot;,
+          &quot;speech-cli&quot;,
+          &quot;fastconformer-timing&quot;,
+          &quot;-j4&quot;
+        ]
+      },
+      &quot;cmake_cache_sha256&quot;: &quot;a64a6fad18e9d004aa51ae48cbe6c52118b60a9516ca3131d05772979b1217d6&quot;,
+      &quot;build_log_sha256&quot;: &quot;8ff17af2a3fcf66be9a32644393bfeb9a15eec1cef68908b652efa9c20e85dab&quot;,
+      &quot;stage_threads_argument&quot;: true,
+      &quot;speech&quot;: {
+        &quot;artifact_path&quot;: &quot;builds/014-original/speech&quot;,
+        &quot;sha256&quot;: &quot;4fccde1a19f26d91bd92d0296c19eb5ae75895c73684dc61017b81b90f9b0e61&quot;
+      },
+      &quot;stage_tool&quot;: {
+        &quot;artifact_path&quot;: &quot;builds/014-original/fastconformer-timing&quot;,
+        &quot;sha256&quot;: &quot;497a79e9dd25c064df089507c34a0089e5956a2e94e6c84e3b60646fe912e4c5&quot;
+      }
+    },
+    &quot;candidate&quot;: {
+      &quot;source_commit&quot;: &quot;37f41cebe928336af11fbd7cac2a3ccfbb067225&quot;,
+      &quot;source_tree&quot;: &quot;31bf7b8269a493dc1ed75f2ec350396df6ec23e9&quot;,
+      &quot;source_verified&quot;: true,
+      &quot;ggml_commit&quot;: &quot;e1a9ac12edbb57402618fd6936598603f5ee6266&quot;,
+      &quot;created_utc&quot;: &quot;2026-11-07T05:50:20.851547+00:00&quot;,
+      &quot;build_flags&quot;: {
+        &quot;configure&quot;: [
+          &quot;-DCMAKE_BUILD_TYPE=Release&quot;,
+          &quot;-DGGML_NATIVE=ON&quot;,
+          &quot;-DGGML_METAL=ON&quot;
+        ],
+        &quot;build&quot;: [
+          &quot;--target&quot;,
+          &quot;speech-cli&quot;,
+          &quot;fastconformer-timing&quot;,
+          &quot;-j4&quot;
+        ]
+      },
+      &quot;cmake_cache_sha256&quot;: &quot;a32a94b78d2220043be5eebc4294006d64bcf0a56b835590213d0df3a099054a&quot;,
+      &quot;build_log_sha256&quot;: &quot;22af3cadb24e7d190be16f4a810c3e1f9bb0b8776e4949828de32c6b644f02c5&quot;,
+      &quot;stage_threads_argument&quot;: true,
+      &quot;speech&quot;: {
+        &quot;artifact_path&quot;: &quot;builds/021-auto-threads/speech&quot;,
+        &quot;sha256&quot;: &quot;9274cb77b23de553e8f65e67e640635d2a14023a2c0965384f1c8b100c49de79&quot;
+      },
+      &quot;stage_tool&quot;: {
+        &quot;artifact_path&quot;: &quot;builds/021-auto-threads/fastconformer-timing&quot;,
+        &quot;sha256&quot;: &quot;1b677742c0d5d1b1b5314d5b1508943ee17867177e4e04053407d5efe9563099&quot;
+      }
+    }
+  },
+  &quot;fixed_anchor&quot;: null,
+  &quot;implementation_checkpoint&quot;: {
+    &quot;source&quot;: &quot;37f41cebe928336af11fbd7cac2a3ccfbb067225&quot;,
+    &quot;original_source&quot;: &quot;114c514430c8aa1455c077819f8e72e674a48b75&quot;,
+    &quot;ggml&quot;: &quot;e1a9ac12edbb57402618fd6936598603f5ee6266&quot;,
+    &quot;evaluation_commit&quot;: &quot;97567644c1e9018e281965d267242e9efa2955ca&quot;,
+    &quot;build_runner_commit&quot;: &quot;54eed08312c70151ecf3cd872e83f09579be6605&quot;,
+    &quot;sweep_runner_commit&quot;: &quot;a239cdb483ff90e05969bdecfb5efe39137119da&quot;,
+    &quot;source_note&quot;: &quot;experiments/haas-mac/021-auto-threads.md&quot;,
+    &quot;comparison&quot;: &quot;Haas-ja-v1.0 with KDA on MTL0 and CPU decoding. The prototype changes only eligible omitted-thread selection when opted in at load.&quot;
+  },
+  &quot;diagnostics&quot;: [
+    {
+      &quot;title&quot;: &quot;Omitted and explicit thread controls&quot;,
+      &quot;method&quot;: &quot;Each percentage pairs the same nine original inputs. The original automatic setting used 16 threads. The original explicit setting used four. Signed changes among identical thread counts show run-to-run variation.&quot;,
+      &quot;headers&quot;: [
+        &quot;GGUF&quot;,
+        &quot;Prototype auto 4 vs original auto 16&quot;,
+        &quot;Round 1&quot;,
+        &quot;Round 2&quot;,
+        &quot;Round 3&quot;,
+        &quot;Prototype auto 4 vs original explicit 4&quot;,
+        &quot;Prototype explicit 4 vs original explicit 4&quot;
+      ],
+      &quot;rows&quot;: [
+        [
+          &quot;Q4_K&quot;,
+          &quot;+6.267%&quot;,
+          &quot;+5.215%&quot;,
+          &quot;+7.755%&quot;,
+          &quot;+6.329%&quot;,
+          &quot;-0.714%&quot;,
+          &quot;+0.047%&quot;
+        ],
+        [
+          &quot;Q8_0&quot;,
+          &quot;+7.486%&quot;,
+          &quot;+5.658%&quot;,
+          &quot;+8.290%&quot;,
+          &quot;+7.674%&quot;,
+          &quot;+1.246%&quot;,
+          &quot;+1.197%&quot;
+        ],
+        [
+          &quot;F16&quot;,
+          &quot;+6.631%&quot;,
+          &quot;+6.894%&quot;,
+          &quot;+6.503%&quot;,
+          &quot;+6.629%&quot;,
+          &quot;+1.752%&quot;,
+          &quot;+1.051%&quot;
+        ]
+      ],
+      &quot;notes&quot;: [
+        &quot;The application already supplies four threads. Its thread count is identical under both settings and receives zero additional runtime gain credit. The measured same-count controls remain visible in the table.&quot;
+      ]
+    },
+    {
+      &quot;title&quot;: &quot;Q4_K thread sweep&quot;,
+      &quot;method&quot;: &quot;Each condition used three timed workers and one quality worker. Load and first warmup are startup observations. Peak is the maximum process footprint across the four workers. Both original-binary conditions received selector 0, which the original binary does not read.&quot;,
+      &quot;headers&quot;: [
+        &quot;Binary&quot;,
+        &quot;Selector&quot;,
+        &quot;Requested&quot;,
+        &quot;Ready threads&quot;,
+        &quot;p50 ms&quot;,
+        &quot;p90 ms&quot;,
+        &quot;p99 ms&quot;,
+        &quot;RTFx&quot;,
+        &quot;Load ms&quot;,
+        &quot;First warmup ms&quot;,
+        &quot;Peak MiB&quot;,
+        &quot;Paired vs original auto 16&quot;
+      ],
+      &quot;rows&quot;: [
+        [
+          &quot;original&quot;,
+          &quot;0 (ignored)&quot;,
+          &quot;omitted&quot;,
+          &quot;16&quot;,
+          &quot;88.65&quot;,
+          &quot;140.08&quot;,
+          &quot;163.14&quot;,
+          &quot;157.42&quot;,
+          &quot;153.26&quot;,
+          &quot;182.14&quot;,
+          &quot;438.6&quot;,
+          &quot;+0.000%&quot;
+        ],
+        [
+          &quot;original&quot;,
+          &quot;0 (ignored)&quot;,
+          &quot;4&quot;,
+          &quot;4&quot;,
+          &quot;79.69&quot;,
+          &quot;131.82&quot;,
+          &quot;152.98&quot;,
+          &quot;169.05&quot;,
+          &quot;149.76&quot;,
+          &quot;170.78&quot;,
+          &quot;436.9&quot;,
+          &quot;+6.419%&quot;
+        ],
+        [
+          &quot;prototype&quot;,
+          &quot;OFF&quot;,
+          &quot;omitted&quot;,
+          &quot;16&quot;,
+          &quot;88.89&quot;,
+          &quot;140.60&quot;,
+          &quot;163.04&quot;,
+          &quot;157.62&quot;,
+          &quot;149.13&quot;,
+          &quot;183.68&quot;,
+          &quot;427.8&quot;,
+          &quot;-0.265%&quot;
+        ],
+        [
+          &quot;prototype&quot;,
+          &quot;ON&quot;,
+          &quot;omitted&quot;,
+          &quot;4&quot;,
+          &quot;81.92&quot;,
+          &quot;129.71&quot;,
+          &quot;150.50&quot;,
+          &quot;169.28&quot;,
+          &quot;147.95&quot;,
+          &quot;169.22&quot;,
+          &quot;432.6&quot;,
+          &quot;+6.267%&quot;
+        ],
+        [
+          &quot;prototype&quot;,
+          &quot;ON&quot;,
+          &quot;1&quot;,
+          &quot;1&quot;,
+          &quot;84.05&quot;,
+          &quot;134.45&quot;,
+          &quot;154.86&quot;,
+          &quot;163.73&quot;,
+          &quot;148.37&quot;,
+          &quot;174.94&quot;,
+          &quot;430.0&quot;,
+          &quot;+3.663%&quot;
+        ],
+        [
+          &quot;prototype&quot;,
+          &quot;ON&quot;,
+          &quot;2&quot;,
+          &quot;2&quot;,
+          &quot;81.97&quot;,
+          &quot;131.50&quot;,
+          &quot;151.81&quot;,
+          &quot;168.00&quot;,
+          &quot;149.10&quot;,
+          &quot;171.55&quot;,
+          &quot;433.4&quot;,
+          &quot;+5.846%&quot;
+        ],
+        [
+          &quot;prototype&quot;,
+          &quot;ON&quot;,
+          &quot;4&quot;,
+          &quot;4&quot;,
+          &quot;79.65&quot;,
+          &quot;129.67&quot;,
+          &quot;149.86&quot;,
+          &quot;168.92&quot;,
+          &quot;147.68&quot;,
+          &quot;171.45&quot;,
+          &quot;434.5&quot;,
+          &quot;+6.960%&quot;
+        ],
+        [
+          &quot;prototype&quot;,
+          &quot;ON&quot;,
+          &quot;8&quot;,
+          &quot;8&quot;,
+          &quot;83.09&quot;,
+          &quot;133.14&quot;,
+          &quot;153.95&quot;,
+          &quot;165.87&quot;,
+          &quot;147.11&quot;,
+          &quot;171.98&quot;,
+          &quot;438.3&quot;,
+          &quot;+5.343%&quot;
+        ],
+        [
+          &quot;prototype&quot;,
+          &quot;ON&quot;,
+          &quot;16&quot;,
+          &quot;16&quot;,
+          &quot;88.50&quot;,
+          &quot;140.21&quot;,
+          &quot;161.25&quot;,
+          &quot;156.99&quot;,
+          &quot;152.28&quot;,
+          &quot;179.82&quot;,
+          &quot;438.9&quot;,
+          &quot;-0.518%&quot;
+        ]
+      ]
+    },
+    {
+      &quot;title&quot;: &quot;Q8_0 thread sweep&quot;,
+      &quot;method&quot;: &quot;Each condition used three timed workers and one quality worker. Load and first warmup are startup observations. Peak is the maximum process footprint across the four workers. Both original-binary conditions received selector 0, which the original binary does not read.&quot;,
+      &quot;headers&quot;: [
+        &quot;Binary&quot;,
+        &quot;Selector&quot;,
+        &quot;Requested&quot;,
+        &quot;Ready threads&quot;,
+        &quot;p50 ms&quot;,
+        &quot;p90 ms&quot;,
+        &quot;p99 ms&quot;,
+        &quot;RTFx&quot;,
+        &quot;Load ms&quot;,
+        &quot;First warmup ms&quot;,
+        &quot;Peak MiB&quot;,
+        &quot;Paired vs original auto 16&quot;
+      ],
+      &quot;rows&quot;: [
+        [
+          &quot;original&quot;,
+          &quot;0 (ignored)&quot;,
+          &quot;omitted&quot;,
+          &quot;16&quot;,
+          &quot;84.90&quot;,
+          &quot;135.43&quot;,
+          &quot;155.77&quot;,
+          &quot;164.12&quot;,
+          &quot;193.29&quot;,
+          &quot;175.27&quot;,
+          &quot;731.1&quot;,
+          &quot;+0.000%&quot;
+        ],
+        [
+          &quot;original&quot;,
+          &quot;0 (ignored)&quot;,
+          &quot;4&quot;,
+          &quot;4&quot;,
+          &quot;79.44&quot;,
+          &quot;125.30&quot;,
+          &quot;146.32&quot;,
+          &quot;175.69&quot;,
+          &quot;198.08&quot;,
+          &quot;164.79&quot;,
+          &quot;738.2&quot;,
+          &quot;+6.434%&quot;
+        ],
+        [
+          &quot;prototype&quot;,
+          &quot;OFF&quot;,
+          &quot;omitted&quot;,
+          &quot;16&quot;,
+          &quot;84.98&quot;,
+          &quot;134.01&quot;,
+          &quot;154.96&quot;,
+          &quot;165.26&quot;,
+          &quot;190.05&quot;,
+          &quot;173.55&quot;,
+          &quot;720.5&quot;,
+          &quot;+0.758%&quot;
+        ],
+        [
+          &quot;prototype&quot;,
+          &quot;ON&quot;,
+          &quot;omitted&quot;,
+          &quot;4&quot;,
+          &quot;77.11&quot;,
+          &quot;123.86&quot;,
+          &quot;144.41&quot;,
+          &quot;178.09&quot;,
+          &quot;194.32&quot;,
+          &quot;162.27&quot;,
+          &quot;725.1&quot;,
+          &quot;+7.486%&quot;
+        ],
+        [
+          &quot;prototype&quot;,
+          &quot;ON&quot;,
+          &quot;1&quot;,
+          &quot;1&quot;,
+          &quot;80.11&quot;,
+          &quot;128.97&quot;,
+          &quot;149.92&quot;,
+          &quot;172.10&quot;,
+          &quot;193.00&quot;,
+          &quot;169.65&quot;,
+          &quot;719.3&quot;,
+          &quot;+4.861%&quot;
+        ],
+        [
+          &quot;prototype&quot;,
+          &quot;ON&quot;,
+          &quot;2&quot;,
+          &quot;2&quot;,
+          &quot;77.12&quot;,
+          &quot;124.33&quot;,
+          &quot;147.02&quot;,
+          &quot;176.16&quot;,
+          &quot;186.05&quot;,
+          &quot;163.84&quot;,
+          &quot;723.0&quot;,
+          &quot;+5.921%&quot;
+        ],
+        [
+          &quot;prototype&quot;,
+          &quot;ON&quot;,
+          &quot;4&quot;,
+          &quot;4&quot;,
+          &quot;75.66&quot;,
+          &quot;124.26&quot;,
+          &quot;144.62&quot;,
+          &quot;178.28&quot;,
+          &quot;187.66&quot;,
+          &quot;163.69&quot;,
+          &quot;729.8&quot;,
+          &quot;+7.532%&quot;
+        ],
+        [
+          &quot;prototype&quot;,
+          &quot;ON&quot;,
+          &quot;8&quot;,
+          &quot;8&quot;,
+          &quot;78.94&quot;,
+          &quot;126.94&quot;,
+          &quot;146.22&quot;,
+          &quot;175.04&quot;,
+          &quot;188.98&quot;,
+          &quot;163.95&quot;,
+          &quot;723.7&quot;,
+          &quot;+6.316%&quot;
+        ],
+        [
+          &quot;prototype&quot;,
+          &quot;ON&quot;,
+          &quot;16&quot;,
+          &quot;16&quot;,
+          &quot;83.38&quot;,
+          &quot;134.27&quot;,
+          &quot;153.50&quot;,
+          &quot;165.32&quot;,
+          &quot;190.26&quot;,
+          &quot;175.38&quot;,
+          &quot;725.2&quot;,
+          &quot;+0.656%&quot;
+        ]
+      ]
+    },
+    {
+      &quot;title&quot;: &quot;F16 thread sweep&quot;,
+      &quot;method&quot;: &quot;Each condition used three timed workers and one quality worker. Load and first warmup are startup observations. Peak is the maximum process footprint across the four workers. Both original-binary conditions received selector 0, which the original binary does not read.&quot;,
+      &quot;headers&quot;: [
+        &quot;Binary&quot;,
+        &quot;Selector&quot;,
+        &quot;Requested&quot;,
+        &quot;Ready threads&quot;,
+        &quot;p50 ms&quot;,
+        &quot;p90 ms&quot;,
+        &quot;p99 ms&quot;,
+        &quot;RTFx&quot;,
+        &quot;Load ms&quot;,
+        &quot;First warmup ms&quot;,
+        &quot;Peak MiB&quot;,
+        &quot;Paired vs original auto 16&quot;
+      ],
+      &quot;rows&quot;: [
+        [
+          &quot;original&quot;,
+          &quot;0 (ignored)&quot;,
+          &quot;omitted&quot;,
+          &quot;16&quot;,
+          &quot;83.52&quot;,
+          &quot;133.12&quot;,
+          &quot;154.85&quot;,
+          &quot;165.67&quot;,
+          &quot;287.87&quot;,
+          &quot;175.19&quot;,
+          &quot;1284.5&quot;,
+          &quot;+0.000%&quot;
+        ],
+        [
+          &quot;original&quot;,
+          &quot;0 (ignored)&quot;,
+          &quot;4&quot;,
+          &quot;4&quot;,
+          &quot;79.48&quot;,
+          &quot;127.62&quot;,
+          &quot;147.99&quot;,
+          &quot;174.80&quot;,
+          &quot;292.28&quot;,
+          &quot;169.83&quot;,
+          &quot;1290.4&quot;,
+          &quot;+5.568%&quot;
+        ],
+        [
+          &quot;prototype&quot;,
+          &quot;OFF&quot;,
+          &quot;omitted&quot;,
+          &quot;16&quot;,
+          &quot;84.71&quot;,
+          &quot;134.18&quot;,
+          &quot;154.36&quot;,
+          &quot;163.97&quot;,
+          &quot;285.49&quot;,
+          &quot;176.23&quot;,
+          &quot;1284.0&quot;,
+          &quot;-1.422%&quot;
+        ],
+        [
+          &quot;prototype&quot;,
+          &quot;ON&quot;,
+          &quot;omitted&quot;,
+          &quot;4&quot;,
+          &quot;76.36&quot;,
+          &quot;123.98&quot;,
+          &quot;144.55&quot;,
+          &quot;177.77&quot;,
+          &quot;288.21&quot;,
+          &quot;168.71&quot;,
+          &quot;1276.3&quot;,
+          &quot;+6.631%&quot;
+        ],
+        [
+          &quot;prototype&quot;,
+          &quot;ON&quot;,
+          &quot;1&quot;,
+          &quot;1&quot;,
+          &quot;81.79&quot;,
+          &quot;133.82&quot;,
+          &quot;154.60&quot;,
+          &quot;167.09&quot;,
+          &quot;286.07&quot;,
+          &quot;179.08&quot;,
+          &quot;1283.9&quot;,
+          &quot;+1.622%&quot;
+        ],
+        [
+          &quot;prototype&quot;,
+          &quot;ON&quot;,
+          &quot;2&quot;,
+          &quot;2&quot;,
+          &quot;79.29&quot;,
+          &quot;126.55&quot;,
+          &quot;146.72&quot;,
+          &quot;173.82&quot;,
+          &quot;287.06&quot;,
+          &quot;169.62&quot;,
+          &quot;1276.8&quot;,
+          &quot;+4.877%&quot;
+        ],
+        [
+          &quot;prototype&quot;,
+          &quot;ON&quot;,
+          &quot;4&quot;,
+          &quot;4&quot;,
+          &quot;76.17&quot;,
+          &quot;127.43&quot;,
+          &quot;148.01&quot;,
+          &quot;176.83&quot;,
+          &quot;288.71&quot;,
+          &quot;165.05&quot;,
+          &quot;1286.5&quot;,
+          &quot;+7.123%&quot;
+        ],
+        [
+          &quot;prototype&quot;,
+          &quot;ON&quot;,
+          &quot;8&quot;,
+          &quot;8&quot;,
+          &quot;78.02&quot;,
+          &quot;128.55&quot;,
+          &quot;148.01&quot;,
+          &quot;173.23&quot;,
+          &quot;287.71&quot;,
+          &quot;168.88&quot;,
+          &quot;1291.2&quot;,
+          &quot;+4.507%&quot;
+        ],
+        [
+          &quot;prototype&quot;,
+          &quot;ON&quot;,
+          &quot;16&quot;,
+          &quot;16&quot;,
+          &quot;83.74&quot;,
+          &quot;135.11&quot;,
+          &quot;154.76&quot;,
+          &quot;165.09&quot;,
+          &quot;292.32&quot;,
+          &quot;176.17&quot;,
+          &quot;1293.2&quot;,
+          &quot;-0.425%&quot;
+        ]
+      ]
+    },
+    {
+      &quot;title&quot;: &quot;Tradeoffs among explicit thread counts&quot;,
+      &quot;method&quot;: &quot;The performance frontier includes an explicit count when no measured alternative has equal or better p50, p90, p99 and RTFx on every measure and a better result on at least one. The second frontier adds lower peak process footprint as a fifth objective.&quot;,
+      &quot;headers&quot;: [
+        &quot;GGUF&quot;,
+        &quot;Performance frontier (threads)&quot;,
+        &quot;Performance and peak footprint frontier (threads)&quot;,
+        &quot;Lowest p50 and highest RTFx (threads)&quot;
+      ],
+      &quot;rows&quot;: [
+        [
+          &quot;Q4_K&quot;,
+          &quot;4&quot;,
+          &quot;1/2/4&quot;,
+          &quot;4&quot;
+        ],
+        [
+          &quot;Q8_0&quot;,
+          &quot;4&quot;,
+          &quot;1/2/4/8&quot;,
+          &quot;4&quot;
+        ],
+        [
+          &quot;F16&quot;,
+          &quot;2/4&quot;,
+          &quot;2/4&quot;,
+          &quot;4&quot;
+        ]
+      ],
+      &quot;notes&quot;: [
+        &quot;On F16, two threads reached p90 126.55 ms compared with 127.43 ms at four.&quot;
+      ]
+    },
+    {
+      &quot;title&quot;: &quot;Separate Q4_K full-corpus quality run&quot;,
+      &quot;method&quot;: &quot;Each condition transcribed the same 650 public FLEURS inputs once after nine warmups. Each of the three condition pairs was checked. These runs contribute quality evidence only.&quot;,
+      &quot;headers&quot;: [
+        &quot;Conditions&quot;,
+        &quot;Inputs per condition&quot;,
+        &quot;Public tokens per condition&quot;,
+        &quot;Public segments per condition&quot;,
+        &quot;Literal edits / characters&quot;,
+        &quot;Literal CER&quot;,
+        &quot;Normalized edits / characters&quot;,
+        &quot;Normalized CER&quot;
+      ],
+      &quot;rows&quot;: [
+        [
+          &quot;Original auto 16, original explicit 4, prototype auto 4&quot;,
+          &quot;650&quot;,
+          &quot;28,405&quot;,
+          &quot;744&quot;,
+          &quot;2,608 / 34,928&quot;,
+          &quot;7.46679%&quot;,
+          &quot;1,520 / 32,648&quot;,
+          &quot;4.65572%&quot;
+        ]
+      ],
+      &quot;notes&quot;: [
+        &quot;All three conditions returned identical text and public token/segment text and times. Public exactness was checked directly as well as by corpus-level CER.&quot;
+      ]
+    }
+  ],
+  &quot;input_hash&quot;: &quot;7196750a6d97b470abbcc6fc45bd3d82572473a5e778200a145fe82dbda03267&quot;,
+  &quot;assets_sha256&quot;: &quot;e82d03c053c861f4943907d67f28e191431f84706429b324e80368adf6808581&quot;,
+  &quot;evidence&quot;: {
+    &quot;directory&quot;: &quot;021&quot;,
+    &quot;paths_relative_to&quot;: &quot;Ignored local campaign artifact directory.&quot;,
+    &quot;evaluation&quot;: &quot;021/evaluation.json&quot;,
+    &quot;evaluation_sha256&quot;: &quot;617aff26e5b6300569f40801c5f60c4b1c0f556f8f86ec85d983f560ffbf4f39&quot;,
+    &quot;source_manifest&quot;: &quot;021/preparation/source-manifest.json&quot;,
+    &quot;input_provenance&quot;: &quot;021/input-provenance.json&quot;,
+    &quot;sweep&quot;: &quot;021/thread-sweep.tsv&quot;,
+    &quot;full_quality&quot;: &quot;021/full-q4-auto-on/execution.json&quot;,
+    &quot;raw_freeze&quot;: &quot;021/raw-freeze.sha256&quot;,
+    &quot;raw_freeze_sha256&quot;: &quot;6194c2b79757c2156d687957461f5c5eb927898cf93ed228c5cefa07d46b26f4&quot;,
+    &quot;matched_file_count&quot;: 652,
+    &quot;matched_file_bytes&quot;: 16898694,
+    &quot;screen_workers&quot;: 108,
+    &quot;full_quality_workers&quot;: 3,
+    &quot;original_and_candidate_build_manifests&quot;: {
+      &quot;original&quot;: &quot;65eab691db2db5baafb1889157c79d78acc8ba016746a8a6b0b570729f3d39df&quot;,
+      &quot;candidate&quot;: &quot;62c978ad217fceeb04b34d2fe24b57d345a1cd545531e6cb9bb0b4c00825a0a3&quot;
+    },
+    &quot;owner_final_metadata_sha256&quot;: &quot;63135ac91529bc1e0558a7ec2ad7a349e7616317adfe70a44b825850de9f12d4&quot;,
+    &quot;audits&quot;: {
+      &quot;request-audit.json&quot;: {
+        &quot;artifact_path&quot;: &quot;report-imports/021/request-audit.json&quot;,
+        &quot;sha256&quot;: &quot;2136d7450779b4f7819e1c865983f99520202ebc07a57edc72fdb61f00c3846e&quot;
+      },
+      &quot;check-audit.json&quot;: {
+        &quot;artifact_path&quot;: &quot;report-imports/021/check-audit.json&quot;,
+        &quot;sha256&quot;: &quot;829db52b2642d48c8bd648a58a1c5ba54cdf3000840c666ba0e306fe1ff319e5&quot;
+      },
+      &quot;independent-evidence-sha256.json&quot;: {
+        &quot;artifact_path&quot;: &quot;report-imports/021/independent-evidence-sha256.json&quot;,
+        &quot;sha256&quot;: &quot;e0f0051056c2e3196916c7ef7945eb3c142a8ed4a11ab5064bff143519d14e47&quot;
+      }
+    }
+  }
+}</pre></details><footer>Local experiment report · JSON is the source of truth · No external assets or telemetry</footer></main></body></html>
