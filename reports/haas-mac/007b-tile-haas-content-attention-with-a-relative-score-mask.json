@@ -1,0 +1,244 @@
+{
+  "schema_version": 1,
+  "measure_id": "007b",
+  "parent_measure_id": "007",
+  "title": "Tiled Haas content attention with a dense relative-score mask",
+  "status": "rejected",
+  "reason": "Reject the current checkpoint at its exact encoder check. On the first synthetic Q4_K input the ordinary and retained ON graphs produced different projected vectors. A separate failure-only capture found 602 of 640 F32 elements differed. No recognition or timing run followed.",
+  "updated_utc": "2026-11-07T06:10:57.808579+00:00",
+  "scope": "checks_only",
+  "evaluation_completed": true,
+  "adopted": false,
+  "primary_screen_executed": false,
+  "full_quality_executed": false,
+  "short_prefix_executed": false,
+  "public_asr_quality_executed": false,
+  "performance_gain_measured": false,
+  "memory_gain_measured": false,
+  "variant_scope": "Global content attention (q+u)K^T, online softmax, and P·V use FA_EXT. The separate dense positional score (q+v)P^T remains, with per-head shifted bias gathered, scaled and cast to F16. K and V incur two full canonical contiguous F32 operations. No ggml runtime change.",
+  "conditions": {
+    "hardware": "Apple M2 Ultra, 76 GPU cores and 192 GB unified memory",
+    "macos": "26.7.2",
+    "threads": 4,
+    "model": "Haas ja v1.0 Q4_K",
+    "selector": "SPEECH_HAAS_REL_FA",
+    "side_modes": "original unset; candidate OFF literal 0; candidate ON literal 1",
+    "latency_definition": "No request or stage latency was measured. This trial ended at the ordinary-versus-retained encoder equality check.",
+    "aggregation": "The synthetic arithmetic cases and the failure-only vector comparison are distinct. The displayed generic CER definitions do not apply to this checks-only trial.",
+    "limitations": [
+      "No official encoder SNR result, no three-side encoder triplet with ON, and no public TDT/API/CLI/worker/650-input recognition, CER, latency, memory gain, or stage timing. No measurement of a slowdown or ASR quality loss.",
+      "Real-feature/remaining weight comparisons, stage-only or mask-only localization, repeat/fusion-disable diagnostics, M5 and Vulkan were not run.",
+      "Direct CPU FA synthetic coverage is separate from the Haas CPU-family ON rejection. Direct NMSE 5e-4 and the planned official 90/25 dB final SNR thresholds do not replace the failed required exact consistency check.",
+      "The first ON run stopped before it saved any failed tensor. The separate diagnostic used the same runtime and the same synthetic input and captured two projected vectors. The root cause and impact on recognition remain unknown.",
+      "The 24 FA nodes per graph were inspected graph nodes. The trial did not count dispatches or establish a memory or performance change.",
+      "The separate noncontiguous tail-padding correction was absent. No connection between that issue and this check failure was established."
+    ]
+  },
+  "models": {
+    "q4_k": {
+      "sha256": "d24d53f29b75214a933ff482b0de1217e0a800f4118cca39ad6cf03609a89d6f",
+      "use": "Weight for the Metal encoder synthetic-input check."
+    }
+  },
+  "implementation_checkpoint": {
+    "measured_source_commit": "566d2c5e141183daae681c0af29325d7f19a1bc7",
+    "ggml_commit": "e1a9ac12edbb57402618fd6936598603f5ee6266",
+    "original_source_commit": "114c514430c8aa1455c077819f8e72e674a48b75",
+    "original_ggml_commit": "e1a9ac12edbb57402618fd6936598603f5ee6266",
+    "separate_diagnostic_helper_commit": "36e6ce8df02179d526b8352ca3c779abc116172c",
+    "diagnostic_binary_sha256": "5c526c60040046fd9c74e7ed3d51c82d360f6a0e48c0518945e629b62ffc009f",
+    "evaluation_commit": "70e1b6cbebcfaf81f12a259e6b1635eb9ffe9ea8",
+    "evaluation_note": "experiments/haas-mac/007b-notes.md",
+    "evaluation_note_sha256": "958b29de23bb6ce08ce20c03d79048034df328c923c798e88e5c0d2658af79fc",
+    "prepared_runner_commit": "dfe7f1ded3cfbadbe07d80560effba1c07a179bf",
+    "worker_executed": false,
+    "integrated": false,
+    "measured_check_binaries": {
+      "original": {
+        "007b-attention-check": "3ba29e6fddd10c6c6371215fa279a58635aa01a18a843817550fac2876729f4c",
+        "007b-encoder-check": "92b59900cb7a5ba887812bdfd52d58b6c9c4f8861d61db63280152b1eceab104"
+      },
+      "candidate": {
+        "007b-attention-check": "c90b1378c972868d935eea78ae15014a57108ea4f5dd466785fdfb2501483534",
+        "007b-encoder-check": "25d1108930d548da5e75cb9e56f9bd26968aaadd8937b4f31951ea2ab4448cb4"
+      }
+    }
+  },
+  "evidence": {
+    "directory": "007b",
+    "owner_evaluation_sha256": "3943a22bba5a741dfe624ce0664589c4453d8b6d61b497a1c28a3df7a52ee557",
+    "owner_manifest_path": "007b/evidence-raw.json",
+    "owner_manifest_sha256": "a8a0e5c2c2a84b90802c789337bbb5a6dc72141307d3c0555eba0632002d6b53",
+    "owner_manifest_counts": {
+      "local_files": 973,
+      "retained_files": 11,
+      "local_bytes": 489686509,
+      "retained_bytes": 9875822
+    },
+    "import_extent_files_checked": 984,
+    "import_small_sha_count": 63,
+    "import_small_hashed_bytes": 1483900,
+    "import_check_audit": {
+      "artifact_path": "report-imports/007b/check-audit.json",
+      "sha256": "48a2c60bb80bf98ecb177d6b7dd3f2abb293133ebdd80c105b5476a6c1491f96"
+    },
+    "diagnostic_result_sha256": "6ed40e8647280aee69f234c0dd00bb6961ca4a893aabfe088053ed395e95bd28",
+    "import_scope": "The owner read the full freeze and verified stored SHA digests. The import stat-checked all files, compared the 448 original/OFF frozen digest/extent pairs, independently hashed small check outputs and recalculated the two 2560-byte error vectors. It did not repeat the 500 MB owner hash pass."
+  },
+  "checks": [
+    {
+      "name": "Independent synthetic attention arithmetic",
+      "status": "passed",
+      "evidence": "007b/execution/normal-retained-first-failure.json",
+      "reason": "20 cases per CPU and Metal backend met the prespecified NMSE bound of 0.0005. All dense mask entries matched the scalar reference. Shared-head and reversed-position negative controls exceeded the bound. This helper runs independently of the family selector.",
+      "required": true,
+      "scope": "mac"
+    },
+    {
+      "name": "Selector errors",
+      "status": "passed",
+      "evidence": "007b/selector-checks/result.json",
+      "reason": "The four observed cases were invalid 2, empty value, CPU ON, and T=385 on Metal. An alternate-model runtime check and an unsupported-GPU-op rejection were unavailable.",
+      "required": true,
+      "scope": "mac"
+    },
+    {
+      "name": "Original and OFF saved encoder outputs",
+      "status": "passed",
+      "evidence": "007b/evidence-raw.json",
+      "reason": "Each side completed 16 synthetic lengths, with one ordinary and one retained graph per length. All 448 matching names had identical recorded extents and SHA digests across sides.",
+      "required": true,
+      "scope": "mac"
+    },
+    {
+      "name": "First enabled ordinary versus retained projected output",
+      "status": "failed",
+      "evidence": "007b/execution/normal-retained-first-failure.json",
+      "reason": "Q4_K on Metal stopped at seven input feature frames (subsampled T=1). Both graphs had 24 FA nodes. All 24 retained masks were finite. The required equality failed before any ON tensor was saved.",
+      "required": true,
+      "scope": "mac"
+    },
+    {
+      "name": "Failure-only re-observation",
+      "status": "passed",
+      "evidence": "007b/retained-diagnostic-t1/result.json",
+      "reason": "The diagnostic reproduced the failed gate at the same T=1. Two 2,560-byte F32 host vectors were saved. Independent import readback found 602 differing four-byte representations out of 640, first index 0, and maximum absolute difference 3.933906555175781e-6. This reproduces the failure, not a successful gate.",
+      "required": true,
+      "scope": "mac"
+    },
+    {
+      "name": "Matched compiler and link rule files",
+      "status": "passed",
+      "evidence": "007b/execution/helper-builds.json",
+      "reason": "The original and candidate each match the recorded 74 compile and 74 link rule files after path normalization.",
+      "required": true,
+      "scope": "mac"
+    },
+    {
+      "name": "Official encoder, TDT, public ASR and performance",
+      "status": "skipped",
+      "evidence": "007b/evaluation.json",
+      "reason": "The strict consistency check stopped evaluation before official SNR, public text, latency, memory, CER or the short-prefix supplement.",
+      "required": true,
+      "scope": "mac"
+    },
+    {
+      "name": "Windows Vulkan and other Metal devices",
+      "status": "unavailable",
+      "evidence": "007b/evaluation.json",
+      "reason": "This trial used the M2 Ultra.",
+      "required": false,
+      "scope": "mac"
+    }
+  ],
+  "diagnostics": [
+    {
+      "title": "The first enabled graph pair failed the exact check",
+      "method": "Two graphs use the same synthetic input. The retained graph additionally exposes encoder stages and the 24 masks.",
+      "headers": [
+        "Side",
+        "Lengths completed",
+        "FA nodes per graph",
+        "Saved F32 files",
+        "Required projected-output check"
+      ],
+      "rows": [
+        [
+          "Original",
+          16,
+          0,
+          448,
+          "Passed"
+        ],
+        [
+          "Candidate OFF",
+          16,
+          0,
+          448,
+          "Passed"
+        ],
+        [
+          "Candidate ON",
+          0,
+          24,
+          0,
+          "Failed on the first T=1 pair"
+        ]
+      ],
+      "notes": [
+        "Original and OFF produced 448 matching file pairs. No three-sided set of saved tensors exists for the initial run."
+      ]
+    },
+    {
+      "title": "Failure-only capture on the same synthetic input",
+      "method": "The separate host capture wrote the two vectors at the existing failure point. Both vectors have shape 1 by 640.",
+      "headers": [
+        "Bytes per vector",
+        "Changed F32 bit patterns",
+        "First index",
+        "Maximum absolute difference"
+      ],
+      "rows": [
+        [
+          2560,
+          "602 / 640",
+          0,
+          "3.933906555175781e-6"
+        ]
+      ],
+      "notes": [
+        "The retained graph exposes additional outputs and has different live ranges. The experiment did not identify which operation first changed or whether transcription would change."
+      ]
+    },
+    {
+      "title": "Independent scalar arithmetic check",
+      "method": "The isolated CPU and Metal tests compare the dense mask and attention arithmetic with the scalar reference.",
+      "headers": [
+        "Backend",
+        "Cases below NMSE bound",
+        "Worst NMSE",
+        "Shared-head control NMSE",
+        "Reversed-position control NMSE"
+      ],
+      "rows": [
+        [
+          "CPU",
+          20,
+          "1.1162772e-13",
+          "0.0087577538",
+          "0.98367282"
+        ],
+        [
+          "GPU",
+          20,
+          "1.1562414e-13",
+          "0.0087577538",
+          "0.98367282"
+        ]
+      ],
+      "notes": [
+        "A passing isolated numerical bound is a separate condition from ordinary-versus-retained exact equality."
+      ]
+    }
+  ]
+}

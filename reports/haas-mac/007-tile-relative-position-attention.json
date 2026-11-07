@@ -2,8 +2,8 @@
   "schema_version": 1,
   "measure_id": "007",
   "title": "Tile relative-position attention",
-  "status": "conditional",
-  "reason": "The bounded ADD/softmax fusion prototype is not adopted: the screen and alternating stage diagnostic do not establish a stable complete-request latency gain. Broader tiled relative-position attention designs remain untested.",
+  "status": "rejected",
+  "reason": "The two tested variants are rejected. The ADD/softmax fusion 007a showed no stable request benefit. The tiled content-attention variant 007b failed its ordinary-versus-retained encoder equality check before any request timing.",
   "checks": [],
-  "updated_utc": "2026-11-06T21:03:45.325144+00:00"
+  "updated_utc": "2026-11-07T06:10:57.808579+00:00"
 }
