@@ -1,8 +1,11 @@
 # Prepare channel-first depthwise weights once
 
-This is an unbuilt, unmeasured prototype on `codex/exp-haas-014`, based on
+This prototype on `codex/exp-haas-014` is based on
 `114c514430c8aa1455c077819f8e72e674a48b75`, with ggml pinned to
-`e1a9ac12edbb57402618fd6936598603f5ee6266`. It includes no other trial's runtime changes and no activation fusion.
+`e1a9ac12edbb57402618fd6936598603f5ee6266`. It includes no other trial's runtime or ggml fusion changes.
+Source checkpoint `dd0a27e412842bde002dc76cb02aaea82c94799f` was evaluated without runtime changes and rejected:
+ordinary Metal output does not meet the strict equivalence gate. `014-depthwise-prepack-evaluation.md` records the
+checks and bounded diagnostics. No performance or public ASR quality measurement ran, and no default changed.
 
 ## Existing weights and byte mapping
 
@@ -16,7 +19,8 @@ Haas-616M-ja-v1.0 Q4_K, Q8_0 and F16 file:
 
 The total selected payload is 903,168 bytes, exactly 882 KiB. These are F32 tensors even in the Q4_K and Q8_0 files;
 the filename's overall quantization type does not describe them. The layout already requires their F32 storage.
-This audit read headers, not all payloads or whole-file hashes. Later evaluation must record the model hashes.
+The source audit read headers only. The evaluation separately verified the existing model files by their full hashes;
+only Q4_K proceeded to inference checks before the strict Metal failure stopped evaluation.
 
 Every selected convolution calls the existing `depthwise()` helper, which constructs
 `PERMUTE(2,3,1,0) -> CONT -> PERMUTE(3,2,0,1)` for its kernel. The encoder first views its `[9,1024]` matrix as
@@ -49,10 +53,9 @@ these weights. CPU and GPU encoder instances prepare on their respective source 
 used only for decoding does not contain an encoder and receives no prepared depthwise tensors. Request progress,
 decoder state, keywords and cancellation points are unchanged. API cancellation still needs its separate smoke check.
 
-## Prepared checks
+## Differential check
 
-`fastconformer-depthwise-prepack-check` uses the actual encoder graph to identify every depthwise operand. It is
-designed to check the following after execution is authorized:
+`fastconformer-depthwise-prepack-check` uses the actual encoder graph to identify every depthwise operand. It checks:
 
 - Metadata inspection with the switch off and on, selector refusal, and the additional retained allocation.
 - Exactly 26 depthwise convolutions in both graphs, exactly 26 fewer total CONT nodes, and the same final kernel
@@ -74,19 +77,22 @@ Byte-preserving preparation alone does not prove that different graph scheduling
 
 This is a candidate-off/candidate-on differential check. It is not an original-binary comparison, an official F32
 reference check, a recognition-quality result, or an API cancellation check. Record model/input hashes and raw logs.
-Official F32 dumps and Windows Vulkan remain unverified. Example commands, not executed here:
+Official F32 inference and Windows Vulkan remain unverified. The Q4_K evaluation uses these command interfaces:
 
 ```sh
 ./build/fastconformer-depthwise-prepack-check "$MODEL" cpu 4 "$SHORT_NPY" "$MEDIUM_NPY" "$LONG_NPY"
 ./build/fastconformer-depthwise-prepack-check "$MODEL" gpu 4 "$SHORT_NPY" "$MEDIUM_NPY" "$LONG_NPY"
 ```
 
-## Pending evaluation
+## Evaluation boundary
 
-The coordinator must add the switch to the frozen runner's environment allowlist. Once authorized, serialize builds
-and inference under `/private/tmp/speech-haas-mac-perf.lock` and bound builds to four jobs. Compare off/on with the
-same files and options, then compare off with the fixed anchor. Record pure load, ready warmup, first request, warm
-latency, process peak memory and actual retained allocation separately. F16 is affected too and is not an unchanged
-runtime control. The 26 removed copies are graph nodes, not 26 removed whole encoder graphs.
+Runner `a7e227c2b9067ee0b73a4582acf2e453cff5f179` was frozen with the switch allowed. Builds and checks used
+`/private/tmp/speech-haas-mac-perf.lock` and four build jobs. The ordinary candidate-off/candidate-on check failed
+on Metal, so original-binary continuity, Q8_0/F16 checks, official encoder checks, fixed-anchor comparisons and
+performance/quality runs were not executed. The additional backend allocation was observed as 882 KiB, but load
+time, process peak memory and latency were not measured. F16 would also be affected by this runtime change.
+The 26 removed copies are graph nodes, not 26 removed whole encoder graphs.
 
-No build, inference check, timing or adoption decision is completed by this source checkpoint.
+This rejection concerns the current prototype's unmet strict gate. It is not a permanent rejection of depthwise
+weight preparation or a reason to relax the numerical gate. A different graph or fusion design would be a separate
+experiment; this evaluation includes no such change.
