@@ -12,8 +12,11 @@ message flushed, with failure details on stderr:
 
 This is deliberately not a speech.cpp worker: the ready message never claims
 protocol 4 and never resolves CPU threads. Startup loads the model and
-tokenizer exactly once, evaluates the parameters, and does no warmup, no
-download, no compilation pass, and no weight or precision changes. Clean EOF
+tokenizer exactly once, applies the reviewed one-time BF16->FP16 parameter
+cast through the shared strict helper in precision.py (which calls
+set_dtype(mx.float16) and validates names, shapes, dtypes and the pinned
+totals), evaluates the cast parameters, and does no warmup, no download, no
+compilation pass, and no other weight or precision change. Clean EOF
 while idle exits 0; EOF with an open request is rejected as abandoned.
 
 ResidentSession is a pure standard-library protocol boundary around a
@@ -26,10 +29,10 @@ from __future__ import annotations
 import argparse
 import base64
 import json
-import platform
 import sys
-from importlib.metadata import version as distribution_version
 from pathlib import Path
+
+import precision
 
 RUNTIME = 'haas-mlx'
 PROTOCOL = 'haas-mlx-pilot-1'
@@ -173,20 +176,25 @@ def load_engine(model_dir):
     import mlx.core as mx
     import sentencepiece as spm
 
+    from mlx.utils import tree_flatten
+
     from haas_mlx.model import HaasModel
 
     if not mx.metal.is_available():
         raise RuntimeError('MLX reports no Metal device; this resident requires a real GPU.')
     model = HaasModel.load(model_dir)
-    sp = spm.SentencePieceProcessor(model_file=str(Path(model_dir) / 'tokenizer.model'))
+    # The reviewed and only precision change, after the load and before ready:
+    # the shared strict helper casts the all-BF16 tree with set_dtype(float16)
+    # and releases the BF16 leaves; then the cast parameters are evaluated.
+    cast = precision.cast_parameters_to_float16(model, mx, tree_flatten)
     mx.eval(model.parameters())
+    sp = spm.SentencePieceProcessor(model_file=str(Path(model_dir) / 'tokenizer.model'))
 
     device = mx.default_device()
     kind = getattr(device, 'type', device)
     kind = getattr(kind, 'name', None) or str(kind)
     if 'gpu' not in str(kind).lower():
         raise RuntimeError(f'this resident requires a real MLX GPU device; the default is {kind}')
-    device_name = mx.device_info()['device_name']
 
     import numpy as np
     from haas_mlx.longform import transcribe_text
@@ -201,12 +209,8 @@ def load_engine(model_dir):
     identity = {
         'runtime': RUNTIME,
         'protocol': PROTOCOL,
-        'mlx': {'version': distribution_version('mlx'),
-                'mlx_metal_version': distribution_version('mlx-metal'),
-                'device': str(kind), 'device_name': device_name},
-        'python': {'executable': sys.executable, 'version': platform.python_version(),
-                   'machine': platform.machine()},
-        'model': {'path': str(Path(model_dir).resolve())},
+        **precision.mlx_runtime_identity(mx),
+        'model': {'path': str(Path(model_dir).resolve()), 'precision': cast},
     }
     return transcribe, identity
 

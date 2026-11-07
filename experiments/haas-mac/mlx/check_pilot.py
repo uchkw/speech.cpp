@@ -4,10 +4,13 @@
 Standard library only: no downloads, no MLX package, no real audio and no
 large data. The resident protocol boundary is driven through a fake transcribe
 callable; the driver is driven through fake children, a fake clock and
-injected PCM reads. The only subprocess is one tiny stdlib Python child, a
-local fixture that blocks its stdin so the blocked-pipe watchdog is exercised
-for real. This file checks behavior only; it asserts no measurement results
-and makes no pass claims beyond these tests.
+injected PCM reads. The load-surface fakes carry a small symbolic BF16
+parameter tree (dtype and shape metadata only), so the reviewed strict
+cast helper and the truthful FP16 ready profile run for real here. The only
+subprocess is one tiny stdlib Python child, a local fixture that blocks its
+stdin so the blocked-pipe watchdog is exercised for real. This file checks
+behavior only; it asserts no measurement results and makes no pass claims
+beyond these tests.
 """
 
 from __future__ import annotations
@@ -31,13 +34,20 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 import pilot    # noqa: E402  (imports the parent campaign helpers)
+import precision  # noqa: E402
 import resident  # noqa: E402
 
+FP16_PROFILE = {'profile': 'fp16-parameters', 'cast': True, 'source_dtype': 'bfloat16',
+                'parameter_dtype': 'float16', 'master_dtype': None,
+                'arithmetic': precision.ARITHMETIC_NOTE,
+                'tensor_count': 731, 'element_count': 615871520,
+                'shape_sample': [['embed.weight', [4609, 1024]], ['fb', [128, 257]]]}
 MLX_READY = {'type': 'ready', 'runtime': 'haas-mlx', 'protocol': 'haas-mlx-pilot-1',
              'mlx': {'version': '0.32.4', 'mlx_metal_version': '0.32.4', 'device': 'gpu',
                      'device_name': 'Apple M2 Ultra'},
              'python': {'executable': '/fake/bin/python3.12', 'version': '3.12.11',
-                        'machine': 'arm64'}}
+                        'machine': 'arm64'},
+             'model': {'precision': FP16_PROFILE}}
 NATIVE_READY = {'type': 'ready', 'protocol': 4, 'model': {'device': 'MTL0', 'threads': 4},
                 'defaults': {'decode_on_cpu': True}}
 
@@ -219,18 +229,77 @@ class FakeSamples:
                 for offset in range(0, len(self.pcm), 2)]
 
 
+BF16 = 'bfloat16'
+FLOAT16 = 'float16'
+FAKE_TENSORS = 4
+FAKE_ELEMENTS = 4609 * 1024 + 512 * 512 + 64 + 128 * 128  # 4998208
+
+
+class FakeLeaf:
+    """A symbolic parameter leaf: dtype and shape metadata only, never data."""
+
+    def __init__(self, dtype, shape):
+        self.dtype, self.shape = dtype, list(shape)
+
+
+def FAKE_PARAMETER_TREE():
+    """A small all-BF16 tree with the dot-name nesting the port uses."""
+    return {
+        'embed': {'weight': FakeLeaf(BF16, [4609, 1024])},
+        'encoder': {'layers': {
+            '0': {'proj': FakeLeaf(BF16, [512, 512])},
+            '1': {'proj': FakeLeaf(BF16, [64])},
+            '2': {'proj': FakeLeaf(BF16, [128, 128])}}},
+    }
+
+
+def fake_tree_flatten(tree, prefix=''):
+    """The mlx.utils.tree_flatten surface: stable dot names, depth first."""
+    flat = []
+    for key, value in tree.items():
+        name = f'{prefix}.{key}' if prefix else str(key)
+        if isinstance(value, dict):
+            flat.extend(fake_tree_flatten(value, name))
+        else:
+            flat.append((name, value))
+    return flat
+
+
+class FakeHaasModel:
+    """The real load surface only: a parameter tree plus nn.Module.set_dtype."""
+
+    def __init__(self, tree, events=None):
+        self.tree, self.events = tree, events
+
+    def parameters(self):
+        return self.tree
+
+    def set_dtype(self, dtype):
+        if self.events is not None:
+            self.events.append(('set_dtype', dtype))
+
+        def cast(node):
+            return {key: cast(value) if isinstance(value, dict) else FakeLeaf(dtype, value.shape)
+                    for key, value in node.items()}
+        self.tree = cast(self.tree)
+
+
 def fake_mlx_modules(events, device_kind='gpu'):
     """The minimum real MLX import surface; mlx.metal has no get_device_name."""
     mlx = types.ModuleType('mlx')
     core = types.ModuleType('mlx.core')
     metal = types.ModuleType('mlx.metal')
+    utils = types.ModuleType('mlx.utils')
     metal.is_available = lambda: True
     core.metal = metal
+    core.bfloat16, core.float16 = BF16, FLOAT16
     core.eval = lambda *values: events.append(('eval',) + values)
     core.default_device = lambda: types.SimpleNamespace(type=FakeDeviceKind(device_kind))
     core.device_info = lambda: {'device_name': 'Apple M2 Ultra', 'architecture': 'arm64'}
     core.array = lambda values: ('mx.array', values)
+    utils.tree_flatten = fake_tree_flatten
     mlx.core = core
+    mlx.utils = utils
     numpy = types.ModuleType('numpy')
     def fake_frombuffer(data, dtype=None):
         if dtype != '<i2':
@@ -249,11 +318,11 @@ def fake_mlx_modules(events, device_kind='gpu'):
     model_module = types.ModuleType('haas_mlx.model')
     longform = types.ModuleType('haas_mlx.longform')
 
-    class HaasModel:
+    class HaasModel(FakeHaasModel):
         @staticmethod
         def load(model_dir):
             events.append(('load', str(model_dir)))
-            return types.SimpleNamespace(parameters=lambda: ('parameters',))
+            return HaasModel(FAKE_PARAMETER_TREE(), events)
 
     def transcribe_text(model, waveform, sp):
         events.append(('transcribe_text', waveform))
@@ -262,8 +331,8 @@ def fake_mlx_modules(events, device_kind='gpu'):
     model_module.HaasModel = HaasModel
     longform.transcribe_text = transcribe_text
     haas.model, haas.longform = model_module, longform
-    modules = {'mlx': mlx, 'mlx.core': core, 'mlx.metal': metal, 'numpy': numpy,
-               'sentencepiece': sentencepiece, 'haas_mlx': haas,
+    modules = {'mlx': mlx, 'mlx.core': core, 'mlx.metal': metal, 'mlx.utils': utils,
+               'numpy': numpy, 'sentencepiece': sentencepiece, 'haas_mlx': haas,
                'haas_mlx.model': model_module, 'haas_mlx.longform': longform}
     return modules, metal
 
@@ -370,11 +439,13 @@ class LoadEngineTest(unittest.TestCase):
         modules, metal = fake_mlx_modules(events, device_kind)
         versions = {'mlx': '0.32.4', 'mlx-metal': '0.32.4'}
         with mock.patch.dict(sys.modules, modules), \
-                mock.patch.object(resident, 'distribution_version', versions.get):
+                mock.patch.object(precision, 'distribution_version', versions.get), \
+                mock.patch.multiple(precision, PINNED_PARAMETER_TENSORS=FAKE_TENSORS,
+                                    PINNED_PARAMETER_ELEMENTS=FAKE_ELEMENTS):
             transcribe, identity = resident.load_engine(self.model_dir)
         return transcribe, identity, metal
 
-    def test_identity_reports_the_actual_device_and_versions(self):
+    def test_identity_reports_the_actual_device_versions_and_cast(self):
         events = []
         transcribe, identity, metal = self.load(events)
         self.assertFalse(hasattr(metal, 'get_device_name'))  # a wrong API name cannot pass
@@ -386,7 +457,20 @@ class LoadEngineTest(unittest.TestCase):
                          {'executable': sys.executable, 'version': platform.python_version(),
                           'machine': platform.machine()})
         self.assertEqual(identity['model']['path'], str(self.model_dir.resolve()))
-        self.assertIn(('eval', ('parameters',)), events)
+        cast = identity['model']['precision']
+        self.assertEqual(cast['profile'], 'fp16-parameters')
+        self.assertTrue(cast['cast'])
+        self.assertEqual(cast['source_dtype'], 'bfloat16')
+        self.assertEqual(cast['parameter_dtype'], 'float16')
+        self.assertIsNone(cast['master_dtype'])  # honest: no BF16 master copy exists
+        self.assertEqual(cast['tensor_count'], FAKE_TENSORS)
+        self.assertEqual(cast['element_count'], FAKE_ELEMENTS)
+        self.assertEqual(cast['shape_sample'][0], ['embed.weight', [4609, 1024]])
+        kinds = [event[0] for event in events]
+        self.assertLess(kinds.index('load'), kinds.index('set_dtype'))   # cast after the load
+        self.assertLess(kinds.index('set_dtype'), kinds.index('eval'))   # eval after the cast
+        evaluated = events[kinds.index('eval')][1]
+        self.assertEqual({leaf.dtype for _, leaf in fake_tree_flatten(evaluated)}, {FLOAT16})
         self.assertIn(('tokenizer', str(self.model_dir / 'tokenizer.model')), events)
         self.assertNotIn('transcribe_text', [event[0] for event in events])  # no startup inference
         self.assertEqual(transcribe(b'\x01\x00\x00\xff'), 'upstream-text')
@@ -396,6 +480,84 @@ class LoadEngineTest(unittest.TestCase):
     def test_a_cpu_default_device_is_refused(self):
         with self.assertRaisesRegex(RuntimeError, 'GPU'):
             self.load([], device_kind='cpu')
+
+    def test_a_tree_that_is_not_the_pinned_model_is_refused(self):
+        modules, _ = fake_mlx_modules([])
+        versions = {'mlx': '0.32.4', 'mlx-metal': '0.32.4'}
+        with mock.patch.dict(sys.modules, modules), \
+                mock.patch.object(precision, 'distribution_version', versions.get):
+            # the real pinned totals apply, so the small fake tree is refused
+            # and there is no alternate code path when validation fails
+            with self.assertRaisesRegex(precision.PrecisionError, 'pinned'):
+                resident.load_engine(self.model_dir)
+
+
+class PrecisionCastTest(unittest.TestCase):
+    """The shared strict cast helper on symbolic trees; no MLX, no numpy."""
+
+    def cast(self, model, pinned=True):
+        fake_mx = types.SimpleNamespace(bfloat16=BF16, float16=FLOAT16)
+        expected = (FAKE_TENSORS, FAKE_ELEMENTS) if pinned else \
+            (precision.PINNED_PARAMETER_TENSORS, precision.PINNED_PARAMETER_ELEMENTS)
+        return precision.cast_parameters_to_float16(
+            model, fake_mx, fake_tree_flatten,
+            expected_tensors=expected[0], expected_elements=expected[1])
+
+    def test_casts_every_leaf_and_reports_honest_counts(self):
+        model = FakeHaasModel(FAKE_PARAMETER_TREE())
+        profile = self.cast(model)
+        self.assertEqual(profile, {
+            'profile': 'fp16-parameters', 'cast': True, 'source_dtype': 'bfloat16',
+            'parameter_dtype': 'float16', 'master_dtype': None,
+            'arithmetic': precision.ARITHMETIC_NOTE,
+            'tensor_count': FAKE_TENSORS, 'element_count': FAKE_ELEMENTS,
+            'shape_sample': [['embed.weight', [4609, 1024]],
+                             ['encoder.layers.0.proj', [512, 512]],
+                             ['encoder.layers.1.proj', [64]]]})
+        leaves = fake_tree_flatten(model.tree)
+        self.assertEqual([leaf.dtype for _, leaf in leaves], [FLOAT16] * FAKE_TENSORS)
+        self.assertEqual([name for name, _ in leaves],
+                         [name for name, _ in fake_tree_flatten(FAKE_PARAMETER_TREE())])
+
+    def test_refuses_a_leaf_that_is_not_bf16(self):
+        tree = FAKE_PARAMETER_TREE()
+        tree['encoder']['layers']['1']['proj'] = FakeLeaf('float32', [64])
+        with self.assertRaisesRegex(precision.PrecisionError, 'bfloat16'):
+            self.cast(FakeHaasModel(tree))
+
+    def test_refuses_a_tree_that_is_not_the_pinned_model(self):
+        with self.assertRaisesRegex(precision.PrecisionError, 'pinned'):
+            self.cast(FakeHaasModel(FAKE_PARAMETER_TREE()), pinned=False)
+        self.assertEqual((precision.PINNED_PARAMETER_TENSORS,
+                          precision.PINNED_PARAMETER_ELEMENTS), (731, 615871520))
+
+    def test_refuses_a_partial_reshaping_or_renaming_cast(self):
+        class Partial(FakeHaasModel):
+            def set_dtype(self, dtype):
+                super().set_dtype(dtype)
+                # one leaf keeps the source dtype, as if the predicate skipped it
+                self.tree['encoder']['layers']['2']['proj'] = FakeLeaf(BF16, [128, 128])
+
+        class Reshaping(FakeHaasModel):
+            def set_dtype(self, dtype):
+                super().set_dtype(dtype)
+                self.tree['embed']['weight'] = FakeLeaf(dtype, [4609, 1023])
+
+        class Renaming(FakeHaasModel):
+            def set_dtype(self, dtype):
+                super().set_dtype(dtype)
+                proj = self.tree['encoder']['layers']['2'].pop('proj')
+                self.tree['encoder']['layers']['2']['projx'] = proj
+
+        for model, pattern in [(Partial(FAKE_PARAMETER_TREE()), 'float16'),
+                               (Reshaping(FAKE_PARAMETER_TREE()), 'shape'),
+                               (Renaming(FAKE_PARAMETER_TREE()), 'names')]:
+            with self.assertRaisesRegex(precision.PrecisionError, pattern):
+                self.cast(model)
+
+    def test_refuses_an_empty_tree(self):
+        with self.assertRaisesRegex(precision.PrecisionError, 'empty'):
+            self.cast(FakeHaasModel({}))
 
 
 class DriverTest(unittest.TestCase):
@@ -517,7 +679,20 @@ class DriverTest(unittest.TestCase):
                     dict(MLX_READY, mlx={**MLX_READY['mlx'], 'device': 'cpu'}),
                     dict(MLX_READY, mlx={**MLX_READY['mlx'], 'device_name': 'Apple M3 Pro'}),
                     dict(MLX_READY, python={**MLX_READY['python'], 'version': '3.12.10'}),
-                    dict(MLX_READY, python={**MLX_READY['python'], 'machine': 'x86_64'})]:
+                    dict(MLX_READY, python={**MLX_READY['python'], 'machine': 'x86_64'}),
+                    dict(MLX_READY, model={}),  # an old BF16 resident reports no profile
+                    dict(MLX_READY, model={'precision': {**FP16_PROFILE, 'parameter_dtype': 'bfloat16'}}),
+                    dict(MLX_READY, model={'precision': {**FP16_PROFILE, 'source_dtype': 'float32'}}),
+                    dict(MLX_READY, model={'precision': {**FP16_PROFILE, 'tensor_count': 730}}),
+                    dict(MLX_READY, model={'precision': {**FP16_PROFILE, 'element_count': 615871521}}),
+                    dict(MLX_READY, model={'precision': {**FP16_PROFILE, 'cast': False}}),
+                    dict(MLX_READY, model={'precision': {**FP16_PROFILE, 'master_dtype': 'bfloat16'}}),
+                    dict(MLX_READY, model={'precision': {**FP16_PROFILE, 'profile': 'bf16-parameters'}}),
+                    dict(MLX_READY, model={'precision': {
+                        key: value for key, value in FP16_PROFILE.items() if key != 'shape_sample'}}),
+                    dict(MLX_READY, model={'precision': {**FP16_PROFILE, 'shape_sample': []}}),
+                    dict(MLX_READY, model={'precision': {**FP16_PROFILE,
+                                                         'shape_sample': [['w', [0]]]}})]:
             with self.assertRaises(RuntimeError):
                 pilot.verify_mlx_ready(bad)
 
@@ -648,7 +823,8 @@ class DriverTest(unittest.TestCase):
             summary = pilot.summarize(directory, manifest, runs)
             self.assertEqual(summary['sides']['mlx']['measured_count'], 27)
             self.assertEqual(summary['sides']['native']['measured_count'], 27)
-            self.assertEqual(summary['sides']['mlx']['latency']['count'], 27)
+            self.assertEqual(summary['sides']['mlx']['latency']['count'], 9)  # nine file medians
+            self.assertEqual(summary['sides']['mlx']['pooled_measured_latency']['count'], 27)
             self.assertEqual(summary['paired']['requests'], 27)
             self.assertEqual(summary['paired']['text_changed'], 2)
             self.assertEqual(summary['paired']['text_equal'], 25)
@@ -656,6 +832,41 @@ class DriverTest(unittest.TestCase):
             changes = json.loads((directory / 'paired-text-changes.json').read_text())
             self.assertEqual({entry['round'] for entry in changes}, {0, 2})
             self.assertTrue((directory / 'summary.json').exists())
+
+    def test_side_summary_primary_latency_is_nine_per_file_medians(self):
+        def repeat_warm(side, round_index):
+            result = self.fake_run_result(side, round_index)
+            for row in result['measured']:
+                row['seconds'] = (2.0 if side == 'mlx' else 4.0) + 0.5 * round_index
+            for row in result['warmups']:
+                row['seconds'] = 1.0 + 0.25 * round_index
+            if round_index == 1:
+                slow = next(row for row in result['measured'] if row['file'] == 'clip-3')
+                slow['seconds'] += 57.0  # one isolated slow repetition among clip-3's three
+            return result
+
+        runs = pilot.execute_rounds(repeat_warm)
+        summary = pilot.side_summary(runs['mlx'])
+        medians = {row['file']: row['median_seconds'] for row in summary['per_input_medians']}
+        self.assertEqual(len(medians), 9)
+        self.assertEqual(medians['clip-3'], 3.0)  # the isolated 59.5s repetition drops out
+        self.assertEqual(sorted(set(medians.values())), [2.5, 3.0])
+        expected_primary = pilot.latency([{'audio_seconds': row['audio_seconds'],
+                                           'seconds': row['median_seconds']}
+                                          for row in summary['per_input_medians']])
+        raw_rows = [row for run in runs['mlx'] for row in run['measured']]
+        self.assertEqual(summary['latency'], expected_primary)  # p50/p90/p99/RTFx over nine medians
+        self.assertEqual(summary['pooled_measured_latency'], pilot.latency(raw_rows))
+        # a raw-27 primary would inherit the 59.5s outlier and differ from the median-based one
+        self.assertNotEqual(summary['latency'], summary['pooled_measured_latency'])
+        self.assertEqual(summary['latency']['count'], 9)
+        self.assertEqual(summary['pooled_measured_latency']['count'], 27)
+        self.assertEqual(summary['measured_count'], 27)
+        uneven = [self.fake_run_result('mlx', r) for r in range(3)]
+        uneven[1]['measured'] = [dict(row, file='clip-0') if row['file'] == 'clip-8' else row
+                                 for row in uneven[1]['measured']]  # 27 rows, a 4/2 split
+        with self.assertRaises(ValueError):
+            pilot.side_summary(uneven)
 
     def write_subset(self, rows):
         subset = []

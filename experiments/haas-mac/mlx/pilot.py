@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
 """Paired timing pilot: the public Haas MLX port against the unmodified speech.cpp F16 resident.
 
-Both runtimes stay unchanged; this driver only verifies artifacts, spawns and
-times them. Everything is verified once, before any process starts or clock
-runs. The timed path is one shared per-request function per product that only
-verifies the prepared PCM (before its clock starts), base64-encodes, sends,
-reads and parses protocol messages. Ready messages are checked for the exact
-placement and pinned versions before the first warm request, and each worker
-group runs under one wall-clock watchdog that also releases a blocked write.
+Both runtimes stay unchanged apart from one reviewed source-only change on
+the MLX side: the resident applies the fixed FP16-parameter profile (the one
+shared strict cast helper in precision.py, once after load and before ready).
+This driver only verifies artifacts, spawns and times them; it also admits
+exactly one finished precision-audit artifact (--mlx-precision-audit) against
+the source/model identities it verified itself and the current runner
+digests, before any child process starts, and never reruns the audit on a
+timed startup. Everything is verified once, before any process starts or
+clock runs. The timed path is one shared per-request function per product
+that only verifies the prepared PCM (before its clock starts), base64-encodes,
+sends, reads and parses protocol messages. Ready messages are checked for the
+exact placement, pinned versions and the FP16 parameter profile before the
+first warm request, and each worker group runs under one wall-clock watchdog
+that also releases a blocked write.
 
 Three rounds run in AB/BA/AB side order over the same fixed nine stratified
 inputs, with nine warmups (longest first) and then nine measured requests per
@@ -18,9 +25,10 @@ Run under the shared campaign wrapper lock; this driver never takes or nests
 the lock itself:
 
     /usr/bin/lockf -k /private/tmp/speech-haas-mac-perf.lock /usr/bin/python3 -B pilot.py \
-        --native-build BUILD.JSON --assets ASSETS.JSON --mlx-python PYTHON3.12 \
+        --native-build BUILD.json --assets ASSETS.json --mlx-python PYTHON3.12 \
         --mlx-source PORT_CHECKOUT --mlx-model-dir MODEL_DIR \
-        --mlx-model-manifest MODEL_MANIFEST.JSON --out FRESH_DIRECTORY
+        --mlx-model-manifest MODEL_MANIFEST.json \
+        --mlx-precision-audit AUDIT_DIRECTORY/audit.json --out FRESH_DIRECTORY
 """
 
 from __future__ import annotations
@@ -51,8 +59,11 @@ PARENT = HERE.parent
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(PARENT))
+sys.path.insert(0, str(HERE))
 from worker import execution_environment, require_evaluation_build
 from compare import latency, sha
+
+import precision  # noqa: E402  (shared FP16 cast pins and audit admission; stdlib only)
 
 NATIVE_SOURCE_COMMIT = '114c514430c8aa1455c077819f8e72e674a48b75'
 NATIVE_GGML_COMMIT = 'e1a9ac12edbb57402618fd6936598603f5ee6266'
@@ -82,6 +93,16 @@ RECEIVE_TIMEOUT = 300.0
 EXIT_TIMEOUT = 30.0
 # One generous bound on a whole worker group: model load plus 18 requests.
 WATCHDOG_SECONDS = 5400.0
+# Recorded beside the per-side latency numbers so the population cannot be
+# misread: the primary summary aggregates nine per-recording medians, and the
+# pooled 27-request summary is a separate, explicitly secondary population.
+LATENCY_SCOPE_NOTE = (
+    'primary latency: the latency() helper over nine distinct per-recording medians, each the '
+    'median of that input\'s three measured repetitions; percentiles use warm interpolation '
+    'across the nine values and RTFx is the sum of the nine distinct audio durations divided '
+    'by the sum of the nine median latencies; pooled_measured_latency is the unchanged pooled '
+    'summary over all 27 raw measured requests (count 27), and the immutable old BF16-branch '
+    'summary pooled a different 27-row population, so its numbers are not comparable')
 
 
 def read(path):
@@ -276,8 +297,8 @@ def verify_native_ready(ready):
         raise RuntimeError(f'Native worker ready.defaults.decode_on_cpu must be true: {ready}')
 
 
-def verify_mlx_ready(ready):
-    """The MLX resident must report the pinned pilot identity, never the native one."""
+def verify_mlx_runtime(ready):
+    """The MLX side must report the pinned pilot identity, never the native one."""
     if (ready.get('type') != 'ready' or ready.get('runtime') != 'haas-mlx'
             or ready.get('protocol') != MLX_PROTOCOL):
         raise RuntimeError(f'MLX resident did not report the pilot protocol and runtime: {ready}')
@@ -299,6 +320,40 @@ def verify_mlx_ready(ready):
             or python_identity.get('machine') != MLX_MACHINE):
         raise RuntimeError(
             f'MLX resident must run Python {MLX_PYTHON_VERSION} on {MLX_MACHINE}: {ready}')
+
+
+def expected_mlx_precision():
+    """The one fixed FP16 parameter profile every MLX ready message must carry."""
+    return {'profile': precision.PRECISION_PROFILE, 'cast': True,
+            'source_dtype': precision.SOURCE_PARAMETER_DTYPE,
+            'parameter_dtype': precision.CAST_PARAMETER_DTYPE, 'master_dtype': None,
+            'arithmetic': precision.ARITHMETIC_NOTE,
+            'tensor_count': precision.PINNED_PARAMETER_TENSORS,
+            'element_count': precision.PINNED_PARAMETER_ELEMENTS}
+
+
+def verify_mlx_ready(ready):
+    """verify_mlx_runtime plus the fixed FP16 parameter profile.
+
+    An old BF16 resident (no model.precision) and a stale or forged profile
+    (wrong dtype, master-copy claim or pinned totals) are both rejected
+    before the first warm request; there is no alternate acceptance path."""
+    verify_mlx_runtime(ready)
+    reported = ready.get('model', {}).get('precision')
+    if not isinstance(reported, dict):
+        raise RuntimeError(f'MLX resident ready must carry model.precision: {ready}')
+    for key, value in expected_mlx_precision().items():
+        if reported.get(key) != value:
+            raise RuntimeError(f'MLX resident precision.{key} must be {value!r}, '
+                               f'got {reported.get(key)!r}: {ready}')
+    sample = reported.get('shape_sample')
+    if (not isinstance(sample, list) or not sample or len(sample) > precision.SHAPE_SAMPLE_SIZE
+            or not all(isinstance(row, list) and len(row) == 2 and isinstance(row[0], str)
+                       and isinstance(row[1], list)
+                       and all(type(dim) is int and dim > 0 for dim in row[1])
+                       for row in sample)):
+        raise RuntimeError(f'MLX resident precision.shape_sample must be small honest '
+                           f'shape metadata: {sample!r}')
 
 
 def default_spawn(command, env, memory_log, stderr_log):
@@ -489,13 +544,20 @@ def side_summary(runs):
     by_file = {}
     for row in rows:
         by_file.setdefault(row['file'], []).append(row)
+    if len(by_file) != MEASURED_PER_ROUND or any(len(group) != ROUNDS for group in by_file.values()):
+        raise ValueError(f'The primary latency needs each of the {MEASURED_PER_ROUND} inputs '
+                         f'measured in exactly {ROUNDS} repetitions.')
     per_input = [{'file': file, 'stratum': group[0]['stratum'],
                   'audio_seconds': group[0]['audio_seconds'],
                   'median_seconds': statistics.median(row['seconds'] for row in group)}
                  for file, group in sorted(by_file.items())]
+    primary_rows = [{'audio_seconds': row['audio_seconds'], 'seconds': row['median_seconds']}
+                    for row in per_input]
     warm_seconds = [row['seconds'] for run in runs for row in run['warmups']]
-    return {'latency': latency(rows),
+    return {'latency': latency(primary_rows),
+            'latency_scope': LATENCY_SCOPE_NOTE,
             'measured_count': len(rows),
+            'pooled_measured_latency': latency(rows),
             'per_input_medians': per_input,
             'rounds': [latency(run['measured']) for run in runs],
             'first_request_ms': statistics.median(run['first_request']['seconds'] for run in runs) * 1000,
@@ -569,6 +631,8 @@ def main(argv=None):
     parser.add_argument('--mlx-source', required=True, help='pinned Haas MLX port Git checkout')
     parser.add_argument('--mlx-model-dir', required=True, help='local converted MLX model directory')
     parser.add_argument('--mlx-model-manifest', required=True, help='verified pinned model file manifest')
+    parser.add_argument('--mlx-precision-audit', required=True,
+                        help='admitted precision.py audit artifact for the FP16 parameter profile')
     parser.add_argument('--out', required=True, help='fresh output directory (never overwritten)')
     args = parser.parse_args(argv)
 
@@ -577,7 +641,8 @@ def main(argv=None):
                                ('mlx-python', args.mlx_python, 'file'),
                                ('mlx-source', args.mlx_source, 'directory'),
                                ('mlx-model-dir', args.mlx_model_dir, 'directory'),
-                               ('mlx-model-manifest', args.mlx_model_manifest, 'file')]:
+                               ('mlx-model-manifest', args.mlx_model_manifest, 'file'),
+                               ('mlx-precision-audit', args.mlx_precision_audit, 'file')]:
         path = Path(value)
         if not (path.is_file() if kind == 'file' else path.is_dir()):
             raise SystemExit(f'pilot: --{label} must be an existing {kind}: {value}')
@@ -587,6 +652,17 @@ def main(argv=None):
     native_model = verify_native(build, assets)
     mlx_source_id = verify_mlx_source(args.mlx_source)
     mlx_model_id = verify_mlx_model(args.mlx_model_manifest, args.mlx_model_dir)
+    # The audit is admitted once, against the identities just verified above
+    # and the current resident/precision sources, before any child starts.
+    audit_admission = precision.verify_audit_artifact(
+        read(args.mlx_precision_audit),
+        {'port': mlx_source_id, 'model': mlx_model_id,
+         'runner': {'resident_sha256': sha(HERE / 'resident.py'),
+                    'precision_sha256': sha(HERE / 'precision.py')},
+         'runtime': {'mlx': {'version': MLX_VERSION, 'mlx_metal_version': MLX_METAL_VERSION,
+                             'device_name': MLX_DEVICE_NAME},
+                     'python': {'version': MLX_PYTHON_VERSION, 'machine': MLX_MACHINE}}})
+    audit_sha = sha(args.mlx_precision_audit)
     inputs = select_inputs(assets)
     native_env = native_environment()
     require_no_mlx_tweaks()
@@ -600,11 +676,15 @@ def main(argv=None):
                    'speech_sha256': build['speech']['sha256'],
                    'model': {'type': 'f16', 'sha256': native_model['sha256']}},
         'mlx': {'port': mlx_source_id, 'model': mlx_model_id,
-                'resident_sha256': sha(HERE / 'resident.py')},
+                'resident_sha256': sha(HERE / 'resident.py'),
+                'precision': audit_admission},
     }
     manifest = {
         'created_utc': datetime.now(timezone.utc).isoformat(),
-        'scope': 'paired timing pilot: nine inputs, three rounds, both residents unchanged',
+        'scope': 'paired timing pilot: nine inputs, three rounds; the native speech.cpp F16 '
+                 'resident is unmodified, while the MLX resident applies the reviewed one-time '
+                 'BF16->FP16 parameter cast after load (operator structure, chunking and decode '
+                 'policy unchanged)',
         'conditions': {
             'rounds': ROUNDS,
             'side_order_per_round': [list(round_order(r)) for r in range(ROUNDS)],
@@ -616,6 +696,15 @@ def main(argv=None):
             'chunk_bytes': CHUNK_BYTES, 'sample_rate': 16000, 'timestamps': False,
             'round_watchdog_seconds': WATCHDOG_SECONDS,
             'native_threads': 4, 'native_extra_args': ['--no-warmup', '--decode-on-cpu'],
+            'mlx_precision': {
+                'profile': precision.PRECISION_PROFILE,
+                'source_dtype': precision.SOURCE_PARAMETER_DTYPE,
+                'parameter_dtype': precision.CAST_PARAMETER_DTYPE, 'master_dtype': None,
+                'tensor_count': precision.PINNED_PARAMETER_TENSORS,
+                'element_count': precision.PINNED_PARAMETER_ELEMENTS,
+                'cast': 'once per resident, after load and before ready; never inside requests',
+                'audit': 'admitted artifact only; never rerun on timed startup',
+            },
             'lock': 'run under the shared lockf wrapper lock; the pilot takes no lock itself',
         },
         'subset_indexes': SUBSET_INDEXES, 'subset_size': SUBSET_SIZE,
@@ -625,8 +714,14 @@ def main(argv=None):
         'pins': {'native_source_commit': NATIVE_SOURCE_COMMIT, 'native_ggml_commit': NATIVE_GGML_COMMIT,
                  'native_f16_sha256': NATIVE_F16_SHA256, 'mlx_source_commit': MLX_SOURCE_COMMIT,
                  'mlx_model_revision': MLX_MODEL_REVISION, 'mlx_weights_sha256': MLX_WEIGHTS_SHA256,
-                 'mlx_tokenizer_sha256': MLX_TOKENIZER_SHA256, 'mlx_config_git_blob': MLX_CONFIG_GIT_BLOB},
+                 'mlx_tokenizer_sha256': MLX_TOKENIZER_SHA256, 'mlx_config_git_blob': MLX_CONFIG_GIT_BLOB,
+                 'mlx_precision_profile': precision.PRECISION_PROFILE,
+                 'mlx_precision_audit_schema': precision.AUDIT_SCHEMA,
+                 'mlx_parameter_tensors': precision.PINNED_PARAMETER_TENSORS,
+                 'mlx_parameter_elements': precision.PINNED_PARAMETER_ELEMENTS},
         'identities': identities,
+        'precision_audit': {'file': Path(args.mlx_precision_audit).name, 'sha256': audit_sha,
+                            'admission': audit_admission},
         'assets': {'path': str(Path(args.assets).resolve()), 'sha256': sha(args.assets)},
         'environment': {'effective_allowed_knobs': {'native': {}, 'mlx': {}},
                         'native_child': 'os.environ via campaign worker.execution_environment, no recorded knobs',
@@ -637,6 +732,7 @@ def main(argv=None):
         'python': {'controller': platform.python_version(), 'executable': sys.executable,
                    'mlx_child': str(args.mlx_python)},
         'runner_sha256': {'pilot.py': sha(HERE / 'pilot.py'), 'resident.py': sha(HERE / 'resident.py'),
+                          'precision.py': sha(HERE / 'precision.py'),
                           'worker.py': sha(PARENT / 'worker.py'), 'compare.py': sha(PARENT / 'compare.py')},
     }
 
