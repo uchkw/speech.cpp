@@ -1,147 +1,112 @@
 # 020: Prepare KDA constants once per prediction backend
 
-This is an unmeasured, default-OFF prototype from speech.cpp
-`114c514430c8aa1455c077819f8e72e674a48b75` and ggml
-`e1a9ac12edbb57402618fd6936598603f5ee6266`. The ggml source is unchanged. No build,
-inference, stage check or performance run is part of this source checkpoint.
+Rejected at the exact same-backend correctness gate. The original real Q4_K Metal comparison failed 104 of 173 assertions with default fusion. Recognition accuracy and end-to-end performance were not evaluated.
 
-## Change
+This is a default-off experiment on speech.cpp source 980269a and ggml e1a9ac1.
 
-`SPEECH_HAAS_KDA_CONSTANTS=0|1` is read once during the full `Recognizer`
-construction. Unset and `0` keep the original path. `1` enables this experiment
-only for `general.name=Haas-ja-v1.0` with KDA prediction. A different value fails.
-The existing metadata factory and the one-argument prediction constructor remain
-OFF and do no computation, even when the environment variable is set.
+## Selector
 
-Each KDA layer currently builds `reshape(a_log, 1, heads) -> EXP -> NEG` into every
-prediction graph. `DecoderStep` already retains its graph within a request, but
-those EXP and NEG nodes still execute whenever that graph computes. The
-experiment prepares the same expression on the same backend once and retains its
-F32 result in a model-owned tensor. Each layer keeps the original `[1, heads]`
-shape. There is no host `exp`, fused arithmetic, change of dtype, or concatenation
-of the layers into another kernel shape. The gate still multiplies by the
-negative exponential at the original point.
+`SPEECH_HAAS_KDA_CONSTANTS` is read once during full `Recognizer` construction.
+Unset and `0` keep the original path, so the prototype is disabled by default.
+`1` enables it only for `general.name=Haas-ja-v1.0` with KDA prediction; any
+other value fails construction. The metadata factory and the one-argument
+prediction constructor stay on the original path and prepare nothing even when
+the variable is set, so inspecting model metadata alone never prepares this prototype.
 
-The Haas Q4_K file's metadata has two KDA layers and five heads, with F32 `a_log`
-in both layers. This makes 40 bytes of retained values per active prediction
-backend and removes two EXP and two NEG nodes from each prediction graph. The
-backend allocation is larger than the payload because of alignment; the check
-reports the actual buffer size. The setup graph has one copy into the retained
-tensor per layer. `Decoding::graphs` continues to count the existing decoding
-graphs and does not count this additional once-per-backend preparation. Its
-separate preparation counter must accompany graph-count reports.
+## When preparation actually happens
 
-The existing host calculations of epsilon and square-root factors are unchanged.
-This trial does not include state retention, decoder graph/plan reuse, matrix
-packing, or any other optimization candidate.
+This is first-prediction preparation, not load-time precomputation.
 
-## Lifetime and first-request accounting
+- Metadata-only inspection and a full load without warmup prepare nothing; the
+  switch is only captured.
+- The first prediction graph on a backend runs one setup graph and allocates
+  one owned buffer; later graphs and requests on that backend reuse the
+  retained values and that buffer. The temporary setup graph and its
+  allocator are destroyed after preparation.
+- The lazy CPU decoder prepares separately, from its copied weights on its own
+  backend, so a GPU-loaded model can retain both device and CPU constants
+  while a CPU-loaded model owns only one set.
+- Standard warmup decodes on the device, then also on the CPU when the default
+  decoding weights are quantized, so `ready` with warmup can include two
+  preparations and `--no-warmup` ready none. An F16 warmup skips the CPU copy,
+  which an explicit later CPU request can still prepare.
+- Pure load, ready and the first request on each backend have separate cost
+  boundaries. A separately loaded model derives its own constants.
 
-This is **first prediction preparation**, not load-time precomputation.
+## Payload and retention
 
-| Boundary | Constant preparation |
-|---|---|
-| Metadata-only model information and default-option inspection | None; no prediction backend exists |
-| Full model load without warmup | None; the switch is captured, but there is no constant buffer |
-| First prediction graph on one backend | One successful setup graph and one owned buffer |
-| Later graphs and requests on that backend | Reuse the same values and allocation |
-| First prediction on the lazy CPU decoder | A separate setup using its copied weights and its backend |
-| A separate loaded model | Independent constants derived from that model's weights |
+Each KDA layer otherwise rebuilds `reshape(a_log, 1, heads) -> EXP -> NEG` into
+every prediction graph. The prototype computes the same expression once on the
+same backend and retains the F32 result in a model-owned tensor with the
+original `[1, heads]` shape: two layers with five heads here, 40 bytes of
+retained values per active prediction backend, in a larger actual allocation
+because of alignment. There is no host `exp`, no dtype change and no
+concatenation into another kernel shape; the gate multiplies by the negative
+exponential at the original point. A buffer is published only after allocation
+and synchronized computation succeed, then destroyed before its weights and backend.
 
-The lazy CPU decoder installs its existing thread pool before any call can build
-a prediction step. A model loaded directly on the CPU has only that one
-prediction owner. A model loaded on a GPU can retain both device and CPU owners.
-The standard engine warmup first decodes on the device, then also on the CPU when
-the file's default decoding weights are quantized. Thus `ready` with standard
-warmup can include two preparations, while `--no-warmup` ready includes none.
-An F16 model's standard warmup does not prepare the optional CPU copy; an explicit
-CPU request can still prepare it later. Pure load, ready with warmup, and the
-first request on each backend must be reported separately.
+## Graph-count limits
 
-Preparation takes place inside the first `const build` call. The existing C API
-contract serializes requests on one model. The owner publishes its cache and
-increments the success counter only after allocation and synchronized graph
-computation succeed. An exception destroys the temporary cache; the next build
-can retry. `ggml_backend_graph_compute` synchronizes before it returns, so the
-temporary graph and allocator do not outlive their GPU work. The retained buffer
-is destroyed before its context, model weights and owning backend. There is no
-global cache, extra lock, changed CPU/GPU fallback, or reread of the file.
+`Decoding::graphs` counts decoding graphs only and does not count the
+once-per-backend preparation, so graph-count reports must be accompanied by
+the separate preparation counter. Removing four EXP/NEG nodes per prediction
+graph is a structural observation, not a speed measurement.
 
-## Differential check
+## Check design
 
-`fastconformer-constants-check` is a new check target. Its sources are
-`checks/fastconformer/fastconformer-constants-check.cpp`, `constants-fixture.h`
-and `constants-cases.h`. They are prepared but have not been compiled or run.
+`fastconformer-constants-check` compares each retained tensor bit for bit
+against an independently built EXP-then-NEG expression on the same backend;
+CPU and GPU results are compared separately and cross-backend identity is not
+assumed. Decoding comparisons cover the first output and state, two distinct
+interleaved 17-step histories, all recurrent and convolution state values,
+projected predictions, every joint logit, TDT tokens, frames and durations,
+progress and cancellation, a second model with changed `a_log`, and real Haas
+models across decoding orders. The direct constant and initial-prediction
+checks mark their results as graph outputs, so their allocation and fusion can
+differ from the ordinary decoding graph. The separate `DecoderStep`, TDT and
+real-Recognizer comparisons are ordinary, with normal output markings: separate evidence.
 
-The synthetic fixture contains two F32 KDA layers with five different `a_log`
-values per layer, nonzero recurrent behavior and a nonzero prediction-to-joint
-projection. The test is designed to verify:
+| Input | Backend | Threads | Assertions | Failures |
+| --- | --- | --- | --- | --- |
+| synthetic F32 | CPU | 1 | 185 | 0 |
+| synthetic F32 | CPU | 4 | 185 | 0 |
+| synthetic F32 | MTL0 | 4 | 178 | 0 |
+| Haas Q4_K weights | CPU | 4 | 177 | 0 |
+| Haas Q4_K weights | MTL0 | 4 | 173 | 104 |
 
-- Metadata construction and option inspection before backend initialization,
-  and plain/prepared constructors with preparation count zero.
-- Each retained tensor against an independently built original EXP then NEG
-  expression on the same backend, bit for bit and finite. CPU and GPU results
-  are compared separately; cross-backend identity is not assumed.
-- The original prediction graph's per-layer EXP and NEG nodes and their absence
-  from the prepared graph. This is a graph-structure check, not a dispatch timing.
-- First prediction output/state, two interleaved 16-step histories, all recurrent
-  and convolution state values, projected predictions and every joint logit.
-  The same final label/frame must still depend on the preceding history.
-- TDT tokens, frames, durations, graph counts and progress/cancellation points,
-  including empty input, zero duration, max-symbol handling, repeated blank
-  chains, a duration past the last frame, cancellation, another request, and
-  custom-vocabulary boosting. A synthetic RNN-T comparison also retains its
-  original host-state behavior.
-- A CPU abort during preparation leaves count zero and no published buffer;
-  retry succeeds once. This exercises a compute failure, not an injected
-  allocator failure.
-- A second synthetic model copy with changed `a_log` owns distinct tensors,
-  derives different constants from its own weights and leaves the first model
-  untouched.
-- Real Haas models: pure load count zero; Device/CPU/Device/CPU decoding preserves
-  text and the emitted path; counts remain one and allocations remain stable.
-  Changing the environment after load does not change either model's captured
-  setting. An unset switch preserves the original path. On a GPU the lazy CPU
-  owner is distinct; on the CPU both decoding choices use the same owner.
+## Numerical comparison
 
-The direct constant and initial prediction checks mark their results as graph
-outputs. Their allocation/fusion can differ from the ordinary decoding graph.
-The separate `DecoderStep`, TDT and real-Recognizer comparisons use their normal
-output markings and are separate evidence. Public worker text/timestamp
-comparisons still belong to the campaign screen/full evaluation. The metadata
-check exercises the underlying factory path; it is not a claim that a public
-`speech_model_info_open` smoke test has been run.
+| Q4_K Metal comparison | Failures | Minimum SNR (dB) | Maximum absolute difference |
+| --- | --- | --- | --- |
+| Initial prediction output | 1 | 142.7 | 4.77e-07 |
+| Initial prediction state | 1 | 146.7 | 2.38e-07 |
+| Reused step, state | 34 | 145.3 | 9.54e-07 |
+| Reused step, projected prediction | 34 | 133.1 | 2.86e-06 |
+| Reused step, joint logits | 34 | 139.1 | 1.14e-05 |
 
-After a build slot is authorized, run the synthetic check on CPU F32 and Metal,
-then the real-model check for Q4_K, Q8_0 and F16 on both CPU and Metal with four
-threads. Each synthetic run needs a new output directory. For example, under
-the shared performance lock:
+The initial plain and prepared prediction graphs use the same output markings.
+Their encoding trace can expose a difference in fusion length. It contains no
+intermediate tensor values that locate the first numerical divergence.
 
-```sh
-build/fastconformer-constants-check --synthetic outputs/020/synthetic-cpu cpu 4
-build/fastconformer-constants-check --synthetic outputs/020/synthetic-metal gpu 4
-build/fastconformer-constants-check /path/to/Haas-616M-ja-v1.0-Q4_K.gguf gpu 4
-```
+## Diagnostics
 
-The executable location follows the configured build layout; these are command
-templates, not completed runs. Do not relax exact comparison on a difference.
-The campaign has 11 official F32 frontend/encoder/joint-encoder-projection dumps
-in `reference-mac`. Official KDA/prediction and complete TDT references needed for
-this change, and Windows Vulkan validation, remain unavailable and must not be
-reported as passed. M5 is unmeasured.
+- Five primary configurations ran 898 assertions with 104 failures. The retained constants matched independent same-backend EXP then NEG bit for bit. Each direct run reported one preparation, 40 bytes of F32 payload and a 64-byte backend allocation. The allocation excludes graph, model and process memory.
+- The initial comparison used label 1 and a zero old state. The 34 comparisons per later tensor family came from two 17-step histories. After the first step each side receives its own preceding state. The minimum SNR and maximum absolute difference in the table come from the printed results for each family. Passing generated-input TDT path and progress assertions do not establish recognition on recordings.
+- Disabling Metal fusion for one separate invocation of the same dedicated binary passed all 173 assertions. The original failure remains the primary result. The check is sensitive to fusion under these conditions.
+- One log-only launcher with default fusion and GRAPH_DEBUG=1 reproduced the original 12,124 stdout bytes exactly, including every printed difference. Seven retained runtime archives and the original check binary were byte-identical across diagnostic linking. The check logic, inputs, numerical threshold and graph-output markings stayed identical.
+- After excluding the setup graph (trace records 58–69), the initial ordinary and prepared graphs occupy records 70–184 and 185–268. Each has 15 logged multi-operation fusion groups. Only the eighth group, the second NORM, changes length. Ordinary node_65 at local index 0 fuses three operations. Prepared node_62 at local index 37 fuses two, then ADD node_64 starts at the next local index 0. The three NORM group lengths are 3/3/3 and 3/2/3 respectively.
+- The KDA source order identifies the second NORM as the pre-normalization of layer 1, pred.kda.1.norm. The log and backend source point to NORM+MUL+ADD becoming NORM+MUL followed by a separate ADD at a local partition boundary. No intermediate tensor or instruction trace locates the first numerical divergence, proves FMA execution or identifies a sole numerical cause.
+- The first diagnostic compile stopped before linking because the added repository include root shadowed the SDK header <version> with VERSION on this case-insensitive filesystem. A source-local checks symlink resolved the check include, and the final compile used the exact original compiler flags. Its seven-archive link order also matched. All failed-attempt logs remain available.
 
-## Later performance gate
+## Limits
 
-No speed claim follows from removing four nodes. Use the frozen common runner,
-record its source and binary identities, explicitly pass the switch to both
-variants, and reject unrecorded inherited `GGML_*`/`SPEECH_*` variables. Start with
-the same nine clips, three alternating rounds, Q4_K/Q8_0/F16, CPU decoding with
-four threads, and all clips warmed before measurement. Keep the fixed campaign
-anchor as a separate comparison. Record first request, pure load and peak
-footprint in addition to warm request latency. A small decoder stage change is
-not by itself an end-to-end gain; use only the separately authorized diagnostic
-or full evaluation when the screen warrants it.
+- The six planned real-model checks for Q8_0, F16 and F32 on CPU4 and Metal did not run. The passing real Q4_K CPU4 assertions describe this prototype under the dedicated test. A CPU-prediction-only implementation and its performance require a separate trial.
+- The official F32 encoder comparison did not run. Available reference inputs cover the encoder boundary. Matching official KDA prediction, recurrent-state and complete TDT stage references were unavailable for this evaluation.
+- Public metadata, API/worker cancellation, recorded-speech keywords, timestamps and public output equivalence were not evaluated. The lifecycle and generated-input path checks inside the dedicated executable have narrower scope.
+- Pure load, warmup-ready time, first request, warm 9-input/3-round screening, the full corpus and peak process memory were not measured. There is no fixed-anchor or paired speed result. Windows Vulkan and M5 were untested.
+- The matched M2 Ultra arm64 Release build matched all 74 common compile-flag files and all 74 common link recipes of the retained 014 original, after normalizing source/build roots. The original build served as a build-configuration reference; no new original worker or end-to-end comparison ran.
 
-All builds and inference runs use the campaign's shared lock, `-j4` for builds,
-and `/usr/bin/python3` for the frozen runner. Large artifacts stay in ignored
-`outputs/`; this branch is a measurement prototype and is not an adoption change.
+## Evidence
+
+The rendered evidence page for this evaluation is at
+`outputs/haas-mac-campaign/020/evaluation.html`.
