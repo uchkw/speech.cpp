@@ -1,0 +1,45 @@
+{
+  "schema": 1,
+  "model": "Haas-ja-v1.0",
+  "runtime_base": "114c514430c8aa1455c077819f8e72e674a48b75",
+  "ggml_base": "e1a9ac12edbb57402618fd6936598603f5ee6266",
+  "reference_commit": "72cc29a01567aee120a990cc6df28fbf18a2232e",
+  "checkpoint": {
+    "repository": "third-intelligence/Haas-ja-v1.0",
+    "revision": "660728d39019e5e065046154beca44ac9a66a540",
+    "file": "Haas-ja-v1.0.nemo",
+    "size": 1232384000,
+    "sha256": "c6ed38698300a371a86eadab4b56d5458f47623f7fc4a5f1e938b5adbe8458aa",
+    "environment": "haas"
+  },
+  "tdt_model": {
+    "file": "Haas-616M-ja-v1.0-F16.gguf",
+    "revision": "6b965d5007ba780585de51549d57a8c1c0d67c7e",
+    "size": 1233128832,
+    "sha256": "f752e02f68c1dfff795900e40aa82e5302976fb5360080fcbd330d8b3c992cd8",
+    "sha256_source": "F16 ggml decoder control for the TDT check: the campaign asset descriptor's verified F16 model row (approved evaluation), copied verbatim and never computed from the file under test; the weights themselves are not supplied with this source checkpoint."
+  },
+  "converter_candidate": {
+    "python": "3.11.11",
+    "coremltools": "9.0",
+    "coremltools_commit": "428d4b2658dfc44194f27f4f36870751be402ff7",
+    "coremltools_wheel": "coremltools-9.0-cp311-none-macosx_11_0_arm64.whl",
+    "coremltools_wheel_sha256": "0e079fea3f13f96a30587c9f7375796ff61cad53f703bde53c56fbf1374813ed",
+    "torch": "2.7.0",
+    "nemo-toolkit": "2.7.3",
+    "lock_status": "not resolved or installed"
+  },
+  "cases": [
+    {"id": "12677001980660723842", "t": 636, "u": 80, "p": 640, "q": 80},
+    {"id": "1321491767934942997.prefix-2s", "t": 200, "u": 25, "p": 208, "q": 26},
+    {"id": "1321491767934942997.prefix-4s", "t": 400, "u": 50, "p": 416, "q": 52},
+    {"id": "17792804258244023911", "t": 876, "u": 110, "p": 880, "q": 110},
+    {"id": "18279972750632495085", "t": 1284, "u": 161, "p": 1296, "q": 162},
+    {"id": "2175022203194507850", "t": 2004, "u": 251, "p": 2016, "q": 252},
+    {"id": "2911928289483699199", "t": 2208, "u": 276, "p": 2224, "q": 278},
+    {"id": "3418079255126577903", "t": 996, "u": 125, "p": 1008, "q": 126},
+    {"id": "5233295116612017093", "t": 1974, "u": 247, "p": 1984, "q": 248},
+    {"id": "9306707928443027514", "t": 1002, "u": 126, "p": 1008, "q": 126},
+    {"id": "9518252661993015549", "t": 2820, "u": 353, "p": 2832, "q": 354}
+  ]
+}

@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Experiment 034 — source status</title>
+<style>
+  :root { color-scheme: light; }
+  body { margin: 0 auto; max-width: 60rem; padding: 1rem 1.25rem 3rem; font: 1rem/1.55 -apple-system, "Helvetica Neue", Arial, sans-serif; color: #1c2733; background: #ffffff; }
+  h1 { font-size: 1.45rem; margin: 1.2rem 0 0.4rem; }
+  h2 { font-size: 1.15rem; margin: 1.8rem 0 0.5rem; border-bottom: 1px solid #c8d2dc; padding-bottom: 0.25rem; }
+  p, li { max-width: 46rem; }
+  code { font: 0.92em/1.45 "SF Mono", Menlo, Consolas, monospace; background: #f0f3f6; padding: 0.05em 0.3em; border-radius: 3px; word-break: break-all; }
+  table { border-collapse: collapse; width: 100%; margin: 0.6rem 0 1rem; font-size: 0.92rem; }
+  caption { text-align: left; font-weight: 600; padding: 0.3rem 0; }
+  th, td { border: 1px solid #c8d2dc; padding: 0.4rem 0.55rem; text-align: left; vertical-align: top; }
+  th { background: #eef2f6; }
+  .status { white-space: nowrap; font-weight: 600; }
+  .status::before { content: "● "; }
+  .unverified { color: #8a5a00; }
+  footer { margin-top: 2.2rem; border-top: 1px solid #c8d2dc; padding-top: 0.7rem; font-size: 0.88rem; color: #51606f; }
+  a { color: #0b5394; }
+</style>
+</head>
+<body>
+<main>
+<h1>Experiment 034 — Haas Core ML encoder probe, source status</h1>
+
+<p>This page describes a <strong>source-only checkpoint</strong> of an independent experiment for the Haas Mac
+campaign: converting speech.cpp's pinned Haas-ja-v1.0 official NeMo frontend, encoder and
+<code>RNNTJoint.project_encoder</code> (restored unchanged in F32 from the pinned BF16 archive, lengths and
+masking preserved) into Core ML ML Programs, checking them against the official CPU F32 dumps, and decoding a
+verified candidate projection through speech.cpp's unchanged unboosted CPU-4 TDT decoder. Nothing below has
+been executed: no environment is resolved, no model is converted, no prediction is made, no number is
+measured. The pins, thresholds, disk plan and the runnable recipe are in <code>pins.json</code> and
+<code>README.md</code>; the remaining acceptance gates and what changed in this revision are in
+<code>evaluation.md</code>.</p>
+
+<h2 id="stages">Stages and their status</h2>
+<table>
+  <caption>Each stage and its current status — <span class="status unverified">unverified</span> means the
+  source exists and nothing has run</caption>
+  <thead>
+    <tr><th scope="col">Stage (source)</th><th scope="col">What it checks</th><th scope="col">Status</th></tr>
+  </thead>
+  <tbody>
+    <tr><th scope="row">Contract &amp; fixtures (<code>contract.py</code>, <code>check_contract.py</code>)</th><td>Identities, shape guards, the per-invocation disk plan and the TDT admission gates hold on synthetic cases.</td><td class="status">13 standard-library tests passed on 2026-11-07</td></tr>
+    <tr><th scope="row">Numerics (<code>numerics.py</code>, <code>check_numerics.py</code>)</th><td>Typed F32 validation and SNR gates behave on tiny arrays.</td><td class="status unverified">needs the frozen environment</td></tr>
+    <tr><th scope="row">Replay, conversion &amp; export (<code>export.py</code>)</th><td>The restored official modules replay the CPU F32 dumps above 90 dB per stage, tracing changes nothing, and both precisions of all three artifacts convert with their identities recorded.</td><td class="status unverified">unverified</td></tr>
+    <tr><th scope="row">Stage check (<code>check.py</code>)</th><td>The converted packages match the export's inventories and the reference files match the export's hashes before prediction; F32 controls, F16 encoder and isolated-projection gates, F16 composed error recorded, never gated.</td><td class="status unverified">unverified</td></tr>
+    <tr><th scope="row">Native probe (<code>Run.swift</code>)</th><td>The normal artifact loads and predicts on macOS 14.4+, stably across repeats, with compile/load/predict/host timings separate and the compiled package's identity bound; <code>plan</code> records anticipated, not observed, device usage.</td><td class="status unverified">unverified</td></tr>
+    <tr><th scope="row">Native parity (<code>check_native.py</code>)</th><td>The native raw normal projection is bit-exact with the same normal Python artifact, with the compiled package identical to the checked and exported one.</td><td class="status unverified">unverified</td></tr>
+    <tr><th scope="row">TDT admission (<code>check_tdt.py</code>)</th><td>A build receipt frozen at build time, a successful parity record, matching identities, the exact case list and the pinned GGUF SHA-256 gate the harness; output coverage is required, not an empty success.</td><td class="status unverified">unverified</td></tr>
+    <tr><th scope="row">TDT comparison (<code>tdt-check.cpp</code>, unchanged)</th><td>The admitted candidate projection reproduces the ggml normal encoder's greedy TDT decisions exactly (ids, frames, durations, graphs, progress) on CPU-4 against pinned speech.cpp.</td><td class="status unverified">unverified</td></tr>
+    <tr><th scope="row">Placement observation (Instruments, external)</th><td>Only a correlated Core ML + Neural Engine + GPU capture, a separate step from the runner's signpost mode, can establish observed hardware activity.</td><td class="status unverified">not attempted</td></tr>
+  </tbody>
+</table>
+
+<h2 id="outer-checks">What has actually been checked</h2>
+<p>The local source checks of this revision were run on 2026-11-07 with <code>/usr/bin/python3</code> (3.9.6),
+and none of them ran an ML tool: the thirteen standard-library test methods of <code>check_contract.py</code>
+passed, including their synthetic rejection cases; all eight Python files passed an AST parse;
+<code>pins.json</code> and the pin environment TOML file parsed; the HTML page and the untracked-source
+whitespace check passed; and all nine shell blocks of <code>README.md</code> parsed under both <code>sh</code>
+and <code>zsh</code> syntax checks (eighteen checks). These are real local measurements of the source tests,
+not of the proposed converter. No NumPy fixture run, build, dependency resolution, heavy import, replay,
+conversion, native prediction, TDT execution, placement capture or performance result has been verified.</p>
+
+<h2 id="not-claimed">What is not claimed</h2>
+<ul>
+  <li>No latency, throughput or memory figure — nothing has been measured, and a source checkpoint has no speed, numerical-model or placement result.</li>
+  <li>No ANE placement — <code>MLComputePlan</code> shows anticipation; only a correlated Instruments capture could show execution.</li>
+  <li>No accuracy claim, and higher weight precision alone is not evidence of better recognition; exact TDT decisions are the correctness evidence.</li>
+  <li>No official Mac KDA/TDT reference and no worker end-to-end claim — the TDT harness is unboosted core correctness against pinned speech.cpp.</li>
+  <li>No production integration — no API outside <code>experiments/haas-mac/034/</code> changed; no sum of prior gains anywhere.</li>
+</ul>
+
+<h2 id="references">Primary references</h2>
+<ul>
+  <li><a href="https://apple.github.io/coremltools/docs-guides/source/flexible-inputs.html">coremltools: flexible and enumerated input shapes</a></li>
+  <li><a href="https://apple.github.io/coremltools/docs-guides/source/model-input-and-output-types.html">coremltools: model input and output types</a></li>
+  <li><a href="https://developer.apple.com/videos/play/wwdc2022/10027/">WWDC 2022 session 10027</a></li>
+  <li><a href="https://developer.apple.com/videos/play/wwdc2024/10161/">WWDC 2024 session 10161</a></li>
+  <li><a href="https://github.com/apple/coremltools/blob/428d4b2658dfc44194f27f4f36870751be402ff7/coremltools/_deps/__init__.py">coremltools 9.0 dependency pins at the recorded commit</a></li>
+  <li><a href="https://github.com/third-intelligence/Haas-ASR/blob/e72638b6e352010c800ffd550af3a51b29e3dbb1/README.md">Haas-ASR, the model's project</a></li>
+</ul>
+
+<footer>
+<p>Static page, written at the source-only checkpoint on 2026-11-07. It is not generated from measured data and
+loads no external style sheet, script or image. The runnable recipe is in <code>README.md</code>; the remaining
+acceptance gates are in <code>evaluation.md</code>.</p>
+</footer>
+</main>
+</body>
+</html>
