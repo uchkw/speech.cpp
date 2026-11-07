@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Testing TensorFold and MLX for Haas on M2 Ultra</title>
+<style>
+  html { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif; line-height: 1.5; color: #111; background: #fff; }
+  body { max-width: 72rem; margin: 0 auto; padding: 1rem 1.25rem 2rem; }
+  h1 { font-size: 1.45rem; margin: 0 0 0.5rem; }
+  h2 { font-size: 1.15rem; margin-top: 1.75rem; border-bottom: 1px solid #ccc; padding-bottom: 0.2rem; }
+  h3 { font-size: 1rem; margin: 1rem 0 0.35rem; }
+  p, li, td, th { font-size: 0.95rem; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.9em; }
+  table { width: 100%; border-collapse: collapse; margin: 0.5rem 0; }
+  th, td { border: 1px solid #999; padding: 0.3rem 0.5rem; text-align: left; vertical-align: top; }
+  th { background: #f2f2f2; }
+  td a, p a { overflow-wrap: anywhere; word-break: break-all; }
+  .meta { color: #333; margin-bottom: 0.75rem; }
+  .cite { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.85em; }
+  footer { margin-top: 2rem; border-top: 1px solid #ccc; padding-top: 0.5rem; font-size: 0.9rem; }
+  @media print { a { color: inherit; text-decoration: none; } body { max-width: none; padding: 0; } tr { page-break-inside: avoid; } }
+</style>
+</head>
+<body>
+<article>
+<header>
+  <h1>Testing TensorFold and MLX for Haas on M2 Ultra</h1>
+  <p class="meta">Scope source_only, status unmeasured with no results, target Apple M2 Ultra. Canonical data at <a href="supplements/mac-runtime-feasibility.json">supplements/mac-runtime-feasibility.json</a>.</p>
+</header>
+
+<section id="summary" aria-labelledby="summary-h">
+  <h2 id="summary-h">Summary</h2>
+  <p>Source-only feasibility supplement for running Haas Japanese ASR on an Apple M2 Ultra. No run, number or measurement was obtained for the target here. Route order reflects expected integration cost only. Every rank and effort tier is a planning judgment, the bridge routes are prospective adaptations, and nothing here predicts speed or recommends adoption.</p>
+  <p>The sections below keep three kinds of content apart. Source findings restate public evidence, routes are planning judgments, and the evaluation section proposes measurements that have not been run.</p>
+</section>
+
+<section id="routes" aria-labelledby="routes-h">
+  <h2 id="routes-h">Routes in expected integration-cost order</h2>
+  <p>Rank values and effort tiers are planning judgments. Ranks 1 and 2 come first as the recommended starting points, and the three bridge routes are prospective adaptations.</p>
+  <table>
+    <thead>
+      <tr><th scope="col">Route</th><th scope="col">Change</th><th scope="col">Cost</th><th scope="col">Stays untouched</th><th scope="col">Relative effort</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <th scope="row">1. Measure the existing unofficial Haas MLX BF16 resident implementation</th>
+        <td>No change to either codebase. Add the shared evaluation harness and policy below.</td>
+        <td>Resident Python process and adapter, one model load, fixed configured device, separate dependency stack.</td>
+        <td>Both codebases and both weight sets.</td>
+        <td>Low, a planning judgment.</td>
+      </tr>
+      <tr>
+        <th scope="row">2. Adapt one pre-M5 SIMD projection when the exact Q4_K file is required</th>
+        <td>One operator at an existing ggml FFN-up boundary with the same codes, host repack (group32, FP32 scale and bias) plus a shader variant accepting F32 activations and results, with two opportunities per block.</td>
+        <td>Host prepack memory and shader maintenance. The device path stays pre-M5.</td>
+        <td>No requantization, the rest of the graph, TDT, and the Q4_K file itself.</td>
+        <td>Medium, a planning judgment.</td>
+      </tr>
+      <tr>
+        <th scope="row">3. Encoder-only port bridging the native frontend and decoder</th>
+        <td>Keep the native frontend and decoder. The encoder side adds the second relative product with rel_shift and gated/depthwise convolutions on existing GGUF primitives, and features and encoder outputs cross the stage boundary once per utterance with layout, handoff and synchronization accounted for. Unified memory alone does not guarantee zero overhead.</td>
+        <td>Bridge layout, handoff and synchronization work, plus new device kernels for relative attention and convolution modules.</td>
+        <td>Existing LLM families, their kernels and their benchmarks.</td>
+        <td>High, a planning judgment.</td>
+      </tr>
+      <tr>
+        <th scope="row">4. Decoder-only port keeping the native frontend and encoder</th>
+        <td>Keep the native frontend and encoder, reimplementing KDA prediction and TDT recurrence with F32 state and per-channel softplus. Hand encoded frames off once while the predictor, joint and TDT stay together. A GPU-only predictor behind a CPU greedy loop can synchronize or cross the boundary for each emitted step or joint decision. Compare against the existing four-thread CPU decoder and preserve the blank, duration, cancellation and keyword rules.</td>
+        <td>New KDA and TDT kernels with F32 state, plus per-step synchronization exposure against the CPU greedy loop.</td>
+        <td>Existing LLM families, their kernels and their benchmarks.</td>
+        <td>High, a planning judgment.</td>
+      </tr>
+      <tr>
+        <th scope="row">5. Complete native TensorFold port of the Haas family</th>
+        <td>Add the family loader and mapping, the encoder, prediction, TDT and the API/serving path, together with a reader and serving entry that accept this model and an adapter beyond the Qwen-only one, and validate each stage independently against the official references.</td>
+        <td>Every migration surface at once, host dispatch, reader and repack integration, and new device kernels for relative attention, convolution modules and softplus KDA rows.</td>
+        <td>Existing LLM families, their kernels and their benchmarks.</td>
+        <td>Greatest engineering effort of these routes, a planning judgment.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="findings" aria-labelledby="findings-h">
+  <h2 id="findings-h">Source findings (public evidence)</h2>
+  <p>Each citation links to its pinned public source, and the full source table appears at the end.</p>
+
+  <h3>Existing MLX BF16 runtime</h3>
+  <p>An unofficial Haas implementation already runs on Apple Silicon in MLX as a separate Python runtime with FastConformer, KDA, TDT and token timestamps, greedy token and duration argmax, and explicit evaluation. Its pinned converted checkpoint holds BF16 values with rearranged axes. The ggml baseline reconstructs Q4_K weights, so the two weight representations differ. <span class="cite">[<a href="https://github.com/matsuurajun/haas-mlx/blob/cde96d263f56aad75c1de70282f71a91562092dd/README.md#L1-L31" rel="noopener">mx_port</a>, <a href="https://huggingface.co/mrjnzzz/Haas-ja-v1.0-mlx/blob/15ef4f11618c6a1ee50e0eafaae13beded8ecdf9/README.md#L21-L30" rel="noopener">hf_model</a>, <a href="https://github.com/matsuurajun/haas-mlx/blob/cde96d263f56aad75c1de70282f71a91562092dd/src/haas_mlx/model.py#L104-L159" rel="noopener">mx_model</a>]</span></p>
+
+  <h3>Reusable TensorFold primitives</h3>
+  <p>At the pinned commit the core GGUF reader recognizes Q4_K blocks (256 values per 144 bytes), and a repack path transcribes the original 4-bit codes, eight groups of 32 per superblock, with FP32 scale and bias, preserving finite reconstructed values without requantization. Pre-M5 hardware routes to row projections because tensor units are gated to GPU generation 17 (M5) and later, so M2 Ultra uses the older paths. <span class="cite">[<a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/src/core/gguf_tensor.zig#L26-L43" rel="noopener">tf_blocks</a>, <a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/src/core/gguf_repack_blocks.zig#L77-L94" rel="noopener">tf_repack</a>, <a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/src/core/gguf_repack.zig#L31-L56" rel="noopener">tf_coeff</a>, <a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/src/families/qwen27/projection.zig#L69-L86" rel="noopener">tf_projection</a>, <a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/src/metal/device.zig#L60-L70" rel="noopener">tf_device</a>]</span></p>
+
+  <h3>Model-level gaps</h3>
+  <p>Reuse is primitive-level, and model-level support is absent. Native dispatch is family-specific and excludes Haas, the published serving entry refuses a GGUF path, the only GGUF model adapter is Qwen-specific (general.architecture=qwen35) and separate from the reader, and the documented speech route is Fish Drama3 synthesis. TensorFold's Kimi shader fixes 128 channels per head and four taps and retains BF16 convolution history with an F32 recurrent matrix. Its GLM configuration uses 64 heads of width 128. Both cited implementations use lower-bound sigmoid decay. Haas has two KDA layers, five heads of width 64, four taps and per-channel softplus decay. Its native ggml predictor carries F32 recurrence and convolution history. The MLX counterpart uses input-dtype convolution history. Generic attention omits the Haas second relative-position product and rel_shift, and encoder blocks add gated pointwise plus depthwise convolutions. The TDT loop keeps prediction state across blanks with independent token and duration decisions. <span class="cite">[<a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/src/native/metal.zig#L174-L204" rel="noopener">tf_dispatch</a>, <a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/src/server/hub.zig#L22-L30" rel="noopener">tf_serve</a>, <a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/src/families/qwen27/gguf_config.zig#L37-L45" rel="noopener">tf_adapter</a>, <a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/src/server/routes.zig#L177-L185" rel="noopener">tf_audio</a>, <a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/kernels/metal/kimi/kda.metal#L4-L26" rel="noopener">tf_kimi_state</a>, <a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/kernels/metal/kimi/kda.metal#L97-L115" rel="noopener">tf_kimi_gate</a>, <a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/src/families/glm/config.zig#L29-L33" rel="noopener">tf_glm_shape</a>, <a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/kernels/metal/glm/kda_rows.metal#L189-L210" rel="noopener">tf_glm_gate</a>, <a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/kernels/metal/ops/sdpa.metal#L21-L44" rel="noopener">tf_sdpa</a>, <a href="https://huggingface.co/mrjnzzz/Haas-ja-v1.0-mlx/blob/15ef4f11618c6a1ee50e0eafaae13beded8ecdf9/config.json#L13-L32" rel="noopener">hf_config</a>, <a href="https://github.com/matsuurajun/haas-mlx/blob/cde96d263f56aad75c1de70282f71a91562092dd/src/haas_mlx/kda.py#L144-L177" rel="noopener">mx_kda</a>, <a href="https://github.com/uchkw/speech.cpp/blob/114c514430c8aa1455c077819f8e72e674a48b75/src/families/fastconformer/kda.cpp#L37-L85" rel="noopener">sp_kda</a>, <a href="https://github.com/uchkw/speech.cpp/blob/114c514430c8aa1455c077819f8e72e674a48b75/src/families/fastconformer/encoder.cpp#L174-L215" rel="noopener">sp_rel</a>, <a href="https://github.com/uchkw/speech.cpp/blob/114c514430c8aa1455c077819f8e72e674a48b75/src/families/fastconformer/encoder.cpp#L304-L333" rel="noopener">sp_blocks</a>, <a href="https://github.com/uchkw/speech.cpp/blob/114c514430c8aa1455c077819f8e72e674a48b75/src/families/fastconformer/tdt.cpp#L70-L112" rel="noopener">sp_tdt</a>]</span></p>
+
+  <h3>Shader mismatch</h3>
+  <p>The representative pre-M5 SIMD QMM shader uses an eight-row tile, group64, and packed BF16 input, scale, bias and result. Lossless Q4_K repack is group32 codes plus FP32 scale and bias, so support needs host and shader changes together, preserving F32 activations and F32 results. Transcription preserves finite reconstructed values without recovering source BF16 weights or the reference accumulation order. <span class="cite">[<a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/kernels/metal/core/simd_qmm.metal#L1-L36" rel="noopener">tf_shader</a>, <a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/src/core/gguf_repack_blocks.zig#L77-L94" rel="noopener">tf_repack</a>, <a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/src/core/gguf_repack.zig#L31-L56" rel="noopener">tf_coeff</a>]</span></p>
+
+  <h3>Baseline pins and reference gates</h3>
+  <p>The ggml baseline is the original split, separate MM then SiLU, with no MM+SiLU epilogue. The optional 006a flag defaults to 0, and GGML_METAL_MM_SILU=1 enables the fused prototype only at its own pin, strictly bounded with the same FP32 accumulator. Any fused kernel symbol belongs to that experiment alone. Official reference stages use pinned NeMo and FLA, with CPU F32 outside the KDA prediction path and CUDA F32 with TF32 disabled. <span class="cite">[<a href="https://github.com/uchkw/ggml/blob/e1a9ac12edbb57402618fd6936598603f5ee6266/src/ggml-metal/ggml-metal-fusion.cpp#L761-L791" rel="noopener">gg_base</a>, <a href="https://github.com/uchkw/ggml/blob/84e511117191c4999aca6981da6d1f7fb57116fc/src/ggml-metal/ggml-metal-fusion.cpp#L709-L752" rel="noopener">gg_006</a>, <a href="https://github.com/uchkw/speech.cpp/blob/e0b0bf2c0e25003013d3c26f01d0823e4f7f0d0e/experiments/haas-mac/006a-notes.md#L21-L34" rel="noopener">sp_006</a>, <a href="https://github.com/uchkw/speech.cpp/blob/114c514430c8aa1455c077819f8e72e674a48b75/docs/adr/haas-runs-through-the-fastconformer-port-with-its-kda-prediction-network-checked-against-fla-on-a-cuda-gpu.md#L3-L27" rel="noopener">sp_ref</a>]</span></p>
+
+  <h3>Frontend right edge</h3>
+  <p>MLX computes n_valid = N//160 and keeps only valid normalized features, pads with the pre-trim STFT frame count to a multiple of sixteen and later crops to encoded_length(n_frames), while the native frontend produces valid frames only. This possible right-edge subsampling difference is a source-level hypothesis to test. <span class="cite">[<a href="https://github.com/matsuurajun/haas-mlx/blob/cde96d263f56aad75c1de70282f71a91562092dd/src/haas_mlx/audio.py#L59-L82" rel="noopener">mx_front</a>, <a href="https://github.com/matsuurajun/haas-mlx/blob/cde96d263f56aad75c1de70282f71a91562092dd/src/haas_mlx/encoder.py#L201-L218" rel="noopener">mx_crop</a>, <a href="https://github.com/uchkw/speech.cpp/blob/114c514430c8aa1455c077819f8e72e674a48b75/src/common/nemo-frontend.cpp#L99-L113" rel="noopener">sp_front</a>]</span></p>
+
+  <h3>Notices and licenses</h3>
+  <p>TensorFold is Apache-2.0 from v0.6, earlier releases remain MIT, and file-level third-party notices, including GLM KDA attribution, apply to adapted code. The MLX port documents original model and encoder attribution, the FLA MIT notice, and checkpoint conversion in which BF16 values are preserved under axis rearrangement minus unused BatchNorm counters. <span class="cite">[<a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/NOTICE#L1-L8" rel="noopener">tf_notice</a>, <a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/THIRD_PARTY_NOTICES.md#L85-L95" rel="noopener">tf_third</a>, <a href="https://github.com/matsuurajun/haas-mlx/blob/cde96d263f56aad75c1de70282f71a91562092dd/NOTICE#L1-L23" rel="noopener">mx_notice</a>]</span></p>
+
+  <h3>External evidence, scope only</h3>
+  <p>TensorFold publishes per-token language-model numbers whose workload, unit and timing boundary differ from ASR. The MLX author compared BF16 output on an M4 against speech.cpp 0.9.3 in F16, a text comparison that differed on some utterances. These are external evidence of scope only, and none is a result for this target. <span class="cite">[<a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/docs/community-benchmarks.md#L44-L50" rel="noopener">tf_bench</a>, <a href="https://github.com/matsuurajun/haas-mlx/blob/cde96d263f56aad75c1de70282f71a91562092dd/CONVERSION.md#L129-L139" rel="noopener">mx_author</a>]</span></p>
+</section>
+
+<section id="evaluation" aria-labelledby="evaluation-h">
+  <h2 id="evaluation-h">Proposed M2 Ultra evaluation (nothing measured yet)</h2>
+
+  <h3>Gates before speed</h3>
+  <ol>
+    <li>Verify original-to-repacked finite coefficients and codes, then decoded values and signed zero as separate checks. The bitwise reconstructed-weight gate is distinct from actual accumulator order and from official checkpoint accuracy. <span class="cite">[<a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/src/core/gguf_repack.zig#L31-L56" rel="noopener">tf_coeff</a>, <a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/src/core/gguf_repack_blocks.zig#L77-L94" rel="noopener">tf_repack</a>]</span></li>
+    <li>Run an internal stage harness against pinned official NeMo F32 and FLA CUDA F32 without TF32, covering layer outputs including the subsampling right edge, KDA state, predictor and joint, token IDs, frames and durations including blanks. Keep approximate numerics and recognition equality distinct, and flag discrepancies before any speed conclusion. <span class="cite">[<a href="https://github.com/uchkw/speech.cpp/blob/114c514430c8aa1455c077819f8e72e674a48b75/docs/adr/haas-runs-through-the-fastconformer-port-with-its-kda-prediction-network-checked-against-fla-on-a-cuda-gpu.md#L3-L27" rel="noopener">sp_ref</a>, <a href="https://github.com/uchkw/speech.cpp/blob/114c514430c8aa1455c077819f8e72e674a48b75/src/common/nemo-frontend.cpp#L99-L113" rel="noopener">sp_front</a>, <a href="https://github.com/matsuurajun/haas-mlx/blob/cde96d263f56aad75c1de70282f71a91562092dd/src/haas_mlx/audio.py#L59-L82" rel="noopener">mx_front</a>, <a href="https://github.com/matsuurajun/haas-mlx/blob/cde96d263f56aad75c1de70282f71a91562092dd/src/haas_mlx/encoder.py#L201-L218" rel="noopener">mx_crop</a>]</span></li>
+  </ol>
+
+  <h3>Operator micro-benchmark</h3>
+  <ol>
+    <li>One actual Haas Q4_K FFN-up [1024,4096] times F32 [1024,T] to F32 [4096,T] in ggml dimension order, with realistic sequence widths and tile tails and the same weights, activation and outputs. <span class="cite">[<a href="https://github.com/uchkw/speech.cpp/blob/114c514430c8aa1455c077819f8e72e674a48b75/src/families/fastconformer/encoder.cpp#L123-L128" rel="noopener">sp_ffn</a>]</span></li>
+    <li>Compare pure MM against pure MM with activation fusion absent on both sides. Separately verify the numerical differences among post-SiLU outputs of the original split 114c514/e1a9, the explicitly enabled 006a fused prototype e0b0bf2/84e5111 with GGML_METAL_MM_SILU=1, and the proposed candidate, which share the same post-SiLU observation boundary and intended F32 rounding points. The 006a flag defaults to 0. The normal uninstrumented full worker keeps its allocator and the fusions usually eligible, and product timing retains no extra output. <span class="cite">[<a href="https://github.com/uchkw/ggml/blob/e1a9ac12edbb57402618fd6936598603f5ee6266/src/ggml-metal/ggml-metal-fusion.cpp#L761-L791" rel="noopener">gg_base</a>, <a href="https://github.com/uchkw/ggml/blob/84e511117191c4999aca6981da6d1f7fb57116fc/src/ggml-metal/ggml-metal-fusion.cpp#L709-L752" rel="noopener">gg_006</a>, <a href="https://github.com/uchkw/speech.cpp/blob/e0b0bf2c0e25003013d3c26f01d0823e4f7f0d0e/experiments/haas-mac/006a-notes.md#L21-L34" rel="noopener">sp_006</a>]</span></li>
+  </ol>
+
+  <h3>End-to-end policy</h3>
+  <ol>
+    <li>Load one resident model per runtime, the ggml route with Metal encoder and explicitly four CPU decoder threads and the MLX route with fixed device, dtype and configuration and completed evaluations. Use the same 16 kHz mono PCM, the same request and terminal boundary and the same feature flags. <span class="cite">[<a href="https://github.com/uchkw/speech.cpp/blob/03829d5e006ce4ef15906bb98377d358071cdfab/experiments/haas-mac/campaign.json#L5-L24" rel="noopener">sp_plan</a>, <a href="https://github.com/matsuurajun/haas-mlx/blob/cde96d263f56aad75c1de70282f71a91562092dd/src/haas_mlx/model.py#L104-L159" rel="noopener">mx_model</a>]</span></li>
+    <li>Time through comparable request and terminal adapters. Where only a direct model function is available, report that model-call measurement separately. <span class="cite">[<a href="https://github.com/matsuurajun/haas-mlx/blob/cde96d263f56aad75c1de70282f71a91562092dd/src/haas_mlx/model.py#L104-L159" rel="noopener">mx_model</a>]</span></li>
+    <li>Preserve correct typed inputs and synchronize ticks. Report cold load, first request, peak and synchronization independently, and separate load and prepack memory and the first request from warm single-request performance. <span class="cite">[<a href="https://github.com/matsuurajun/haas-mlx/blob/cde96d263f56aad75c1de70282f71a91562092dd/src/haas_mlx/model.py#L104-L159" rel="noopener">mx_model</a>]</span></li>
+    <li>Run interleaved serial order for a minimum of three rounds over 30 stratified untimestamped FLEURS Japanese latency inputs and 650 timestamped quality inputs with identical inputs and scorer. Compare literal and repository CER identically and keep official JACER separate. Capture exact public text, tokens, timestamps and segments where supported, and never infer private or raw TDT decisions from worker text. <span class="cite">[<a href="https://github.com/uchkw/speech.cpp/blob/03829d5e006ce4ef15906bb98377d358071cdfab/experiments/haas-mac/campaign.json#L5-L24" rel="noopener">sp_plan</a>]</span></li>
+    <li>Measure six prefixes of 2 s and 4 s from three parents for agreement and latency only, without reference CER. <span class="cite">[<a href="https://github.com/uchkw/speech.cpp/blob/03829d5e006ce4ef15906bb98377d358071cdfab/experiments/haas-mac/short.py#L22-L55" rel="noopener">sp_short</a>]</span></li>
+    <li>Compute the median per input, then p50, p90 and p99, and define RTFx as audio seconds divided by elapsed warm seconds. The p99 from 30 latency inputs has limited resolution. <span class="cite">[<a href="https://github.com/uchkw/speech.cpp/blob/03829d5e006ce4ef15906bb98377d358071cdfab/experiments/haas-mac/campaign.json#L5-L24" rel="noopener">sp_plan</a>]</span></li>
+  </ol>
+</section>
+
+<section id="sources" aria-labelledby="sources-h">
+  <h2 id="sources-h">Sources</h2>
+  <table>
+    <thead>
+      <tr><th scope="col">ID</th><th scope="col">Label</th><th scope="col">URL</th></tr>
+    </thead>
+    <tbody>
+      <tr><td class="cite">tf_dispatch</td><td>TensorFold native model dispatch</td><td><a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/src/native/metal.zig#L174-L204" rel="noopener">github.com/ashhart/TensorFold/…/zig/src/native/metal.zig#L174-L204</a></td></tr>
+      <tr><td class="cite">tf_audio</td><td>TensorFold speech route</td><td><a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/src/server/routes.zig#L177-L185" rel="noopener">github.com/ashhart/TensorFold/…/zig/src/server/routes.zig#L177-L185</a></td></tr>
+      <tr><td class="cite">tf_blocks</td><td>GGUF block layout</td><td><a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/src/core/gguf_tensor.zig#L26-L43" rel="noopener">github.com/ashhart/TensorFold/…/zig/src/core/gguf_tensor.zig#L26-L43</a></td></tr>
+      <tr><td class="cite">tf_repack</td><td>Q4_K block transcription</td><td><a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/src/core/gguf_repack_blocks.zig#L77-L94" rel="noopener">github.com/ashhart/TensorFold/…/zig/src/core/gguf_repack_blocks.zig#L77-L94</a></td></tr>
+      <tr><td class="cite">tf_coeff</td><td>GGUF repack storage</td><td><a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/src/core/gguf_repack.zig#L31-L56" rel="noopener">github.com/ashhart/TensorFold/…/zig/src/core/gguf_repack.zig#L31-L56</a></td></tr>
+      <tr><td class="cite">tf_serve</td><td>GGUF serving entry</td><td><a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/src/server/hub.zig#L22-L30" rel="noopener">github.com/ashhart/TensorFold/…/zig/src/server/hub.zig#L22-L30</a></td></tr>
+      <tr><td class="cite">tf_adapter</td><td>Qwen GGUF family adapter</td><td><a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/src/families/qwen27/gguf_config.zig#L37-L45" rel="noopener">github.com/ashhart/TensorFold/…/zig/src/families/qwen27/gguf_config.zig#L37-L45</a></td></tr>
+      <tr><td class="cite">tf_device</td><td>Metal tensor-generation gate</td><td><a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/src/metal/device.zig#L60-L70" rel="noopener">github.com/ashhart/TensorFold/…/zig/src/metal/device.zig#L60-L70</a></td></tr>
+      <tr><td class="cite">tf_projection</td><td>Projection host dispatch</td><td><a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/src/families/qwen27/projection.zig#L69-L86" rel="noopener">github.com/ashhart/TensorFold/…/zig/src/families/qwen27/projection.zig#L69-L86</a></td></tr>
+      <tr><td class="cite">tf_shader</td><td>Pre-M5 SIMD QMM</td><td><a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/kernels/metal/core/simd_qmm.metal#L1-L36" rel="noopener">github.com/ashhart/TensorFold/…/zig/kernels/metal/core/simd_qmm.metal#L1-L36</a></td></tr>
+      <tr><td class="cite">tf_kimi_state</td><td>Kimi KDA width and state</td><td><a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/kernels/metal/kimi/kda.metal#L4-L26" rel="noopener">github.com/ashhart/TensorFold/…/zig/kernels/metal/kimi/kda.metal#L4-L26</a></td></tr>
+      <tr><td class="cite">tf_kimi_gate</td><td>Kimi KDA decay</td><td><a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/kernels/metal/kimi/kda.metal#L97-L115" rel="noopener">github.com/ashhart/TensorFold/…/zig/kernels/metal/kimi/kda.metal#L97-L115</a></td></tr>
+      <tr><td class="cite">tf_glm_shape</td><td>GLM KDA geometry</td><td><a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/src/families/glm/config.zig#L29-L33" rel="noopener">github.com/ashhart/TensorFold/…/zig/src/families/glm/config.zig#L29-L33</a></td></tr>
+      <tr><td class="cite">tf_glm_gate</td><td>GLM KDA gate and rounding</td><td><a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/kernels/metal/glm/kda_rows.metal#L189-L210" rel="noopener">github.com/ashhart/TensorFold/…/zig/kernels/metal/glm/kda_rows.metal#L189-L210</a></td></tr>
+      <tr><td class="cite">tf_sdpa</td><td>TensorFold attention scoring</td><td><a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/kernels/metal/ops/sdpa.metal#L21-L44" rel="noopener">github.com/ashhart/TensorFold/…/zig/kernels/metal/ops/sdpa.metal#L21-L44</a></td></tr>
+      <tr><td class="cite">tf_bench</td><td>Scope of TensorFold benchmarks</td><td><a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/docs/community-benchmarks.md#L44-L50" rel="noopener">github.com/ashhart/TensorFold/…/docs/community-benchmarks.md#L44-L50</a></td></tr>
+      <tr><td class="cite">tf_notice</td><td>TensorFold license history</td><td><a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/NOTICE#L1-L8" rel="noopener">github.com/ashhart/TensorFold/…/NOTICE#L1-L8</a></td></tr>
+      <tr><td class="cite">tf_third</td><td>TensorFold third-party attribution</td><td><a href="https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/THIRD_PARTY_NOTICES.md#L85-L95" rel="noopener">github.com/ashhart/TensorFold/…/THIRD_PARTY_NOTICES.md#L85-L95</a></td></tr>
+      <tr><td class="cite">mx_port</td><td>Haas-specific MLX implementation</td><td><a href="https://github.com/matsuurajun/haas-mlx/blob/cde96d263f56aad75c1de70282f71a91562092dd/README.md#L1-L31" rel="noopener">github.com/matsuurajun/haas-mlx/…/README.md#L1-L31</a></td></tr>
+      <tr><td class="cite">mx_model</td><td>MLX inference and output materialization</td><td><a href="https://github.com/matsuurajun/haas-mlx/blob/cde96d263f56aad75c1de70282f71a91562092dd/src/haas_mlx/model.py#L104-L159" rel="noopener">github.com/matsuurajun/haas-mlx/…/src/haas_mlx/model.py#L104-L159</a></td></tr>
+      <tr><td class="cite">mx_kda</td><td>MLX per-channel KDA computation</td><td><a href="https://github.com/matsuurajun/haas-mlx/blob/cde96d263f56aad75c1de70282f71a91562092dd/src/haas_mlx/kda.py#L144-L177" rel="noopener">github.com/matsuurajun/haas-mlx/…/src/haas_mlx/kda.py#L144-L177</a></td></tr>
+      <tr><td class="cite">mx_notice</td><td>MLX and upstream notices</td><td><a href="https://github.com/matsuurajun/haas-mlx/blob/cde96d263f56aad75c1de70282f71a91562092dd/NOTICE#L1-L23" rel="noopener">github.com/matsuurajun/haas-mlx/…/NOTICE#L1-L23</a></td></tr>
+      <tr><td class="cite">mx_author</td><td>Conditions of the MLX author's comparison</td><td><a href="https://github.com/matsuurajun/haas-mlx/blob/cde96d263f56aad75c1de70282f71a91562092dd/CONVERSION.md#L129-L139" rel="noopener">github.com/matsuurajun/haas-mlx/…/CONVERSION.md#L129-L139</a></td></tr>
+      <tr><td class="cite">hf_model</td><td>Pinned converted BF16 model card</td><td><a href="https://huggingface.co/mrjnzzz/Haas-ja-v1.0-mlx/blob/15ef4f11618c6a1ee50e0eafaae13beded8ecdf9/README.md#L21-L30" rel="noopener">huggingface.co/mrjnzzz/Haas-ja-v1.0-mlx/…/README.md#L21-L30</a></td></tr>
+      <tr><td class="cite">hf_config</td><td>Haas network dimensions</td><td><a href="https://huggingface.co/mrjnzzz/Haas-ja-v1.0-mlx/blob/15ef4f11618c6a1ee50e0eafaae13beded8ecdf9/config.json#L13-L32" rel="noopener">huggingface.co/mrjnzzz/Haas-ja-v1.0-mlx/…/config.json#L13-L32</a></td></tr>
+      <tr><td class="cite">sp_kda</td><td>speech.cpp Haas KDA state and gates</td><td><a href="https://github.com/uchkw/speech.cpp/blob/114c514430c8aa1455c077819f8e72e674a48b75/src/families/fastconformer/kda.cpp#L37-L85" rel="noopener">github.com/uchkw/speech.cpp/…/src/families/fastconformer/kda.cpp#L37-L85</a></td></tr>
+      <tr><td class="cite">sp_rel</td><td>Haas relative-position attention</td><td><a href="https://github.com/uchkw/speech.cpp/blob/114c514430c8aa1455c077819f8e72e674a48b75/src/families/fastconformer/encoder.cpp#L174-L215" rel="noopener">github.com/uchkw/speech.cpp/…/src/families/fastconformer/encoder.cpp#L174-L215</a></td></tr>
+      <tr><td class="cite">sp_blocks</td><td>Conformer convolution and block order</td><td><a href="https://github.com/uchkw/speech.cpp/blob/114c514430c8aa1455c077819f8e72e674a48b75/src/families/fastconformer/encoder.cpp#L304-L333" rel="noopener">github.com/uchkw/speech.cpp/…/src/families/fastconformer/encoder.cpp#L304-L333</a></td></tr>
+      <tr><td class="cite">sp_tdt</td><td>speech.cpp TDT recurrence and progress</td><td><a href="https://github.com/uchkw/speech.cpp/blob/114c514430c8aa1455c077819f8e72e674a48b75/src/families/fastconformer/tdt.cpp#L70-L112" rel="noopener">github.com/uchkw/speech.cpp/…/src/families/fastconformer/tdt.cpp#L70-L112</a></td></tr>
+      <tr><td class="cite">sp_ref</td><td>Official NeMo and FLA reference</td><td><a href="https://github.com/uchkw/speech.cpp/blob/114c514430c8aa1455c077819f8e72e674a48b75/docs/adr/haas-runs-through-the-fastconformer-port-with-its-kda-prediction-network-checked-against-fla-on-a-cuda-gpu.md#L3-L27" rel="noopener">github.com/uchkw/speech.cpp/…/docs/adr/haas-runs-through-the-fastconformer-port-with-its-kda-prediction-network-checked-against-fla-on-a-cuda-gpu.md#L3-L27</a></td></tr>
+      <tr><td class="cite">gg_base</td><td>Baseline Metal fusion table</td><td><a href="https://github.com/uchkw/ggml/blob/e1a9ac12edbb57402618fd6936598603f5ee6266/src/ggml-metal/ggml-metal-fusion.cpp#L761-L791" rel="noopener">github.com/uchkw/ggml/…/src/ggml-metal/ggml-metal-fusion.cpp#L761-L791</a></td></tr>
+      <tr><td class="cite">sp_ffn</td><td>Haas FFN-up and activation</td><td><a href="https://github.com/uchkw/speech.cpp/blob/114c514430c8aa1455c077819f8e72e674a48b75/src/families/fastconformer/encoder.cpp#L123-L128" rel="noopener">github.com/uchkw/speech.cpp/…/src/families/fastconformer/encoder.cpp#L123-L128</a></td></tr>
+      <tr><td class="cite">sp_006</td><td>Optional 006a epilogue geometry and arithmetic</td><td><a href="https://github.com/uchkw/speech.cpp/blob/e0b0bf2c0e25003013d3c26f01d0823e4f7f0d0e/experiments/haas-mac/006a-notes.md#L21-L34" rel="noopener">github.com/uchkw/speech.cpp/…/experiments/haas-mac/006a-notes.md#L21-L34</a></td></tr>
+      <tr><td class="cite">gg_006</td><td>Optional 006a selector and gate</td><td><a href="https://github.com/uchkw/ggml/blob/84e511117191c4999aca6981da6d1f7fb57116fc/src/ggml-metal/ggml-metal-fusion.cpp#L709-L752" rel="noopener">github.com/uchkw/ggml/…/src/ggml-metal/ggml-metal-fusion.cpp#L709-L752</a></td></tr>
+      <tr><td class="cite">sp_plan</td><td>Shared quality and warm timing policy</td><td><a href="https://github.com/uchkw/speech.cpp/blob/03829d5e006ce4ef15906bb98377d358071cdfab/experiments/haas-mac/campaign.json#L5-L24" rel="noopener">github.com/uchkw/speech.cpp/…/experiments/haas-mac/campaign.json#L5-L24</a></td></tr>
+      <tr><td class="cite">sp_short</td><td>Short prefix measurement policy</td><td><a href="https://github.com/uchkw/speech.cpp/blob/03829d5e006ce4ef15906bb98377d358071cdfab/experiments/haas-mac/short.py#L22-L55" rel="noopener">github.com/uchkw/speech.cpp/…/experiments/haas-mac/short.py#L22-L55</a></td></tr>
+      <tr><td class="cite">mx_front</td><td>MLX valid and padded frontend lengths</td><td><a href="https://github.com/matsuurajun/haas-mlx/blob/cde96d263f56aad75c1de70282f71a91562092dd/src/haas_mlx/audio.py#L59-L82" rel="noopener">github.com/matsuurajun/haas-mlx/…/src/haas_mlx/audio.py#L59-L82</a></td></tr>
+      <tr><td class="cite">mx_crop</td><td>MLX encoder boundary crop</td><td><a href="https://github.com/matsuurajun/haas-mlx/blob/cde96d263f56aad75c1de70282f71a91562092dd/src/haas_mlx/encoder.py#L201-L218" rel="noopener">github.com/matsuurajun/haas-mlx/…/src/haas_mlx/encoder.py#L201-L218</a></td></tr>
+      <tr><td class="cite">sp_front</td><td>Native valid-only frontend</td><td><a href="https://github.com/uchkw/speech.cpp/blob/114c514430c8aa1455c077819f8e72e674a48b75/src/common/nemo-frontend.cpp#L99-L113" rel="noopener">github.com/uchkw/speech.cpp/…/src/common/nemo-frontend.cpp#L99-L113</a></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<footer>
+  <p>Source-only supplement, status unmeasured with no results. The canonical JSON lives at <a href="supplements/mac-runtime-feasibility.json">supplements/mac-runtime-feasibility.json</a> and is embedded below as inert data.</p>
+</footer>
+</article>
+
+<script type="application/json" id="report-data">
+{
+  "scope": "source_only",
+  "status": "unmeasured",
+  "results": null,
+  "target": "Apple M2 Ultra",
+  "title": "Testing TensorFold and MLX for Haas on M2 Ultra",
+  "summary": "Source-only feasibility supplement for running Haas Japanese ASR on an Apple M2 Ultra. No run, number or measurement was obtained for the target here. Route order reflects expected integration cost only. Every rank and effort tier is a planning judgment, the bridge routes are prospective adaptations, and nothing here predicts speed or recommends adoption.",
+  "findings": [
+    {
+      "topic": "Existing MLX BF16 runtime",
+      "text": "An unofficial Haas implementation already runs on Apple Silicon in MLX as a separate Python runtime with FastConformer, KDA, TDT and token timestamps, greedy token and duration argmax, and explicit evaluation. Its pinned converted checkpoint holds BF16 values with rearranged axes. The ggml baseline reconstructs Q4_K weights, so the two weight representations differ. [mx_port, hf_model, mx_model]"
+    },
+    {
+      "topic": "Reusable TensorFold primitives",
+      "text": "At the pinned commit the core GGUF reader recognizes Q4_K blocks (256 values per 144 bytes), and a repack path transcribes the original 4-bit codes, eight groups of 32 per superblock, with FP32 scale and bias, preserving finite reconstructed values without requantization. Pre-M5 hardware routes to row projections because tensor units are gated to GPU generation 17 (M5) and later, so M2 Ultra uses the older paths. [tf_blocks, tf_repack, tf_coeff, tf_projection, tf_device]"
+    },
+    {
+      "topic": "Model-level gaps",
+      "text": "Reuse is primitive-level, and model-level support is absent. Native dispatch is family-specific and excludes Haas, the published serving entry refuses a GGUF path, the only GGUF model adapter is Qwen-specific (general.architecture=qwen35) and separate from the reader, and the documented speech route is Fish Drama3 synthesis. TensorFold's Kimi shader fixes 128 channels per head and four taps and retains BF16 convolution history with an F32 recurrent matrix. Its GLM configuration uses 64 heads of width 128. Both cited implementations use lower-bound sigmoid decay. Haas has two KDA layers, five heads of width 64, four taps and per-channel softplus decay. Its native ggml predictor carries F32 recurrence and convolution history. The MLX counterpart uses input-dtype convolution history. Generic attention omits the Haas second relative-position product and rel_shift, and encoder blocks add gated pointwise plus depthwise convolutions. The TDT loop keeps prediction state across blanks with independent token and duration decisions. [tf_dispatch, tf_serve, tf_adapter, tf_audio, tf_kimi_state, tf_kimi_gate, tf_glm_shape, tf_glm_gate, tf_sdpa, hf_config, mx_kda, sp_kda, sp_rel, sp_blocks, sp_tdt]"
+    },
+    {
+      "topic": "Shader mismatch",
+      "text": "The representative pre-M5 SIMD QMM shader uses an eight-row tile, group64, and packed BF16 input, scale, bias and result. Lossless Q4_K repack is group32 codes plus FP32 scale and bias, so support needs host and shader changes together, preserving F32 activations and F32 results. Transcription preserves finite reconstructed values without recovering source BF16 weights or the reference accumulation order. [tf_shader, tf_repack, tf_coeff]"
+    },
+    {
+      "topic": "Baseline pins and reference gates",
+      "text": "The ggml baseline is the original split, separate MM then SiLU, with no MM+SiLU epilogue. The optional 006a flag defaults to 0, and GGML_METAL_MM_SILU=1 enables the fused prototype only at its own pin, strictly bounded with the same FP32 accumulator. Any fused kernel symbol belongs to that experiment alone. Official reference stages use pinned NeMo and FLA, with CPU F32 outside the KDA prediction path and CUDA F32 with TF32 disabled. [gg_base, gg_006, sp_006, sp_ref]"
+    },
+    {
+      "topic": "Frontend right edge",
+      "text": "MLX computes n_valid = N//160 and keeps only valid normalized features, pads with the pre-trim STFT frame count to a multiple of sixteen and later crops to encoded_length(n_frames), while the native frontend produces valid frames only. This possible right-edge subsampling difference is a source-level hypothesis to test. [mx_front, mx_crop, sp_front]"
+    },
+    {
+      "topic": "Notices and licenses",
+      "text": "TensorFold is Apache-2.0 from v0.6, earlier releases remain MIT, and file-level third-party notices, including GLM KDA attribution, apply to adapted code. The MLX port documents original model and encoder attribution, the FLA MIT notice, and checkpoint conversion in which BF16 values are preserved under axis rearrangement minus unused BatchNorm counters. [tf_notice, tf_third, mx_notice]"
+    },
+    {
+      "topic": "External evidence, scope only",
+      "text": "TensorFold publishes per-token language-model numbers whose workload, unit and timing boundary differ from ASR. The MLX author compared BF16 output on an M4 against speech.cpp 0.9.3 in F16, a text comparison that differed on some utterances. These are external evidence of scope only, and none is a result for this target. [tf_bench, mx_author]"
+    }
+  ],
+  "routes": [
+    {
+      "rank": 1,
+      "route": "Measure the existing unofficial Haas MLX BF16 resident implementation",
+      "change": "No change to either codebase. Add the shared evaluation harness and policy below.",
+      "cost": "Resident Python process and adapter, one model load, fixed configured device, separate dependency stack.",
+      "untouched": "Both codebases and both weight sets.",
+      "relative_effort": "Low, a planning judgment."
+    },
+    {
+      "rank": 2,
+      "route": "Adapt one pre-M5 SIMD projection when the exact Q4_K file is required",
+      "change": "One operator at an existing ggml FFN-up boundary with the same codes, host repack (group32, FP32 scale and bias) plus a shader variant accepting F32 activations and results, with two opportunities per block.",
+      "cost": "Host prepack memory and shader maintenance. The device path stays pre-M5.",
+      "untouched": "No requantization, the rest of the graph, TDT, and the Q4_K file itself.",
+      "relative_effort": "Medium, a planning judgment."
+    },
+    {
+      "rank": 3,
+      "route": "Encoder-only port bridging the native frontend and decoder",
+      "change": "Keep the native frontend and decoder. The encoder side adds the second relative product with rel_shift and gated/depthwise convolutions on existing GGUF primitives, and features and encoder outputs cross the stage boundary once per utterance with layout, handoff and synchronization accounted for. Unified memory alone does not guarantee zero overhead.",
+      "cost": "Bridge layout, handoff and synchronization work, plus new device kernels for relative attention and convolution modules.",
+      "untouched": "Existing LLM families, their kernels and their benchmarks.",
+      "relative_effort": "High, a planning judgment."
+    },
+    {
+      "rank": 4,
+      "route": "Decoder-only port keeping the native frontend and encoder",
+      "change": "Keep the native frontend and encoder, reimplementing KDA prediction and TDT recurrence with F32 state and per-channel softplus. Hand encoded frames off once while the predictor, joint and TDT stay together. A GPU-only predictor behind a CPU greedy loop can synchronize or cross the boundary for each emitted step or joint decision. Compare against the existing four-thread CPU decoder and preserve the blank, duration, cancellation and keyword rules.",
+      "cost": "New KDA and TDT kernels with F32 state, plus per-step synchronization exposure against the CPU greedy loop.",
+      "untouched": "Existing LLM families, their kernels and their benchmarks.",
+      "relative_effort": "High, a planning judgment."
+    },
+    {
+      "rank": 5,
+      "route": "Complete native TensorFold port of the Haas family",
+      "change": "Add the family loader and mapping, the encoder, prediction, TDT and the API/serving path, together with a reader and serving entry that accept this model and an adapter beyond the Qwen-only one, and validate each stage independently against the official references.",
+      "cost": "Every migration surface at once, host dispatch, reader and repack integration, and new device kernels for relative attention, convolution modules and softplus KDA rows.",
+      "untouched": "Existing LLM families, their kernels and their benchmarks.",
+      "relative_effort": "Greatest engineering effort of these routes, a planning judgment."
+    }
+  ],
+  "proposed_evaluation": {
+    "gates": [
+      "Verify original-to-repacked finite coefficients and codes, then decoded values and signed zero as separate checks. The bitwise reconstructed-weight gate is distinct from actual accumulator order and from official checkpoint accuracy. [tf_coeff, tf_repack]",
+      "Run an internal stage harness against pinned official NeMo F32 and FLA CUDA F32 without TF32, covering layer outputs including the subsampling right edge, KDA state, predictor and joint, token IDs, frames and durations including blanks. Keep approximate numerics and recognition equality distinct, and flag discrepancies before any speed conclusion. [sp_ref, sp_front, mx_front, mx_crop]"
+    ],
+    "operator": [
+      "One actual Haas Q4_K FFN-up [1024,4096] times F32 [1024,T] to F32 [4096,T] in ggml dimension order, with realistic sequence widths and tile tails and the same weights, activation and outputs. [sp_ffn]",
+      "Compare pure MM against pure MM with activation fusion absent on both sides. Separately verify the numerical differences among post-SiLU outputs of the original split 114c514/e1a9, the explicitly enabled 006a fused prototype e0b0bf2/84e5111 with GGML_METAL_MM_SILU=1, and the proposed candidate, which share the same post-SiLU observation boundary and intended F32 rounding points. The 006a flag defaults to 0. The normal uninstrumented full worker keeps its allocator and the fusions usually eligible, and product timing retains no extra output. [gg_base, gg_006, sp_006]"
+    ],
+    "end_to_end": [
+      "Load one resident model per runtime, the ggml route with Metal encoder and explicitly four CPU decoder threads and the MLX route with fixed device, dtype and configuration and completed evaluations. Use the same 16 kHz mono PCM, the same request and terminal boundary and the same feature flags. [sp_plan, mx_model]",
+      "Time through comparable request and terminal adapters. Where only a direct model function is available, report that model-call measurement separately. [mx_model]",
+      "Preserve correct typed inputs and synchronize ticks. Report cold load, first request, peak and synchronization independently, and separate load and prepack memory and the first request from warm single-request performance. [mx_model]",
+      "Run interleaved serial order for a minimum of three rounds over 30 stratified untimestamped FLEURS Japanese latency inputs and 650 timestamped quality inputs with identical inputs and scorer. Compare literal and repository CER identically and keep official JACER separate. Capture exact public text, tokens, timestamps and segments where supported, and never infer private or raw TDT decisions from worker text. [sp_plan]",
+      "Measure six prefixes of 2 s and 4 s from three parents for agreement and latency only, without reference CER. [sp_short]",
+      "Compute the median per input, then p50, p90 and p99, and define RTFx as audio seconds divided by elapsed warm seconds. The p99 from 30 latency inputs has limited resolution. [sp_plan]"
+    ]
+  },
+  "sources": [
+    {"id": "tf_dispatch", "label": "TensorFold native model dispatch", "url": "https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/src/native/metal.zig#L174-L204"},
+    {"id": "tf_audio", "label": "TensorFold speech route", "url": "https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/src/server/routes.zig#L177-L185"},
+    {"id": "tf_blocks", "label": "GGUF block layout", "url": "https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/src/core/gguf_tensor.zig#L26-L43"},
+    {"id": "tf_repack", "label": "Q4_K block transcription", "url": "https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/src/core/gguf_repack_blocks.zig#L77-L94"},
+    {"id": "tf_coeff", "label": "GGUF repack storage", "url": "https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/src/core/gguf_repack.zig#L31-L56"},
+    {"id": "tf_serve", "label": "GGUF serving entry", "url": "https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/src/server/hub.zig#L22-L30"},
+    {"id": "tf_adapter", "label": "Qwen GGUF family adapter", "url": "https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/src/families/qwen27/gguf_config.zig#L37-L45"},
+    {"id": "tf_device", "label": "Metal tensor-generation gate", "url": "https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/src/metal/device.zig#L60-L70"},
+    {"id": "tf_projection", "label": "Projection host dispatch", "url": "https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/src/families/qwen27/projection.zig#L69-L86"},
+    {"id": "tf_shader", "label": "Pre-M5 SIMD QMM", "url": "https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/kernels/metal/core/simd_qmm.metal#L1-L36"},
+    {"id": "tf_kimi_state", "label": "Kimi KDA width and state", "url": "https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/kernels/metal/kimi/kda.metal#L4-L26"},
+    {"id": "tf_kimi_gate", "label": "Kimi KDA decay", "url": "https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/kernels/metal/kimi/kda.metal#L97-L115"},
+    {"id": "tf_glm_shape", "label": "GLM KDA geometry", "url": "https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/src/families/glm/config.zig#L29-L33"},
+    {"id": "tf_glm_gate", "label": "GLM KDA gate and rounding", "url": "https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/kernels/metal/glm/kda_rows.metal#L189-L210"},
+    {"id": "tf_sdpa", "label": "TensorFold attention scoring", "url": "https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/zig/kernels/metal/ops/sdpa.metal#L21-L44"},
+    {"id": "tf_bench", "label": "Scope of TensorFold benchmarks", "url": "https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/docs/community-benchmarks.md#L44-L50"},
+    {"id": "tf_notice", "label": "TensorFold license history", "url": "https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/NOTICE#L1-L8"},
+    {"id": "tf_third", "label": "TensorFold third-party attribution", "url": "https://github.com/ashhart/TensorFold/blob/9fb5d2096746d19034410bcf52bdb716eac08382/THIRD_PARTY_NOTICES.md#L85-L95"},
+    {"id": "mx_port", "label": "Haas-specific MLX implementation", "url": "https://github.com/matsuurajun/haas-mlx/blob/cde96d263f56aad75c1de70282f71a91562092dd/README.md#L1-L31"},
+    {"id": "mx_model", "label": "MLX inference and output materialization", "url": "https://github.com/matsuurajun/haas-mlx/blob/cde96d263f56aad75c1de70282f71a91562092dd/src/haas_mlx/model.py#L104-L159"},
+    {"id": "mx_kda", "label": "MLX per-channel KDA computation", "url": "https://github.com/matsuurajun/haas-mlx/blob/cde96d263f56aad75c1de70282f71a91562092dd/src/haas_mlx/kda.py#L144-L177"},
+    {"id": "mx_notice", "label": "MLX and upstream notices", "url": "https://github.com/matsuurajun/haas-mlx/blob/cde96d263f56aad75c1de70282f71a91562092dd/NOTICE#L1-L23"},
+    {"id": "mx_author", "label": "Conditions of the MLX author's comparison", "url": "https://github.com/matsuurajun/haas-mlx/blob/cde96d263f56aad75c1de70282f71a91562092dd/CONVERSION.md#L129-L139"},
+    {"id": "hf_model", "label": "Pinned converted BF16 model card", "url": "https://huggingface.co/mrjnzzz/Haas-ja-v1.0-mlx/blob/15ef4f11618c6a1ee50e0eafaae13beded8ecdf9/README.md#L21-L30"},
+    {"id": "hf_config", "label": "Haas network dimensions", "url": "https://huggingface.co/mrjnzzz/Haas-ja-v1.0-mlx/blob/15ef4f11618c6a1ee50e0eafaae13beded8ecdf9/config.json#L13-L32"},
+    {"id": "sp_kda", "label": "speech.cpp Haas KDA state and gates", "url": "https://github.com/uchkw/speech.cpp/blob/114c514430c8aa1455c077819f8e72e674a48b75/src/families/fastconformer/kda.cpp#L37-L85"},
+    {"id": "sp_rel", "label": "Haas relative-position attention", "url": "https://github.com/uchkw/speech.cpp/blob/114c514430c8aa1455c077819f8e72e674a48b75/src/families/fastconformer/encoder.cpp#L174-L215"},
+    {"id": "sp_blocks", "label": "Conformer convolution and block order", "url": "https://github.com/uchkw/speech.cpp/blob/114c514430c8aa1455c077819f8e72e674a48b75/src/families/fastconformer/encoder.cpp#L304-L333"},
+    {"id": "sp_tdt", "label": "speech.cpp TDT recurrence and progress", "url": "https://github.com/uchkw/speech.cpp/blob/114c514430c8aa1455c077819f8e72e674a48b75/src/families/fastconformer/tdt.cpp#L70-L112"},
+    {"id": "sp_ref", "label": "Official NeMo and FLA reference", "url": "https://github.com/uchkw/speech.cpp/blob/114c514430c8aa1455c077819f8e72e674a48b75/docs/adr/haas-runs-through-the-fastconformer-port-with-its-kda-prediction-network-checked-against-fla-on-a-cuda-gpu.md#L3-L27"},
+    {"id": "gg_base", "label": "Baseline Metal fusion table", "url": "https://github.com/uchkw/ggml/blob/e1a9ac12edbb57402618fd6936598603f5ee6266/src/ggml-metal/ggml-metal-fusion.cpp#L761-L791"},
+    {"id": "sp_ffn", "label": "Haas FFN-up and activation", "url": "https://github.com/uchkw/speech.cpp/blob/114c514430c8aa1455c077819f8e72e674a48b75/src/families/fastconformer/encoder.cpp#L123-L128"},
+    {"id": "sp_006", "label": "Optional 006a epilogue geometry and arithmetic", "url": "https://github.com/uchkw/speech.cpp/blob/e0b0bf2c0e25003013d3c26f01d0823e4f7f0d0e/experiments/haas-mac/006a-notes.md#L21-L34"},
+    {"id": "gg_006", "label": "Optional 006a selector and gate", "url": "https://github.com/uchkw/ggml/blob/84e511117191c4999aca6981da6d1f7fb57116fc/src/ggml-metal/ggml-metal-fusion.cpp#L709-L752"},
+    {"id": "sp_plan", "label": "Shared quality and warm timing policy", "url": "https://github.com/uchkw/speech.cpp/blob/03829d5e006ce4ef15906bb98377d358071cdfab/experiments/haas-mac/campaign.json#L5-L24"},
+    {"id": "sp_short", "label": "Short prefix measurement policy", "url": "https://github.com/uchkw/speech.cpp/blob/03829d5e006ce4ef15906bb98377d358071cdfab/experiments/haas-mac/short.py#L22-L55"},
+    {"id": "mx_front", "label": "MLX valid and padded frontend lengths", "url": "https://github.com/matsuurajun/haas-mlx/blob/cde96d263f56aad75c1de70282f71a91562092dd/src/haas_mlx/audio.py#L59-L82"},
+    {"id": "mx_crop", "label": "MLX encoder boundary crop", "url": "https://github.com/matsuurajun/haas-mlx/blob/cde96d263f56aad75c1de70282f71a91562092dd/src/haas_mlx/encoder.py#L201-L218"},
+    {"id": "sp_front", "label": "Native valid-only frontend", "url": "https://github.com/uchkw/speech.cpp/blob/114c514430c8aa1455c077819f8e72e674a48b75/src/common/nemo-frontend.cpp#L99-L113"}
+  ]
+}
+</script>
+</body>
+</html>
