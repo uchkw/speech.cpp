@@ -64,6 +64,9 @@ public:
     /** The same with `boost`'s words boosted, by a decoding that boosts them (TdtDecoder). */
     Decoding decoding(const std::vector<float> & projected, const std::string & name, DecodeOn on, const DecodingProgress & progress,
                       const Boost & boost);
+    /** The same for plain KDA TDT, rechecking the joint while a completed prediction prefix matches. */
+    Decoding decoding(const std::vector<float> & projected, const std::string & name, DecodeOn on, const DecodingProgress & progress,
+                      TdtPrefixCache::Reading & prefix);
     /** The same with the default decoding. */
     Decoding decoding(const std::vector<float> & projected) { return decoding(projected, decodings().front()); }
 

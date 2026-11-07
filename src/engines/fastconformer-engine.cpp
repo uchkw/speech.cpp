@@ -1,6 +1,9 @@
 #include <cmath>
+#include <cstdlib>
+#include <cstring>
 #include <optional>
 #include <string>
+#include <tuple>
 #include <vector>
 
 #include "engine.h"
@@ -11,41 +14,25 @@ namespace {
 
 class FastConformerEngine : public Engine {
 public:
-    FastConformerEngine(const std::string & path, ggml_backend_t backend, int threads) : recognizer_(path, backend, threads) {}
+    FastConformerEngine(const std::string & path, ggml_backend_t backend, int threads) : recognizer_(path, backend, threads) {
+        if (recognizer_.model().str("fastconformer.decoder.prediction") != "kda" ||
+            recognizer_.model().str("fastconformer.decoder.kind") != "tdt") return;
+        const char * name = "SPEECH_HAAS_KDA_PREFIX_CACHE";
+        const char * value = std::getenv(name);
+        if (!value || std::strcmp(value, "0") == 0) return;
+        if (std::strcmp(value, "1") != 0) throw Error(Fault::InvalidArgument, std::string(name) + " must be 0 or 1", name);
+        prefix_cache_ = std::make_unique<fastconformer::TdtPrefixCache>();
+    }
 
-    /**
-     * The three stages report their progress in thirds, the decoding by the frames it has passed: the frontend takes
-     * milliseconds, the encoder runs as one graph, and the decoding steps frame by frame.
-     */
     Recognized transcribe(const std::vector<float> & samples, const RequestValues & values, Run & run) override {
-        // Before the work passes anything to the caller, so that a request whose keywords are refused can be fixed and run.
-        const std::optional<fastconformer::Vocabulary> vocabulary = vocabulary_of(values);
-        const NemoFrontend & frontend = recognizer_.frontend();
-        const std::vector<float> features = frontend.features(samples);
-        if (!run.progress(1.0 / 3)) return {};
-        const std::vector<float> projected = recognizer_.encode(features, frontend.frames(samples.size()));
-        if (!run.progress(2.0 / 3)) return {};
-        const std::string & name = values.has(SPEECH_OPT_DECODING) ? values.string(SPEECH_OPT_DECODING) : recognizer_.decodings().front();
-        const fastconformer::DecodeOn on = values.boolean(SPEECH_OPT_DECODE_ON_CPU) ? fastconformer::DecodeOn::Cpu : fastconformer::DecodeOn::Device;
-        const auto progress = [&](double done) { return run.progress((2 + done) / 3); };
-        if (vocabulary) return with_keywords(*vocabulary, values, samples, projected, name, on, progress, run);
-        const fastconformer::Decoding decoding = recognizer_.decoding(projected, name, on, progress);
-        if (run.stopped()) return {};
-        const fastconformer::Detokenizer & detokenizer = recognizer_.detokenizer();
-        Recognized out;
-        out.text = detokenizer.text(decoding.ids);
-        if (values.boolean(SPEECH_OPT_TIMESTAMPS)) {
-            const std::vector<std::string> texts = detokenizer.token_texts(decoding.ids);
-            const std::vector<fastconformer::Span> spans = fastconformer::token_spans(decoding, detokenizer);
-            for (size_t i = 0; i < texts.size(); i++) {
-                out.tokens.push_back({recognizer_.seconds(spans[i].start), recognizer_.seconds(spans[i].end), texts[i]});
-            }
-            for (const fastconformer::Segment & s : recognizer_.segments(decoding)) {
-                out.segments.push_back({recognizer_.seconds(s.span.start), recognizer_.seconds(s.span.end), s.text});
-            }
+        try {
+            Recognized out = transcribe_reading(samples, values, run);
+            if (prefix_cache_ && run.stopped()) reset_prefix();
+            return out;
+        } catch (...) {
+            reset_prefix();
+            throw;
         }
-        run.progress(1);
-        return out;
     }
 
     void warm_up() override {
@@ -65,6 +52,65 @@ public:
     bool computes_on_cpu() const override { return true; }
 
 private:
+    /** The decoding, language, decode_on_cpu and timestamps the published prefix was recorded under; another combination of the four never reuses it. */
+    using PrefixKey = std::tuple<std::string, std::string, bool, bool>;
+
+    void reset_prefix() noexcept {
+        if (prefix_cache_) prefix_cache_->clear();
+        prefix_key_.reset();
+    }
+
+    /**
+     * The three stages report their progress in thirds, the decoding by the frames it has passed: the frontend takes
+     * milliseconds, the encoder runs as one graph, and the decoding steps frame by frame.
+     */
+    Recognized transcribe_reading(const std::vector<float> & samples, const RequestValues & values, Run & run) {
+        // Before the work passes anything to the caller, so that a request whose keywords are refused can be fixed and run.
+        const std::optional<fastconformer::Vocabulary> vocabulary = vocabulary_of(values);
+        std::optional<fastconformer::TdtPrefixCache::Reading> prefix;
+        std::optional<PrefixKey> key;
+        if (prefix_cache_) {
+            if (vocabulary) reset_prefix();
+            else {
+                key.emplace(values.has(SPEECH_OPT_DECODING) ? values.string(SPEECH_OPT_DECODING) : recognizer_.decodings().front(),
+                            values.string(SPEECH_OPT_LANGUAGE), values.boolean(SPEECH_OPT_DECODE_ON_CPU),
+                            values.boolean(SPEECH_OPT_TIMESTAMPS));
+                if (key != prefix_key_) prefix_cache_->clear();
+                prefix.emplace(prefix_cache_->begin(samples.size()));
+            }
+        }
+        const NemoFrontend & frontend = recognizer_.frontend();
+        const std::vector<float> features = frontend.features(samples);
+        if (!run.progress(1.0 / 3)) return {};
+        const std::vector<float> projected = recognizer_.encode(features, frontend.frames(samples.size()));
+        if (!run.progress(2.0 / 3)) return {};
+        const std::string & name = values.has(SPEECH_OPT_DECODING) ? values.string(SPEECH_OPT_DECODING) : recognizer_.decodings().front();
+        const fastconformer::DecodeOn on = values.boolean(SPEECH_OPT_DECODE_ON_CPU) ? fastconformer::DecodeOn::Cpu : fastconformer::DecodeOn::Device;
+        const auto progress = [&](double done) { return run.progress((2 + done) / 3); };
+        if (vocabulary) return with_keywords(*vocabulary, values, samples, projected, name, on, progress, run);
+        const fastconformer::Decoding decoding = prefix ? recognizer_.decoding(projected, name, on, progress, *prefix)
+                                                       : recognizer_.decoding(projected, name, on, progress);
+        if (run.stopped()) return {};
+        const fastconformer::Detokenizer & detokenizer = recognizer_.detokenizer();
+        Recognized out;
+        out.text = detokenizer.text(decoding.ids);
+        if (values.boolean(SPEECH_OPT_TIMESTAMPS)) {
+            const std::vector<std::string> texts = detokenizer.token_texts(decoding.ids);
+            const std::vector<fastconformer::Span> spans = fastconformer::token_spans(decoding, detokenizer);
+            for (size_t i = 0; i < texts.size(); i++) {
+                out.tokens.push_back({recognizer_.seconds(spans[i].start), recognizer_.seconds(spans[i].end), texts[i]});
+            }
+            for (const fastconformer::Segment & s : recognizer_.segments(decoding)) {
+                out.segments.push_back({recognizer_.seconds(s.span.start), recognizer_.seconds(s.span.end), s.text});
+            }
+        }
+        run.progress(1);
+        if (prefix && !run.stopped()) {
+            prefix_cache_->publish(std::move(*prefix));
+            prefix_key_ = std::move(key);
+        }
+        return out;
+    }
     /**
      * The vocabulary of the request's keywords, or none for a request without keywords, which takes no keywords_alpha or
      * keywords_guard. A request with keywords takes no timestamps, since the keywords write the text after the decoding,
@@ -112,6 +158,8 @@ private:
     }
 
     fastconformer::Recognizer recognizer_;
+    std::unique_ptr<fastconformer::TdtPrefixCache> prefix_cache_;
+    std::optional<PrefixKey> prefix_key_;
 };
 
 }  // namespace

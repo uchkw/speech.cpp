@@ -25,7 +25,8 @@ TdtDecoder::TdtDecoder(const ModelFile & m, const PredictionNetwork & prediction
       joint_(joint),
       blank_((int) m.u32("fastconformer.decoder.blank_id")),
       durations_(m.i32_array("fastconformer.decoder.tdt.durations")),
-      max_symbols_(m.u32("fastconformer.decoder.tdt.max_symbols")) {}
+      max_symbols_(m.u32("fastconformer.decoder.tdt.max_symbols")),
+      kda_(m.str("fastconformer.decoder.prediction") == "kda") {}
 
 Decoding TdtDecoder::decode(const std::vector<float> & projected, ggml_backend_t backend, const DecodingProgress & progress) const {
     return run(projected, backend, progress, nullptr);
@@ -37,8 +38,15 @@ Decoding TdtDecoder::decode(const std::vector<float> & projected, ggml_backend_t
     return run(projected, backend, progress, &boost);
 }
 
+Decoding TdtDecoder::decode(const std::vector<float> & projected, ggml_backend_t backend, const DecodingProgress & progress,
+                            TdtPrefixCache::Reading & prefix) const {
+    if (!kda_) throw std::logic_error("a prediction prefix requires a KDA TDT decoder");
+    prefix.bind(this, backend);
+    return run(projected, backend, progress, nullptr, &prefix);
+}
+
 Decoding TdtDecoder::run(const std::vector<float> & projected, ggml_backend_t backend, const DecodingProgress & progress,
-                         const Boost * boost) const {
+                         const Boost * boost, TdtPrefixCache::Reading * prefix) const {
     const int hidden = joint_.hidden();
     const int64_t frames = (int64_t) (projected.size() / (size_t) hidden);
     auto frame = [&](int64_t t) {
@@ -73,15 +81,28 @@ Decoding TdtDecoder::run(const std::vector<float> & projected, ggml_backend_t ba
     int64_t t = 0, last_token_frame = -1;
     uint32_t tokens_on_frame = 0;
     while (t < frames) {
-        if (progress && !progress((double) t / (double) frames)) break;
-        // The prediction network takes the last label, and the joint is evaluated at the current frame with its
-        // output, in one graph.
-        step.compute(label, state, frame(t));
-        d.graphs++;
-        state = step.state();
-        const std::vector<float> prediction = step.prediction();
+        if (progress && !progress((double) t / (double) frames)) return d;
+        const int32_t fed_label = label;
+        const TdtPrefixCache::Entry * cached = prefix ? prefix->find(fed_label) : nullptr;
+        std::vector<float> prediction;
         std::vector<float> out;
-        step.logits(out);
+        if (cached) {
+            state = cached->state;
+            prediction = cached->prediction;
+            Graph j(64);
+            ggml_tensor * next = joint_.build(j.ctx(), j.input(frame(t), hidden), j.input(prediction, hidden));
+            j.output(next);
+            j.compute(backend, joint_allocator.get());
+            out = Graph::read(next);
+        } else {
+            // The prediction network takes the last label, and the joint is evaluated at the current frame with its
+            // output, in one graph.
+            step.compute(label, state, frame(t));
+            state = step.state();
+            prediction = step.prediction();
+            step.logits(out);
+        }
+        d.graphs++;
 
         int64_t label_frame;
         int32_t duration;
@@ -99,6 +120,7 @@ Decoding TdtDecoder::run(const std::vector<float> & projected, ggml_backend_t ba
             d.graphs++;
             out = Graph::read(next);
         }
+        if (prefix) prefix->append(fed_label, state, prediction, label);
         if (label == blank_) break;
         d.ids.push_back(label);
         if (boost) {
@@ -111,6 +133,7 @@ Decoding TdtDecoder::run(const std::vector<float> & projected, ggml_backend_t ba
         last_token_frame = label_frame;
         if (t < frames && t == label_frame && tokens_on_frame >= max_symbols_) t++;
     }
+    if (prefix) prefix->finish();
     return d;
 }
 

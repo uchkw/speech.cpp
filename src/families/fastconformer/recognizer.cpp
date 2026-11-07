@@ -91,6 +91,13 @@ std::vector<Segment> Recognizer::segments(const Decoding & decoding) const {
                                    token_spans(decoding, detokenizer_), separators_, breaks_);
 }
 
+Decoding Recognizer::decoding(const std::vector<float> & projected, const std::string & name, DecodeOn on,
+                              const DecodingProgress & progress, TdtPrefixCache::Reading & prefix) {
+    if (on == DecodeOn::Device || on_cpu_) return device_.decoder(name).decode(projected, backend_, progress, prefix);
+    OnCpu & copy = cpu();
+    return copy.transducer.decoder(name).decode(projected, copy.backend.get(), progress, prefix);
+}
+
 double Recognizer::seconds(int64_t frame) const {
     const double window_stride = (double) frontend_.hop_length() / (double) frontend_.sample_rate();
     return (double) frame * window_stride * (double) encoder_.subsampling_factor();

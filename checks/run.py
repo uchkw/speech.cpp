@@ -393,7 +393,7 @@ def fastconformer(model, devices, ctx):
     root = os.path.join(out, model.name)
     words = any(os.path.isdir(os.path.join(root, d, "words")) for d in os.listdir(root)) if os.path.isdir(root) else False
     for device in devices:
-        runs += [runs_on(device, f"fastconformer-{stage}-check", model, [out]) for stage in ("encoder", "transducer", "times")]
+        runs += [runs_on(device, f"fastconformer-{stage}-check", model, [out]) for stage in ("encoder", "transducer", "tdt-prefix", "times")]
         if words:
             runs.append(runs_on(device, "fastconformer-words-check", model, [out]))
     return runs

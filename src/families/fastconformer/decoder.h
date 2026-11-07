@@ -8,6 +8,7 @@
 
 #include "boosting.h"
 #include "transducer.h"
+#include "tdt-prefix.h"
 
 namespace fastconformer {
 
@@ -52,6 +53,10 @@ public:
     /** The same with `boost`'s words boosted, by a decoding that boosts words (TDT's); any other throws. */
     virtual Decoding decode(const std::vector<float> & projected, ggml_backend_t backend, const DecodingProgress & progress,
                             const Boost & boost) const;
+
+    /** The same with a verified plain prediction prefix, by a KDA TDT decoding; any other throws. */
+    virtual Decoding decode(const std::vector<float> & projected, ggml_backend_t backend, const DecodingProgress & progress,
+                            TdtPrefixCache::Reading & prefix) const;
 
     virtual int blank() const = 0;
 };

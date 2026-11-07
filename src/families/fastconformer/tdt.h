@@ -26,17 +26,21 @@ public:
     Decoding decode(const std::vector<float> & projected, ggml_backend_t backend, const DecodingProgress & progress) const override;
     Decoding decode(const std::vector<float> & projected, ggml_backend_t backend, const DecodingProgress & progress,
                     const Boost & boost) const override;
+    Decoding decode(const std::vector<float> & projected, ggml_backend_t backend, const DecodingProgress & progress,
+                    TdtPrefixCache::Reading & prefix) const override;
 
     int blank() const override { return blank_; }
 
 private:
-    Decoding run(const std::vector<float> & projected, ggml_backend_t backend, const DecodingProgress & progress, const Boost * boost) const;
+    Decoding run(const std::vector<float> & projected, ggml_backend_t backend, const DecodingProgress & progress, const Boost * boost,
+                 TdtPrefixCache::Reading * prefix = nullptr) const;
 
     const PredictionNetwork & prediction_;
     const Joint & joint_;
     int blank_;
     std::vector<int32_t> durations_;
     uint32_t max_symbols_;
+    bool kda_;
 };
 
 }  // namespace fastconformer

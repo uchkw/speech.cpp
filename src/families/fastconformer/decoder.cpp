@@ -57,6 +57,10 @@ Decoding Decoder::decode(const std::vector<float> &, ggml_backend_t, const Decod
     throw std::logic_error("this decoding boosts no words");
 }
 
+Decoding Decoder::decode(const std::vector<float> &, ggml_backend_t, const DecodingProgress &, TdtPrefixCache::Reading &) const {
+    throw std::logic_error("this decoding caches no prediction prefix");
+}
+
 int first_argmax(const float * v, int n) {
     int best = 0;
     for (int i = 1; i < n; i++) {

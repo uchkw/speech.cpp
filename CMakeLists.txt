@@ -110,6 +110,7 @@ add_library(fastconformer STATIC
     src/families/fastconformer/decoder-step.cpp
     src/families/fastconformer/decoder.cpp
     src/families/fastconformer/tdt.cpp
+    src/families/fastconformer/tdt-prefix.cpp
     src/families/fastconformer/boosting.cpp
     src/families/fastconformer/words.cpp
     src/families/fastconformer/alsd.cpp
@@ -439,7 +440,7 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
 endif()
 
 # The checks of FastConformer's stages.
-foreach(stage frontend encoder transducer times sentencepiece)
+foreach(stage frontend encoder transducer times sentencepiece tdt-prefix)
     add_executable(fastconformer-${stage}-check checks/fastconformer/fastconformer-${stage}-check.cpp)
     target_include_directories(fastconformer-${stage}-check PRIVATE checks)
     target_link_libraries(fastconformer-${stage}-check PRIVATE fastconformer)
