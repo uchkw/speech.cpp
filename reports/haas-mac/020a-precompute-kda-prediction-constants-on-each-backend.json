@@ -1,0 +1,297 @@
+{
+  "schema_version": 1,
+  "measure_id": "020a",
+  "parent_measure_id": "020",
+  "title": "Precompute KDA prediction constants on each backend",
+  "status": "rejected",
+  "reason": "The general backend variant failed exact equivalence on Q4_K Metal. Its initial and recurrent prediction paths failed 104 of 173 assertions with default fusion. Evaluation stopped before recorded speech or latency measurements.",
+  "updated_utc": "2026-11-07T06:17:06.616789+00:00",
+  "scope": "checks_only",
+  "evaluation_completed": true,
+  "adopted": false,
+  "primary_screen_executed": false,
+  "full_quality_executed": false,
+  "short_prefix_executed": false,
+  "public_asr_quality_executed": false,
+  "performance_gain_measured": false,
+  "memory_gain_measured": false,
+  "variant_scope": "The general CPU and Metal preparation trial. A separate CPU-prediction-only alternative (020b) has its own applicability and performance gates.",
+  "conditions": {
+    "hardware": "Apple M2 Ultra, 24 CPU cores, 76 GPU cores, 192 GB unified memory",
+    "selector": "SPEECH_HAAS_KDA_CONSTANTS=0|1, unset=0",
+    "precision": "Synthetic F32 constants and real Haas Q4_K weights with generated inputs.",
+    "latency_definition": "No request timing, cold-start measurement or stage timing was collected.",
+    "aggregation": "The primary table counts check assertions. The fusion-disabled and log-only invocations are separate diagnostics. No CER score was computed.",
+    "limitations": [
+      "The six planned real-model checks for Q8_0, F16 and F32 on CPU4 and Metal did not run. The passing real Q4_K CPU4 assertions describe this prototype under the dedicated test. A CPU-prediction-only implementation and its performance require a separate trial.",
+      "The official F32 encoder comparison did not run. Available reference inputs cover the encoder boundary. Matching official KDA prediction, recurrent-state and complete TDT stage references were unavailable for this evaluation.",
+      "Public metadata, API/worker cancellation, recorded-speech keywords, timestamps and public output equivalence were not evaluated. The lifecycle and generated-input path checks inside the dedicated executable have narrower scope.",
+      "Pure load, warmup-ready time, first request, warm 9-input/3-round screening, the full corpus and peak process memory were not measured. There is no fixed-anchor or paired speed result. Windows Vulkan and M5 were untested.",
+      "The matched M2 Ultra arm64 Release build matched all 74 common compile-flag files and all 74 common link recipes of the retained 014 original, after normalizing source/build roots. The original build served as a build-configuration reference; no new original worker or end-to-end comparison ran."
+    ]
+  },
+  "implementation_checkpoint": {
+    "source_evidence_measure_id": "020",
+    "measured_source_commit": "980269a89fdd5fa76caaae37753d3507e0ac0d4a",
+    "source_base": "114c514430c8aa1455c077819f8e72e674a48b75",
+    "ggml_commit": "e1a9ac12edbb57402618fd6936598603f5ee6266",
+    "evaluation_commit": "0c2fbd4d32af28708292218d1f084020ba73858f",
+    "evaluation_note": "experiments/haas-mac/020-kda-constants.md",
+    "evaluation_note_sha256": "2ab39c3f95dcea8e59e376a676a15ff9c0ebbeb1b6b5e3bd4ebdba15fcf51563",
+    "prepared_runner_commit": "54eed08312c70151ecf3cd872e83f09579be6605",
+    "prepared_runner_worker_sha256": "b518d88a5a641999fe4b069dc9631141efb0e83031643efe7932bf2850dc93ea",
+    "worker_executed": false,
+    "candidate_build_cli_sha256": "bf6808ce7d294695e478073fcc5b439d563aaced2ba1ecab5e24ecf0a5aa9439",
+    "candidate_dedicated_check_sha256": "2716013c8e0b608cd353ffe5c0f58b785c91c242262b710ad2cfb5e71c9fffd4",
+    "original_build_reference_sha256": "4fccde1a19f26d91bd92d0296c19eb5ae75895c73684dc61017b81b90f9b0e61",
+    "integrated": false
+  },
+  "evidence": {
+    "directory": "020",
+    "owner_manifest_sha256": "ef337f9f19c428d5ab818c648de818491345b21dc145410dd5645f661769d3f3",
+    "owner_evaluation_sha256": "201e374638e9b9cc1ad01b05d2eeb9897a633671ca35205ba84c4de6c20693e9",
+    "owner_checks_sha256": "7810aaa8582394de763dd29b2585ec9979a7d1897ebc79f69675a9474b76bab6",
+    "owner_metadata_sha256": "5e8e4732efe79f6851bb75bb58715adde73e529c6895271aa91a8cdc8971b3d3",
+    "import_verified_counts": {
+      "local_files": 50,
+      "local_bytes": 38914414,
+      "retained_files": 16,
+      "retained_bytes": 38375075,
+      "symlinks": 1
+    },
+    "import_verified_symbolic_links": 1,
+    "import_audits": {
+      "independent-evidence-sha256.json": {
+        "artifact_path": "report-imports/020/independent-evidence-sha256.json",
+        "sha256": "19955b81a45f89833d15dbb4f0a3c8adf5b06fa5761f0256b84ff1ed0d2c1700"
+      },
+      "check-audit.json": {
+        "artifact_path": "report-imports/020/check-audit.json",
+        "sha256": "04109118f2a99025b550c373b8f26d5b303904242e7591cdfd5a3efcb53bd8b5"
+      }
+    },
+    "scope": "Frozen synthetic fixtures, logs and build artifacts. No actual Haas weights or corpus audio were read."
+  },
+  "diagnostics": [
+    {
+      "title": "Same-backend exact checks",
+      "method": "Compare ordinary and prepared prediction paths on the same backend. Counts are assertions, not audio utterances.",
+      "headers": [
+        "Input",
+        "Backend",
+        "Threads",
+        "Assertions",
+        "Failures"
+      ],
+      "rows": [
+        [
+          "synthetic F32",
+          "CPU",
+          1,
+          185,
+          0
+        ],
+        [
+          "synthetic F32",
+          "CPU",
+          4,
+          185,
+          0
+        ],
+        [
+          "synthetic F32",
+          "MTL0",
+          4,
+          178,
+          0
+        ],
+        [
+          "Haas Q4_K weights",
+          "CPU",
+          4,
+          177,
+          0
+        ],
+        [
+          "Haas Q4_K weights",
+          "MTL0",
+          4,
+          173,
+          104
+        ]
+      ],
+      "notes": [
+        "Five primary configurations ran 898 assertions with 104 failures. The retained constants matched independent same-backend EXP then NEG bit for bit. Each direct run reported one preparation, 40 bytes of F32 payload and a 64-byte backend allocation. The allocation excludes graph, model and process memory."
+      ]
+    },
+    {
+      "title": "Q4_K Metal failures with default fusion",
+      "method": "Counts and error ranges come from each primary failure family. These printed numerical measures describe a failed bit-exact test.",
+      "headers": [
+        "Q4_K Metal comparison",
+        "Failures",
+        "Minimum SNR (dB)",
+        "Maximum absolute difference"
+      ],
+      "rows": [
+        [
+          "Initial prediction output",
+          1,
+          142.7,
+          "4.77e-07"
+        ],
+        [
+          "Initial prediction state",
+          1,
+          146.7,
+          "2.38e-07"
+        ],
+        [
+          "Reused step, state",
+          34,
+          145.3,
+          "9.54e-07"
+        ],
+        [
+          "Reused step, projected prediction",
+          34,
+          133.1,
+          "2.86e-06"
+        ],
+        [
+          "Reused step, joint logits",
+          34,
+          139.1,
+          "1.14e-05"
+        ]
+      ],
+      "notes": [
+        "The initial comparison used label 1 and a zero old state. The 34 comparisons per later tensor family came from two 17-step histories. After the first step each side receives its own preceding state. The minimum SNR and maximum absolute difference in the table come from the printed results for each family. Passing generated-input TDT path and progress assertions do not establish recognition on recordings."
+      ]
+    },
+    {
+      "title": "Separate diagnostics on the failing input",
+      "method": "Keep the original 173-assertion failure as the primary result. Neither diagnostic supplies a recognition result.",
+      "headers": [
+        "Condition",
+        "Assertions",
+        "Failures",
+        "Observation"
+      ],
+      "rows": [
+        [
+          "Primary, default fusion",
+          173,
+          104,
+          "Initial and reused prediction outputs differed."
+        ],
+        [
+          "Same binary, fusion disabled",
+          173,
+          0,
+          "The dedicated test passed on this separate run."
+        ],
+        [
+          "Default fusion, log-only launcher",
+          173,
+          104,
+          "All 12,124 stdout bytes matched the primary failure."
+        ]
+      ],
+      "notes": [
+        "After excluding the setup graph (trace records 58–69), the initial ordinary and prepared graphs occupy records 70–184 and 185–268. Each has 15 logged multi-operation fusion groups. Only the eighth group, the second NORM, changes length. Ordinary node_65 at local index 0 fuses three operations. Prepared node_62 at local index 37 fuses two, then ADD node_64 starts at the next local index 0. The three NORM group lengths are 3/3/3 and 3/2/3 respectively.",
+        "The KDA source order identifies the second NORM as the pre-normalization of layer 1, pred.kda.1.norm. The log and backend source point to NORM+MUL+ADD becoming NORM+MUL followed by a separate ADD at a local partition boundary. No intermediate tensor or instruction trace locates the first numerical divergence, proves FMA execution or identifies a sole numerical cause."
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "name": "Synthetic F32 CPU and Metal checks",
+      "status": "passed",
+      "scope": "mac",
+      "required": true,
+      "evidence": "020/execution/strict-stop.json",
+      "reason": "185 assertions each at CPU1 and CPU4, and 178 at Metal4, with zero failures."
+    },
+    {
+      "name": "Real Q4_K weights, CPU4",
+      "status": "passed",
+      "scope": "mac",
+      "required": true,
+      "evidence": "020/checks/q4_k-cpu4.stdout.log",
+      "reason": "177 assertions passed with generated inputs. This check covers this general prototype, not the separate CPU-only change."
+    },
+    {
+      "name": "Real Q4_K weights, Metal4 with default fusion",
+      "status": "failed",
+      "scope": "mac",
+      "required": true,
+      "evidence": "020/checks/q4_k-gpu4.stdout.log",
+      "reason": "104 of 173 assertions failed the prespecified exact check. All five primary configurations total 898 assertions, 794 passed and 104 failed."
+    },
+    {
+      "name": "Prepared constants and workspace",
+      "status": "passed",
+      "scope": "mac",
+      "required": true,
+      "evidence": "020/execution/strict-stop.json",
+      "reason": "Across the five dedicated runs, each reported one preparation, 40 bytes of F32 payload and a 64-byte backend allocation. These values do not measure process peak memory."
+    },
+    {
+      "name": "Fusion-disabled diagnostic",
+      "status": "passed",
+      "scope": "mac",
+      "required": true,
+      "evidence": "020/execution/fusion-disabled-diagnostic.json",
+      "reason": "A separate single invocation of the same binary completed 173 assertions without failure."
+    },
+    {
+      "name": "Log-only reproduction of the original failure",
+      "status": "passed",
+      "scope": "mac",
+      "required": true,
+      "evidence": "020/graph-debug/first-fusion-candidate.json",
+      "reason": "One launcher reproduced 104 of 173 failures and the identical 12,124-byte stdout. Of 15 groups in each initial graph only group 8 changed fusion length. The import audited 17,146 complete log records. The log does not establish the first divergent numerical operation or FMA causality."
+    },
+    {
+      "name": "Matched compilation and diagnostic launcher",
+      "status": "passed",
+      "scope": "mac",
+      "required": true,
+      "evidence": "020/execution/compile-link-comparison.json",
+      "reason": "148 common build rule files matched after path normalization (74 compile and 74 link). An initial diagnostic compile failed before linking or inference; the corrected launcher used the original flags and seven runtime archives."
+    },
+    {
+      "name": "Remaining model matrix and official encoder",
+      "status": "skipped",
+      "scope": "mac",
+      "required": true,
+      "evidence": "020/evaluation.json",
+      "reason": "The primary gate stopped the six planned Q8_0, F16 and F32 CPU/Metal comparisons and the official F32 encoder check."
+    },
+    {
+      "name": "Official prediction, recurrent-state and TDT reference",
+      "status": "unavailable",
+      "scope": "mac",
+      "required": false,
+      "evidence": "020/evaluation.json",
+      "reason": "The matching official references for these changed stages were not available."
+    },
+    {
+      "name": "Recorded speech, startup, memory and request latency",
+      "status": "skipped",
+      "scope": "mac",
+      "required": true,
+      "evidence": "020/evaluation.json",
+      "reason": "No public audio quality, entry-point equivalence, 9-input timing, 30-input timing, 650-input CER, short-prefix or process-memory measurement."
+    },
+    {
+      "name": "Windows Vulkan and other Metal devices",
+      "status": "unavailable",
+      "scope": "mac",
+      "required": false,
+      "evidence": "020/evaluation.json",
+      "reason": "No run on these backends or devices."
+    }
+  ]
+}

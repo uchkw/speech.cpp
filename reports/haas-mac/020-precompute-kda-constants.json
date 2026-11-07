@@ -2,7 +2,10 @@
   "schema_version": 1,
   "measure_id": "020",
   "title": "Precompute KDA constants",
-  "status": "pending",
-  "reason": "Not evaluated.",
-  "checks": []
+  "status": "rejected",
+  "reason": "Both tested variants are rejected. General preparation (020a) failed the Q4_K Metal exact check. CPU-only preparation (020b) passed its differential checks and showed mixed whole-request results across the three formats.",
+  "checks": [],
+  "updated_utc": "2026-11-07T06:41:58.766296+00:00",
+  "evaluation_completed": true,
+  "adopted": false
 }
