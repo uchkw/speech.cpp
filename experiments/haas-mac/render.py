@@ -76,8 +76,11 @@ def report_html(entry, filename, campaign, trials=()):
     body += f'<p><a href="{text(filename)}">Machine-readable report JSON</a> · <a href="{text(campaign["tracking_issue"])}">Tracking issue</a></p>'
     conditions = {**campaign, **entry.get('conditions', {})}
     if entry.get('types'):
-        body += f'<p><strong>Measured scope:</strong> {text(conditions["latency_count"])} inputs × {text(conditions["rounds"])} latency rounds per side; {text(conditions["quality_count"])} quality inputs per side. CPU decoding with {text(conditions["threads"])} threads.</p>'
-        if conditions.get('thread_setting_note'):
+        decoder = conditions.get('decoder_device', 'cpu')
+        decoding = (f'Metal decoding on MTL0 with {text(conditions["threads"])} CPU load threads.' if decoder == 'metal'
+                    else f'CPU decoding with {text(conditions["threads"])} threads.')
+        body += f'<p><strong>Measured scope:</strong> {text(conditions["latency_count"])} inputs × {text(conditions["rounds"])} latency rounds per side; {text(conditions["quality_count"])} quality inputs per side. {decoding}</p>'
+        if conditions.get('thread_setting_note') and decoder == 'cpu':
             body += '<p class="muted">' + text(conditions['thread_setting_note']) + '</p>'
     if trials:
         body += '<h2>Recorded variants</h2><p>A rejected variant does not close the whole measure.</p>'

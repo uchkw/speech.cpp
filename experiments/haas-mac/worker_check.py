@@ -1,4 +1,5 @@
-"""Check worker thread selection and ready validation without a model or subprocess."""
+"""Check worker thread selection, decoder-device selection and ready validation without a model or subprocess."""
+import base64
 import hashlib
 import io
 import json
@@ -13,30 +14,43 @@ def check(root):
     root.mkdir()
     artifact = root / 'fixture'; artifact.write_bytes(b'fixture')
     identity = {'path': str(artifact), 'sha256': hashlib.sha256(artifact.read_bytes()).hexdigest()}
-    record = {'file': 'fixture.wav', 'pcm_path': str(artifact), 'pcm_sha256': identity['sha256'],
+    # Recognition PCM crossing the protocol's 32768-byte chunk boundary: two chunks of 32768 and 64 bytes.
+    pcm = root / 'boundary.pcm'; pcm.write_bytes(bytes(range(256)) * 128 + bytes(range(64)))
+    record = {'file': 'boundary.wav', 'pcm_path': str(pcm), 'pcm_sha256': hashlib.sha256(pcm.read_bytes()).hexdigest(),
               'stratum': 'fixture', 'seconds': 1., 'reference': 'same'}
     base = {'environment': {}, 'build': {'speech': identity}, 'model': {**identity, 'type': 'fixture'},
             'phase': 'latency', 'round': 0, 'side': 'fixture', 'warmup': [record], 'records': [record]}
 
-    def launch(name, requested, expected, resolved, accepted, phase='latency', build_flags=None, environment=None):
+    def launch(name, requested, expected, resolved, accepted, phase='latency', build_flags=None, environment=None,
+               decoder_device=None, ready_model=None, ready_defaults=None, error=None):
         spec = {**base, 'threads': requested, 'directory': str(root / name), 'phase': phase,
                 'build': {**base['build'], **(build_flags or {})}, 'environment': environment or {}}
         if expected is not None:
             spec['expected_threads'] = expected
-        sent = []
+        if decoder_device is not None:
+            spec['decoder_device'] = decoder_device
+            spec['decode_on_cpu'] = decoder_device == 'cpu'
+        sent, flushes = [], []
 
         class Input(io.StringIO):
             def write(self, message):
-                sent.append(json.loads(message)); return super().write(message)
+                sent.append(message); return super().write(message)
+
+            def flush(self):
+                flushes.append(len(sent)); super().flush()
 
         def start(command, **options):
-            suffix = ['--no-warmup', '--decode-on-cpu']
+            suffix = ['--no-warmup', '--decode-on-cpu=false' if decoder_device == 'metal' else '--decode-on-cpu']
             if requested:
                 suffix = ['--threads', str(requested), *suffix]
-            assert command[4:] == [str(artifact), 'worker', str(artifact), '--device', 'gpu', *suffix]
+            assert command[4:] == [str(artifact), 'worker', str(artifact), '--device',
+                                   'MTL0' if decoder_device == 'metal' else 'gpu', *suffix]
             assert options['env'] == worker.execution_environment(spec['environment'], diagnostic=phase == 'diagnostic')
             Path(command[3]).write_text('100 peak memory footprint\n')
-            messages = [{'type': 'ready', 'protocol': 4, 'model': {'threads': resolved}}]
+            ready = {'type': 'ready', 'protocol': 4, 'model': {'threads': resolved, **(ready_model or {})}}
+            if ready_defaults is not None:
+                ready['defaults'] = ready_defaults
+            messages = [ready]
             messages.extend({'type': 'end', 'id': request_id, 'stop': 'complete', 'text': 'same'}
                             for request_id in ['warm-0', '0'])
             return SimpleNamespace(stdout=io.StringIO(''.join(json.dumps(m) + '\n' for m in messages)),
@@ -51,20 +65,70 @@ def check(root):
                 assert report['thread_selection'] == {
                     'requested_mode': 'explicit' if requested else 'auto', 'requested_threads': requested,
                     'expected_threads': expected if expected is not None else requested, 'resolved_threads': resolved}
-                assert [m['id'] for m in sent if m['type'] == 'transcribe'] == ['warm-0', '0']
+                assert report['decoder_device'] == (decoder_device or 'cpu')
+                assert report['decode_on_cpu'] is ((decoder_device or 'cpu') == 'cpu')
+                expected_ready = {'type': 'ready', 'protocol': 4, 'model': {'threads': resolved, **(ready_model or {})}}
+                if ready_defaults is not None:
+                    expected_ready['defaults'] = ready_defaults
+                assert report['ready'] == expected_ready
+                option_default = next((option.get('default') for option in (ready_model or {}).get('options', [])
+                                       if option.get('name') == 'decode_on_cpu'), None)
+                assert report['decoder_evidence'] == {'ready_model_device': (ready_model or {}).get('device'),
+                                                      'ready_defaults_decode_on_cpu': (ready_defaults or {}).get('decode_on_cpu'),
+                                                      'model_option_default_decode_on_cpu': option_default}
+                messages = [json.loads(line) for line in sent]
+                assert [m['id'] for m in messages if m['type'] == 'transcribe'] == ['warm-0', '0']
+                return sent, flushes, messages
+            try:
+                worker.run(spec)
+            except ValueError as failure:
+                assert (error or 'ready.model.threads') in str(failure), failure
             else:
-                try:
-                    worker.run(spec)
-                except ValueError as error:
-                    assert 'ready.model.threads' in str(error), error
-                else:
-                    raise AssertionError('An unexpected resolved thread count was accepted.')
-                assert not sent and not (Path(spec['directory']) / 'result.json').exists()
+                raise AssertionError('An unexpected worker run was accepted.')
+            assert not sent and not (Path(spec['directory']) / 'result.json').exists()
 
     for requested, expected, resolved in [(0, 16, 16), (0, 4, 4), (16, None, 16), (4, None, 4)]:
         launch(f'pass-{requested}-{resolved}', requested, expected, resolved, True)
     for requested, expected, resolved in [(0, 4, 16), (16, None, 4), (4, None, None), (4, None, True)]:
         launch(f'refuse-{requested}-{resolved}', requested, expected, resolved, False)
+    launch('pass-explicit-cpu', 4, None, 4, True, decoder_device='cpu')
+    sent, flushes, messages = launch('pass-wire-bytes', 4, None, 4, True)
+    assert flushes == list(range(1, len(sent) + 1))
+    for line, message in zip(sent, messages):
+        assert line == json.dumps(message, ensure_ascii=False) + '\n'
+    assert sent[2] == json.dumps({'type': 'transcribe', 'id': 'warm-0', 'sample_rate': 16000, 'timestamps': False},
+                                 ensure_ascii=False) + '\n'
+    assert sent[5] == json.dumps({'type': 'transcribe', 'id': '0', 'sample_rate': 16000, 'timestamps': False},
+                                 ensure_ascii=False) + '\n'
+    for request_id in ['warm-0', '0']:
+        round_messages = [m for m in messages if m.get('id') == request_id]
+        assert [m['type'] for m in round_messages] == ['chunk', 'chunk', 'transcribe']
+        chunks = [m for m in round_messages if m['type'] == 'chunk']
+        assert [m['seq'] for m in chunks] == [0, 1]
+        assert [len(base64.b64decode(m['pcm'])) for m in chunks] == [32768, 64]
+        assert b''.join(base64.b64decode(m['pcm']) for m in chunks) == pcm.read_bytes()
+
+    metal_model = {'device': 'MTL0', 'options': [{'name': 'decode_on_cpu', 'type': 'bool', 'default': True}]}
+    for name, option_default in [('q4', True), ('q8', True), ('f16', False)]:
+        launch(f'pass-metal-{name}', 4, None, 4, True, decoder_device='metal',
+               ready_model={'device': 'MTL0', 'options': [{'name': 'decode_on_cpu', 'type': 'bool', 'default': option_default}]},
+               ready_defaults={'decode_on_cpu': False})
+    launch('pass-metal-auto-threads', 0, 16, 16, True, decoder_device='metal',
+           ready_model=metal_model, ready_defaults={'decode_on_cpu': False})
+    launch('refuse-metal-device', 4, None, 4, False, decoder_device='metal',
+           ready_model={**metal_model, 'device': 'Metal'}, ready_defaults={'decode_on_cpu': False},
+           error='ready.model.device')
+    launch('refuse-metal-device-missing', 4, None, 4, False, decoder_device='metal',
+           ready_model={'options': metal_model['options']}, ready_defaults={'decode_on_cpu': False},
+           error='ready.model.device')
+    for label, value in [('true', True), ('string', 'false'), ('numeric', 0)]:
+        launch(f'refuse-metal-default-{label}', 4, None, 4, False, decoder_device='metal',
+               ready_model=metal_model, ready_defaults={'decode_on_cpu': value}, error='ready.defaults.decode_on_cpu')
+    launch('refuse-metal-default-missing', 4, None, 4, False, decoder_device='metal',
+           ready_model=metal_model, ready_defaults={}, error='ready.defaults.decode_on_cpu')
+    launch('refuse-metal-threads', 4, None, 16, False, decoder_device='metal',
+           ready_model=metal_model, ready_defaults={'decode_on_cpu': False}, error='ready.model.threads')
+
     for phase in ['latency', 'quality', 'diagnostic']:
         with patch.object(worker.subprocess, 'Popen') as start:
             try:
@@ -92,3 +156,14 @@ def check(root):
             else:
                 raise AssertionError('An invalid thread expectation was accepted.')
             start.assert_not_called()
+    for values, reason in [({'decoder_device': 'cuda'}, 'decoder_device must be cpu or metal'),
+                           ({'decoder_device': 'metal', 'decode_on_cpu': True}, 'disagrees')]:
+        with patch.object(worker.subprocess, 'Popen') as start:
+            try:
+                worker.run({**base, 'threads': 4, 'directory': str(root / 'invalid-decoder'), **values})
+            except ValueError as error:
+                assert reason in str(error), error
+            else:
+                raise AssertionError('An invalid decoder selection was accepted.')
+            start.assert_not_called()
+            assert not (root / 'invalid-decoder').exists()

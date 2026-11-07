@@ -3,7 +3,7 @@
 Usage: compare.py assets --previous PATH --out PATH
        compare.py build --source WORKTREE --out BUILD_DIRECTORY
        compare.py run --measure 001 --baseline BUILD_JSON --candidate BUILD_JSON --anchor BUILD_JSON
-                      --assets ASSETS_JSON --types q4_k,q8_0 --out RUN_DIRECTORY
+                      --assets ASSETS_JSON --types q4_k,q8_0 --out RUN_DIRECTORY [--decoder-device cpu|metal]
        compare.py record --measure 001 --run RUN_DIRECTORY --checks CHECKS_JSON
                          --verdict conditional --reason TEXT
 Large evidence stays outside reports/. No command pushes, merges or changes a model default.
@@ -32,6 +32,39 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 REPORTS = REPO / 'reports/haas-mac'
 LOCK = '/private/tmp/speech-haas-mac-perf.lock'
+# The one decoder placement every side of a run shares: the worker's --device argument and the stage tool's device
+# and decode-on arguments. A Metal run overrides the campaign's CPU decoder explicitly.
+DECODER_DEVICES = {'cpu': {'device': 'gpu', 'decode_on': 'cpu'},
+                   'metal': {'device': 'MTL0', 'decode_on': 'device'}}
+
+
+def stage_expectations(decoder_device, threads):
+    """The stage condition a decoder placement requires; summarize rejects stage rows or records that disagree."""
+    expected = {'decoder_device': decoder_device, 'decode_on_cpu': decoder_device == 'cpu',
+                'decoding': 'greedy', 'decode_on': DECODER_DEVICES[decoder_device]['decode_on']}
+    if threads is not None:
+        expected['threads'] = threads
+    if decoder_device == 'metal':
+        expected['device'] = DECODER_DEVICES[decoder_device]['device']
+    return expected
+
+
+def require_metal_result(result, label, threads):
+    """Reject worker evidence that does not itself record the requested Metal placement.
+
+    Stage rows validate the stage tool only; they cannot establish where a latency or quality worker decoded.
+    """
+    model = (result.get('ready') or {}).get('model') or {}
+    defaults = (result.get('ready') or {}).get('defaults') or {}
+    for key, got, want in [('decoder_device', result.get('decoder_device'), 'metal'),
+                           ('decode_on_cpu', result.get('decode_on_cpu'), False),
+                           ('ready.model.device', model.get('device'), 'MTL0'),
+                           ('ready.defaults.decode_on_cpu', defaults.get('decode_on_cpu'), False),
+                           ('ready.model.threads', model.get('threads'), threads)]:
+        # Strict equality: 0 is not the JSON false and 4.0 or true is not the integer thread setting.
+        if got == want and type(got) is type(want):
+            continue
+        raise ValueError(f'{label} records {key}={got!r}; the requested metal decoder run requires {want!r}.')
 
 
 def read(path):
@@ -230,6 +263,15 @@ def screen_inputs(subset):
 
 def summarize(directory):
     manifest = read(directory / 'run.json')
+    conditions = manifest['conditions']
+    decoder_device = conditions.get('decoder_device', 'cpu')
+    if decoder_device not in DECODER_DEVICES:
+        raise ValueError(f'decoder_device must be one of {sorted(DECODER_DEVICES)}, not {decoder_device!r}.')
+    threads = conditions.get('threads')
+    stage_expected = stage_expectations(decoder_device, threads)
+    if conditions.get('stage_expectations') not in (None, stage_expected):
+        raise ValueError(f"The recorded stage expectations disagree with the requested {decoder_device} decoder run: "
+                         f"{conditions['stage_expectations']} instead of {stage_expected}.")
     profiles = {}
     for kind in manifest['types']:
         sides, quality_rows, medians, latency_runs = {}, {}, {}, {}
@@ -239,6 +281,10 @@ def summarize(directory):
                 raise ValueError('The latency evidence does not contain every recorded round.')
             latency_runs[side] = runs
             quality = read(directory / kind / side / 'quality-0/result.json')
+            if decoder_device == 'metal':
+                for result in runs:
+                    require_metal_result(result, f"{kind} {side} latency round {result['round']}", threads)
+                require_metal_result(quality, f'{kind} {side} quality', threads)
             by_file = defaultdict(list)
             for run in runs:
                 for record in run['records']:
@@ -247,6 +293,12 @@ def summarize(directory):
             medians[side], quality_rows[side] = rows, quality['records']
             stages_path = directory / kind / side / 'stages.jsonl'
             stages = [json.loads(line) for line in stages_path.read_text().splitlines()] if stages_path.exists() else []
+            for stage in stages:
+                for key, expected_value in stage_expected.items():
+                    if key in ['decoder_device', 'decode_on_cpu'] or stage.get(key) == expected_value:
+                        continue
+                    raise ValueError(f"Stage evidence for input {stage.get('input')!r} records {key}={stage.get(key)!r}; "
+                                     f"the requested {decoder_device} decoder run requires {expected_value!r}.")
             stage_groups = defaultdict(list)
             for stage in stages:
                 stage_groups[stage['input']].append(stage)
@@ -284,8 +336,15 @@ def summarize(directory):
 
 
 def run_comparison(args):
+    decoder_device = getattr(args, 'decoder_device', 'cpu')
+    if decoder_device not in DECODER_DEVICES:
+        raise ValueError(f'decoder_device must be one of {sorted(DECODER_DEVICES)}, not {decoder_device!r}.')
+    decode_on_cpu = decoder_device == 'cpu'
     directory = Path(args.out).resolve()
     data, policy = read(args.assets), read(HERE / 'campaign.json')
+    # The campaign thread note describes the CPU decoder; a Metal report states its own CPU load threads instead.
+    if decoder_device == 'metal':
+        policy.pop('thread_setting_note', None)
     builds = {'baseline': read(args.baseline), 'candidate': read(args.candidate)}
     environments = {'baseline': environment(args.baseline_env), 'candidate': environment(args.candidate_env)}
     fixed_anchor = None
@@ -325,6 +384,8 @@ def run_comparison(args):
                 'models': {m['type']: {k: m[k] for k in ['type', 'sha256', 'size', 'revision'] if k in m} for m in data['models'] if m['type'] in args.types.split(',')},
                 'assets_sha256': sha(args.assets), 'input_hash': data['input_hash'],
                 'conditions': {**policy, 'quality_policy': args.quality_policy, 'latency_count': len(subset), 'quality_count': len(corpus),
+                               'decoder_device': decoder_device, 'decode_on_cpu': decode_on_cpu,
+                               'stage_expectations': stage_expectations(decoder_device, policy['threads']),
                                'hardware': data['source_environment']['hardware'],
                                'current_machine': {key: subprocess.check_output(command, text=True).strip() for key, command in {
                                    'chip': ['sysctl', '-n', 'machdep.cpu.brand_string'], 'cpu_cores': ['sysctl', '-n', 'hw.ncpu'],
@@ -347,14 +408,16 @@ def run_comparison(args):
                         destination = directory / kind / side / f'{phase}-{round_index}'
                         spec_path = directory / f'{kind}-{side}-{phase}-{round_index}.json'
                         write(spec_path, {'directory': str(destination), 'build': builds[side], 'model': model, 'threads': policy['threads'],
+                                          'decoder_device': decoder_device, 'decode_on_cpu': decode_on_cpu,
                                           'phase': phase, 'round': round_index, 'side': side, 'environment': environments[side], 'warmup': subset, 'records': records})
                         locked(['_worker', '--spec', str(spec_path)])
             for side, b in builds.items():
                 if not b['stage_threads_argument']:
                     continue
                 path = directory / kind / side / 'stages.jsonl'
-                command = ['/usr/bin/lockf', '-k', LOCK, b['stage_tool']['path'], model['path'], 'gpu', 'greedy', 'cpu',
-                           str(policy['rounds']), str(policy['threads']), *[r['directory'] for r in data['stages']]]
+                placement = DECODER_DEVICES[decoder_device]
+                command = ['/usr/bin/lockf', '-k', LOCK, b['stage_tool']['path'], model['path'], placement['device'], 'greedy',
+                           placement['decode_on'], str(policy['rounds']), str(policy['threads']), *[r['directory'] for r in data['stages']]]
                 with path.open('w') as output, path.with_suffix('.stderr.log').open('w') as log:
                     subprocess.run(command, stdout=output, stderr=log, env=execution_environment(environments[side]), check=True)
         summarize(directory)
@@ -440,6 +503,7 @@ def main():
     for side in ['baseline', 'candidate', 'anchor']:
         p.add_argument('--' + side + '-env', action='append', default=[])
     p.add_argument('--quality-policy', choices=['exact', 'cer'], default='exact')
+    p.add_argument('--decoder-device', choices=sorted(DECODER_DEVICES), default='cpu')
     p = commands.add_parser('record'); p.add_argument('--measure', required=True); p.add_argument('--run'); p.add_argument('--checks')
     p.add_argument('--title')
     p.add_argument('--artifact-root')

@@ -6,6 +6,7 @@ import argparse
 from html.parser import HTMLParser
 import json
 from pathlib import Path
+import platform
 import sys
 import tempfile
 from types import SimpleNamespace
@@ -90,6 +91,242 @@ def performance_build_checks(root):
             refused(lambda: compare.run_comparison(args), 'An instrumented build was evaluated.', expected='performance_evaluation_eligible=false')
             launch.assert_not_called()
             assert not Path(args.out).exists()
+
+
+def decoder_device_run_checks(root):
+    root.mkdir()
+    binary = root / 'binary'; binary.write_bytes(b'fixture')
+    anchor_binary = root / 'anchor-binary'; anchor_binary.write_bytes(b'anchor-fixture')
+
+    def build_manifest(path):
+        return {'source_verified': True, 'source_commit': 'fixture', 'stage_threads_argument': True,
+                'speech': {'path': str(path), 'sha256': compare.sha(path)},
+                'stage_tool': {'path': str(path), 'sha256': compare.sha(path)}}
+
+    paths = {side: root / f'{side}.json' for side in ['baseline', 'candidate']}
+    compare.write(paths['baseline'], build_manifest(binary)); compare.write(paths['candidate'], build_manifest(binary))
+    anchor = root / 'anchor.json'; compare.write(anchor, build_manifest(anchor_binary))
+    rows = [{'file': f'{group}-{i}', 'seconds': seconds + i / 10, 'stratum': group}
+            for group, seconds in [('6-10s', 6), ('10-20s', 12), ('20-30s', 24)] for i in range(10)]
+    stage_directory = root / 'stage-audio' / 'fixture-input'; stage_directory.mkdir(parents=True)
+    (stage_directory / 'audio.npy').write_bytes(b'fixture-npy')
+    assets = root / 'assets.json'
+    compare.write(assets, {'models': [{'type': 'q4_k', 'path': str(binary), 'sha256': compare.sha(binary)}],
+                           'stages': [{'file': 'fixture-input.wav', 'directory': str(stage_directory), 'seconds': 6.,
+                                       'npy_sha256': compare.sha(stage_directory / 'audio.npy')}],
+                           'subset': rows, 'input_hash': 'fixture', 'source_environment': {'hardware': {}}})
+    specs, stage_commands = [], []
+
+    def locked_worker(arguments):
+        spec = compare.read(arguments[2])
+        specs.append(spec)
+        target = Path(spec['directory']); target.mkdir(parents=True)
+        records = [{'file': r['file'], 'stratum': r['stratum'], 'audio_seconds': r['seconds'], 'seconds': .1,
+                    'reference': 'a', 'text': 'a', 'tokens': [], 'segments': []} for r in spec['records']]
+        ready = {'model': {'threads': spec['threads']}}
+        if spec['decoder_device'] == 'metal':
+            ready = {'model': {'threads': spec['threads'], 'device': 'MTL0'}, 'defaults': {'decode_on_cpu': False}}
+        compare.write(target / 'result.json', {'round': spec['round'], 'side': spec['side'], 'records': records,
+                                               'decoder_device': spec['decoder_device'], 'decode_on_cpu': spec['decode_on_cpu'],
+                                               'ready': ready, 'memory': {'peak_memory_footprint': 100}, 'load_seconds': .1,
+                                               'first_request': {'seconds': .2}})
+
+    def stage_tool(command, **options):
+        stage_commands.append(list(command))
+        for directory in command[10:]:
+            options['stdout'].write(json.dumps({'input': Path(directory).name, 'device': command[5], 'decoding': command[6],
+                                                'decode_on': command[7], 'threads': int(command[9]), 'run': 0,
+                                                'audio_seconds': 6., 'core_total_ms': 50., 'decoder_ms': 5.}) + '\n')
+
+    def comparison(name, decoder=None, anchor_path=None):
+        arguments = SimpleNamespace(out=root / name, assets=assets, baseline=paths['baseline'], candidate=paths['candidate'],
+                                    anchor=anchor_path, baseline_env=[], candidate_env=[], anchor_env=[], smoke=False,
+                                    screen=True, types='q4_k', quality_policy='exact', measure='fixture')
+        if decoder is not None:
+            arguments.decoder_device = decoder
+        specs.clear(); stage_commands.clear()
+        with patch.object(compare, 'locked', locked_worker), \
+                patch.object(compare.subprocess, 'check_output', return_value='fixture'), \
+                patch.object(compare.subprocess, 'run', stage_tool):
+            compare.run_comparison(arguments)
+        return root / name
+
+    cpu_expectations = {'decoder_device': 'cpu', 'decode_on_cpu': True, 'decoding': 'greedy', 'decode_on': 'cpu', 'threads': 4}
+    default_run = comparison('cpu-default')
+    cpu_commands = [list(command) for command in stage_commands]
+    cpu_specs = [dict(spec) for spec in specs]
+    explicit_run = comparison('cpu-explicit', 'cpu')
+    assert [list(command) for command in stage_commands] == cpu_commands
+    assert [{k: v for k, v in spec.items() if k != 'directory'} for spec in specs] == \
+           [{k: v for k, v in spec.items() if k != 'directory'} for spec in cpu_specs]
+    for run_directory in [default_run, explicit_run]:
+        manifest = compare.read(run_directory / 'run.json')
+        assert manifest['conditions']['decoder_device'] == 'cpu' and manifest['conditions']['decode_on_cpu'] is True
+        assert manifest['conditions']['stage_expectations'] == cpu_expectations
+        assert compare.read(run_directory / 'summary.json')['conditions'] == manifest['conditions']
+    for spec in cpu_specs:
+        assert spec['decoder_device'] == 'cpu' and spec['decode_on_cpu'] is True
+    for command in cpu_commands:
+        assert command[5:10] == ['gpu', 'greedy', 'cpu', '3', '4'] and command[10:] == [str(stage_directory)]
+    assert compare.read(compare.HERE / 'campaign.json')['decode_on_cpu'] is True
+
+    metal_run = comparison('metal', 'metal', anchor)
+    manifest = compare.read(metal_run / 'run.json'); conditions = manifest['conditions']
+    assert conditions['decoder_device'] == 'metal' and conditions['decode_on_cpu'] is False
+    assert conditions['stage_expectations'] == {'decoder_device': 'metal', 'decode_on_cpu': False, 'decoding': 'greedy',
+                                                'decode_on': 'device', 'threads': 4, 'device': 'MTL0'}
+    assert set(manifest['builds']) == {'baseline', 'candidate', 'anchor'}
+    assert manifest['fixed_anchor']['measured_side'] == 'anchor'
+    assert {spec['side'] for spec in specs} == {'baseline', 'candidate', 'anchor'}
+    for spec in specs:
+        assert spec['decoder_device'] == 'metal' and spec['decode_on_cpu'] is False
+    for command in stage_commands:
+        assert command[5:10] == ['MTL0', 'greedy', 'device', '3', '4']
+    summary = compare.read(metal_run / 'summary.json')
+    assert summary['conditions'] == conditions
+    assert all(side['stage_status'] == 'measured' for side in summary['types']['q4_k']['sides'].values())
+
+    deduplicated = comparison('metal-dedup', 'metal', paths['baseline'])
+    manifest = compare.read(deduplicated / 'run.json')
+    assert set(manifest['builds']) == {'baseline', 'candidate'} and manifest['fixed_anchor']['measured_side'] == 'baseline'
+    assert all(spec['decoder_device'] == 'metal' for spec in specs)
+
+    invalid = SimpleNamespace(out=root / 'refused-selector', assets=assets, baseline=paths['baseline'],
+                              candidate=paths['candidate'], anchor=None, baseline_env=[], candidate_env=[],
+                              anchor_env=[], smoke=False, screen=True, types='q4_k', quality_policy='exact',
+                              measure='fixture', decoder_device='cuda')
+    with patch.object(compare, 'locked') as launch, patch.object(compare.subprocess, 'check_output', return_value='fixture'):
+        refused(lambda: compare.run_comparison(invalid), 'An invalid decoder selector reached a launch.',
+                expected='decoder_device must be')
+        launch.assert_not_called()
+        assert not (root / 'refused-selector').exists()
+    with patch.object(sys, 'argv', ['compare.py', 'run', '--measure', 'fixture', '--baseline', str(paths['baseline']),
+                                    '--candidate', str(paths['candidate']), '--assets', str(assets), '--types', 'q4_k',
+                                    '--out', str(root / 'refused-cli'), '--decoder-device', 'cuda']):
+        try:
+            compare.main()
+        except SystemExit as failure:
+            assert failure.code == 2
+        else:
+            raise AssertionError('The command line accepted an invalid decoder selector.')
+    assert not (root / 'refused-cli').exists()
+
+    valid_metal_stage = {'input': 'fixture-input', 'device': 'MTL0', 'decoding': 'greedy', 'decode_on': 'device',
+                         'threads': 4, 'run': 0, 'audio_seconds': 6., 'core_total_ms': 50., 'decoder_ms': 5.}
+    for side in ['baseline', 'candidate', 'anchor']:
+        path = metal_run / 'q4_k' / side / 'stages.jsonl'
+        for key, value in [('decode_on', 'cpu'), ('device', 'Metal'), ('decoding', 'beam'), ('threads', 8)]:
+            path.write_text(json.dumps({**valid_metal_stage, key: value}) + '\n')
+            refused(lambda: compare.summarize(metal_run), f'A mislabeled {side} metal stage row was summarized.',
+                    expected=f'{key}={value!r}')
+        path.write_text(json.dumps(valid_metal_stage) + '\n')
+    for side, phase, label in [('anchor', 'latency-0', 'latency round'), ('candidate', 'quality-0', 'quality')]:
+        path = metal_run / 'q4_k' / side / phase / 'result.json'
+        original = compare.read(path)
+        compare.write(path, {**original, 'decoder_device': 'cpu', 'decode_on_cpu': True, 'ready': {'model': {'threads': 4}}})
+        refused(lambda: compare.summarize(metal_run), f'A CPU {label} result was summarized under a metal manifest.',
+                expected="records decoder_device='cpu'")
+        compare.write(path, original)
+    valid_cpu_stage = {**valid_metal_stage, 'device': 'gpu', 'decode_on': 'cpu'}
+    cpu_stage = default_run / 'q4_k' / 'baseline' / 'stages.jsonl'
+    for key, value in [('decode_on', 'device'), ('decoding', 'beam'), ('threads', 8)]:
+        cpu_stage.write_text(json.dumps({**valid_cpu_stage, key: value}) + '\n')
+        refused(lambda: compare.summarize(default_run), 'A mislabeled CPU stage row was summarized.',
+                expected=f'{key}={value!r}')
+    cpu_stage.write_text(json.dumps(valid_cpu_stage) + '\n')
+    compare.summarize(default_run)
+    manifest = compare.read(metal_run / 'run.json')
+    manifest['conditions']['stage_expectations']['decode_on'] = 'cpu'
+    compare.write(metal_run / 'run.json', manifest)
+    refused(lambda: compare.summarize(metal_run), 'Stage expectations contradicting the decoder were summarized.',
+            expected='disagree')
+    manifest['conditions']['stage_expectations']['decode_on'] = 'device'
+    compare.write(metal_run / 'run.json', manifest)
+    compare.summarize(metal_run)
+
+    campaign = compare.read(compare.HERE / 'campaign.json')
+    page = render.report_html({**compare.read(metal_run / 'summary.json'), 'title': 'Fixture', 'reason': 'Fixture',
+                               'status': 'conditional'}, 'fixture.json', campaign)
+    assert 'Metal decoding on MTL0 with 4 CPU load threads.' in page
+    assert 'CPU decoding with' not in page and campaign['thread_setting_note'] not in page
+    cpu_summary = compare.read(default_run / 'summary.json')
+    page = render.report_html({**cpu_summary, 'title': 'Fixture', 'reason': 'Fixture', 'status': 'conditional'},
+                              'fixture.json', campaign)
+    assert 'CPU decoding with 4 threads.' in page and campaign['thread_setting_note'] in page
+    legacy = {**cpu_summary, 'conditions': {key: value for key, value in cpu_summary['conditions'].items()
+                                            if key != 'decoder_device'}}
+    page = render.report_html({**legacy, 'title': 'Fixture', 'reason': 'Fixture', 'status': 'conditional'},
+                              'fixture.json', campaign)
+    assert 'CPU decoding with 4 threads.' in page and 'Metal decoding' not in page
+
+
+def cpu_decoder_supplement_gates(root):
+    root.mkdir()
+    import importlib.util
+    import short
+    module = importlib.util.spec_from_file_location('latency_repeat_gate', compare.HERE / 'latency-repeat.py')
+    repeat = importlib.util.module_from_spec(module); module.loader.exec_module(repeat)
+    binary = root / 'binary'; binary.write_bytes(b'fixture')
+    identity = {'path': str(binary), 'sha256': compare.sha(binary)}
+    build = {'source_verified': True, 'speech': identity}
+    model = {'type': 'q4_k', **identity}
+    assets = root / 'assets.json'
+    compare.write(assets, {'models': [model], 'input_hash': 'fixture'})
+    short_manifest = {'scope': 'full', 'measure_id': '003', 'types': ['q4_k'], 'assets_sha256': compare.sha(assets),
+                      'input_hash': 'fixture', 'builds': {'baseline': build, 'candidate': build},
+                      'execution_environments': {'baseline': {}, 'candidate': {}},
+                      'models': {'q4_k': {'sha256': identity['sha256']}},
+                      'conditions': {'python': platform.python_version(), 'python_executable': sys.executable, 'rounds': 3,
+                                     'latency_count': 30, 'quality_count': 650, 'decode_on_cpu': True, 'threads': 4,
+                                     'runner_sha256': {'worker.py': compare.sha(compare.HERE / 'worker.py')},
+                                     'latency_definition': 'Fixture timer.', 'aggregation': 'Median per input, then percentiles.'}}
+    short_primary = root / 'short-primary'; short_primary.mkdir()
+
+    def save_short():
+        compare.write(short_primary / 'run.json', short_manifest)
+        compare.write(short_primary / 'summary.json', {'scope': 'full', 'measure_id': '003',
+                                                       'evidence': {'run_manifest_sha256': compare.sha(short_primary / 'run.json')}})
+
+    data = {'source_assets_sha256': compare.sha(assets), 'source_input_hash': 'fixture', 'models': [model]}
+    save_short()
+    assert short.primary(short_primary, data)['measure_id'] == '003'
+    short_manifest['conditions']['decode_on_cpu'] = False; save_short()
+    refused(lambda: short.primary(short_primary, data), 'A metal-decoder primary run entered the short supplement.',
+            expected='three-round 30/650 CPU-decoder')
+    short_manifest['conditions']['decode_on_cpu'] = True
+
+    rows = [{'file': f'{stratum}-{index}.wav', 'pcm_path': str(binary), 'pcm_sha256': identity['sha256'],
+             'seconds': seconds, 'stratum': stratum, 'reference': 'reference'}
+            for stratum, seconds in [('6-10s', 6), ('10-20s', 12), ('20-30s', 24)] for index in range(10)]
+    compare.write(assets, {'subset': rows, 'models': [model], 'input_hash': 'fixture'})
+    repeat_manifest = {'scope': 'full', 'measure_id': 'fixture', 'types': ['q4_k'], 'assets_sha256': compare.sha(assets),
+                       'input_hash': 'fixture', 'builds': {side: build for side in ['baseline', 'candidate']},
+                       'execution_environments': {side: {} for side in ['baseline', 'candidate']},
+                       'models': {'q4_k': {'sha256': identity['sha256']}},
+                       'conditions': {'python': platform.python_version(), 'python_executable': sys.executable, 'rounds': 3,
+                                      'latency_count': 30, 'quality_count': 650, 'decode_on_cpu': True, 'threads': 4,
+                                      'runner_sha256': {name: compare.sha(compare.HERE / name)
+                                                        for name in ['compare.py', 'worker.py']},
+                                      'latency_definition': 'Fixture timer.', 'aggregation': 'Median per input, then percentiles.'}}
+    repeat_primary = root / 'repeat-primary'; repeat_primary.mkdir()
+
+    def save_repeat():
+        compare.write(repeat_primary / 'run.json', repeat_manifest)
+        compare.write(repeat_primary / 'summary.json', {'scope': 'full', 'measure_id': 'fixture',
+                                                        'evidence': {'run_manifest_sha256': compare.sha(repeat_primary / 'run.json')}})
+
+    save_repeat()
+    for side in ['baseline', 'candidate']:
+        for rnd in range(3):
+            directory = repeat_primary / 'q4_k' / side / f'latency-{rnd}'; directory.mkdir(parents=True)
+            compare.write(directory / 'result.json', {'type': 'q4_k', 'round': rnd, 'side': side,
+                                                      'started_utc': f'2026-01-01T00:00:{rnd:02}Z'})
+    arguments = SimpleNamespace(primary_run=repeat_primary, assets=assets, runner=compare.HERE, out=root / 'unused')
+    assert len(repeat.primary(arguments)[2]) == 6
+    repeat_manifest['conditions']['decode_on_cpu'] = False; save_repeat()
+    refused(lambda: repeat.primary(arguments), 'A metal-decoder primary run entered the latency repeat.',
+            expected='three-round 30/650 CPU-decoder')
+    repeat_manifest['conditions']['decode_on_cpu'] = True
 
 
 class Links(HTMLParser):
@@ -222,8 +459,10 @@ def main():
     assert compare.percentile([1., 4., 9.], .9) == 8.
     with tempfile.TemporaryDirectory(prefix='haas-campaign-check-') as temporary:
         performance_build_checks(Path(temporary) / 'performance-builds')
+        decoder_device_run_checks(Path(temporary) / 'decoder-device')
         from worker_check import check as check_worker_threads
         check_worker_threads(Path(temporary) / 'worker-threads')
+        cpu_decoder_supplement_gates(Path(temporary) / 'cpu-decoder-supplements')
         review_regressions(Path(temporary))
         from short_check import check as check_short_inputs
         check_short_inputs(Path(temporary) / 'short-prefixes')
@@ -256,7 +495,7 @@ def main():
             assert actual['literal_edits'] == item['quality']['literal_edits']
             assert actual['repository_edits'] == item['quality']['repository_cer_edits']
         print('Previous 650-input scores reproduced for all four final types.')
-    print('Arithmetic, pairing, refusal gates, environment selection and standalone report checks passed.')
+    print('Arithmetic, pairing, refusal gates, decoder-device selection, environment selection and standalone report checks passed.')
 
 
 if __name__ == '__main__':

@@ -27,6 +27,10 @@ BINARY_EXPERIMENT_ENVIRONMENT = {'SPEECH_HAAS_CPU_REPACK', 'SPEECH_HAAS_FFN_F16'
                                  'SPEECH_HAAS_KDA_PREFIX_CACHE'} | DIAGNOSTIC_EXPERIMENT_ENVIRONMENT
 EXPERIMENT_ENVIRONMENT = BINARY_EXPERIMENT_ENVIRONMENT | {'GGML_METAL_MM_TILE_N'}
 
+# The decoder placement shared by every side of one run: the worker's --device value and its decode-on-CPU argument.
+# A Metal run turns the CPU-decoder flag explicitly false, in the =form the production command line accepts.
+DECODER_DEVICES = {'cpu': ('gpu', '--decode-on-cpu'), 'metal': ('MTL0', '--decode-on-cpu=false')}
+
 
 def execution_environment(recorded, *, diagnostic=False):
     """Return the launch environment only when every backend override is explicitly recorded and allowed."""
@@ -50,6 +54,12 @@ def require_evaluation_build(build):
 
 
 def run(spec):
+    decoder_device = spec.get('decoder_device', 'cpu')
+    if decoder_device not in DECODER_DEVICES:
+        raise ValueError(f'decoder_device must be cpu or metal, not {decoder_device!r}.')
+    decode_on_cpu = decoder_device == 'cpu'
+    if 'decode_on_cpu' in spec and spec['decode_on_cpu'] is not decode_on_cpu:
+        raise ValueError(f"decode_on_cpu {spec['decode_on_cpu']!r} disagrees with the requested {decoder_device!r} decoder.")
     child_environment = execution_environment(spec['environment'], diagnostic=spec.get('phase') == 'diagnostic')
     if spec['phase'] != 'pgo_train':
         require_evaluation_build(spec['build'])
@@ -72,10 +82,11 @@ def run(spec):
             raise ValueError('The model or binary changed after the manifest was written.')
     directory = Path(spec['directory'])
     directory.mkdir(parents=True, exist_ok=False)
-    command = [spec['build']['speech']['path'], 'worker', spec['model']['path'], '--device', 'gpu']
+    device, decode_argument = DECODER_DEVICES[decoder_device]
+    command = [spec['build']['speech']['path'], 'worker', spec['model']['path'], '--device', device]
     if threads:
         command += ['--threads', str(threads)]
-    command += ['--no-warmup', '--decode-on-cpu']
+    command += ['--no-warmup', decode_argument]
     memory_log = directory / 'memory.log'
     messages = queue.Queue()
     with (directory / 'stderr.log').open('w') as log:
@@ -140,6 +151,20 @@ def run(spec):
             if type(resolved) is not int or resolved != expected:
                 raise ValueError(f'Worker ready.model.threads is {resolved!r}; expected {expected}.')
             thread_selection['resolved_threads'] = resolved
+            # The ready message is request-condition evidence of the launch, not an observation of kernel dispatch.
+            model_options = ready.get('model', {}).get('options')
+            option_default = None
+            if isinstance(model_options, list):
+                option_default = next((option.get('default') for option in model_options
+                                       if isinstance(option, dict) and option.get('name') == 'decode_on_cpu'), None)
+            if decoder_device == 'metal':
+                ready_device = ready.get('model', {}).get('device')
+                if ready_device != 'MTL0':
+                    raise ValueError(f'Worker ready.model.device is {ready_device!r}; a metal decoder run requires MTL0.')
+                requested_decode = ready.get('defaults', {}).get('decode_on_cpu')
+                if type(requested_decode) is not bool or requested_decode:
+                    raise ValueError(f'Worker ready.defaults.decode_on_cpu is {requested_decode!r}; '
+                                     'a metal decoder run requires the JSON boolean false.')
             warm = sorted(spec['warmup'], key=lambda r: (-r['seconds'], r['file']))
             warmed = [recognize(record, f'warm-{i}') for i, record in enumerate(warm)]
             measured = []
@@ -164,6 +189,10 @@ def run(spec):
         raise RuntimeError(f'Missing peak memory footprint in {memory_log}.')
     report = {'started_utc': started, 'phase': spec['phase'], 'round': spec['round'], 'side': spec['side'],
               'type': spec['model']['type'], 'command': command, 'environment': spec['environment'], 'build': spec['build'], 'ready': ready,
+              'decoder_device': decoder_device, 'decode_on_cpu': decode_on_cpu,
+              'decoder_evidence': {'ready_model_device': ready.get('model', {}).get('device'),
+                                   'ready_defaults_decode_on_cpu': ready.get('defaults', {}).get('decode_on_cpu'),
+                                   'model_option_default_decode_on_cpu': option_default},
               'load_seconds': load_seconds, 'first_request': warmed[0], 'warmup_count': len(warmed),
               'memory': memory, 'records': measured, 'thread_selection': thread_selection}
     report['worker_source_sha256'] = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
