@@ -22,14 +22,17 @@ def check(root):
             'phase': 'latency', 'round': 0, 'side': 'fixture', 'warmup': [record], 'records': [record]}
 
     def launch(name, requested, expected, resolved, accepted, phase='latency', build_flags=None, environment=None,
-               decoder_device=None, ready_model=None, ready_defaults=None, error=None):
+               decoder_device=None, ready_model=None, ready_defaults=None, error=None, overrides=None,
+               terminal=None, progress=None):
         spec = {**base, 'threads': requested, 'directory': str(root / name), 'phase': phase,
-                'build': {**base['build'], **(build_flags or {})}, 'environment': environment or {}}
+                'build': {**base['build'], **(build_flags or {})}, 'environment': environment or {}, **(overrides or {})}
         if expected is not None:
             spec['expected_threads'] = expected
         if decoder_device is not None:
             spec['decoder_device'] = decoder_device
             spec['decode_on_cpu'] = decoder_device == 'cpu'
+        request_ids = ([f'warm-{i}' for i in range(len(spec['warmup']))]
+                       + [str(i) for i in range(len(spec['records']))])
         sent, flushes = [], []
 
         class Input(io.StringIO):
@@ -51,8 +54,13 @@ def check(root):
             if ready_defaults is not None:
                 ready['defaults'] = ready_defaults
             messages = [ready]
-            messages.extend({'type': 'end', 'id': request_id, 'stop': 'complete', 'text': 'same'}
-                            for request_id in ['warm-0', '0'])
+            for request_id in request_ids:
+                if progress and request_id in progress:
+                    messages.append({'type': 'progress', 'id': request_id})
+                end = {'type': 'end', 'id': request_id, 'stop': 'complete', 'text': 'same'}
+                if terminal and request_id in terminal:
+                    end.update(terminal[request_id])
+                messages.append(end)
             return SimpleNamespace(stdout=io.StringIO(''.join(json.dumps(m) + '\n' for m in messages)),
                                    stdin=Input(), wait=lambda timeout: 0, poll=lambda: 0)
 
@@ -77,7 +85,7 @@ def check(root):
                                                       'ready_defaults_decode_on_cpu': (ready_defaults or {}).get('decode_on_cpu'),
                                                       'model_option_default_decode_on_cpu': option_default}
                 messages = [json.loads(line) for line in sent]
-                assert [m['id'] for m in messages if m['type'] == 'transcribe'] == ['warm-0', '0']
+                assert [m['id'] for m in messages if m['type'] == 'transcribe'] == request_ids
                 return sent, flushes, messages
             try:
                 worker.run(spec)
@@ -167,3 +175,104 @@ def check(root):
                 raise AssertionError('An invalid decoder selection was accepted.')
             start.assert_not_called()
             assert not (root / 'invalid-decoder').exists()
+
+    # The opt-in keyword experiment: mixed plain and A/B option requests under real warm sorting and round rotation.
+    def keyword_record(name, seconds, request_options=None):
+        return {**record, 'file': f'{name}.wav', 'seconds': seconds,
+                **({'request_options': request_options} if request_options is not None else {})}
+
+    alpha = {'keywords': 'Grüße\n  übermorgen', 'keywords_alpha': 2, 'keywords_guard': False}
+    bravo = {'keywords': 'bon «matin»\tça va'}
+    charlie = {'keywords': 'żółć, naïve\r\n日本語', 'keywords_alpha': 0.25, 'keywords_guard': True}
+    warm = [keyword_record('warm-alpha', 1., alpha), keyword_record('warm-plain', 3.),
+            keyword_record('warm-bravo', 2., bravo)]
+    measured = [keyword_record('measured-plain', 1., {}), keyword_record('measured-charlie', 1., charlie),
+                keyword_record('measured-bravo', 1., bravo)]
+    sent, flushes, messages = launch('pass-keyword-options', 4, None, 4, True,
+                                     overrides={'warmup': warm, 'records': measured, 'round': 1},
+                                     progress={'warm-1', '2'},
+                                     terminal={'0': {'languages': ['fr'], 'untimed': 'recorded'},
+                                               'warm-2': {'languages': ['de']}})
+    assert flushes == list(range(1, len(sent) + 1))
+    expected_wire = [{'type': 'transcribe', 'id': 'warm-0', 'sample_rate': 16000, 'timestamps': False},
+                     {'type': 'transcribe', 'id': 'warm-1', 'sample_rate': 16000, 'timestamps': False, **bravo},
+                     {'type': 'transcribe', 'id': 'warm-2', 'sample_rate': 16000, 'timestamps': False, **alpha},
+                     {'type': 'transcribe', 'id': '0', 'sample_rate': 16000, 'timestamps': False, **charlie},
+                     {'type': 'transcribe', 'id': '1', 'sample_rate': 16000, 'timestamps': False, **bravo},
+                     {'type': 'transcribe', 'id': '2', 'sample_rate': 16000, 'timestamps': False}]
+    assert [m for m in messages if m['type'] == 'transcribe'] == expected_wire
+    assert [sent[3 * i + 2] for i in range(6)] == [json.dumps(m, ensure_ascii=False) + '\n' for m in expected_wire]
+    chunks = [base64.b64decode(m['pcm']) for m in messages if m['type'] == 'chunk' and m['id'] == '0']
+    assert [len(chunk) for chunk in chunks] == [32768, 64] and b''.join(chunks) == pcm.read_bytes()
+    for message in messages:
+        if message['type'] == 'transcribe' and ('keywords_alpha' in message or 'keywords_guard' in message):
+            assert message['keywords']
+    report = json.loads((root / 'pass-keyword-options' / 'result.json').read_text())
+    assert all(set(entry) == {'id', 'file', 'request_options', 'timestamps', 'terminal'}
+               for entry in report['request_provenance'])
+    assert [(entry['id'], entry['file'], entry['request_options'], entry['timestamps'])
+            for entry in report['request_provenance']] == [
+        ('warm-0', 'warm-plain.wav', {}, False), ('warm-1', 'warm-bravo.wav', bravo, False),
+        ('warm-2', 'warm-alpha.wav', alpha, False), ('0', 'measured-charlie.wav', charlie, False),
+        ('1', 'measured-bravo.wav', bravo, False), ('2', 'measured-plain.wav', {}, False)]
+    terminals = {entry['id']: entry['terminal'] for entry in report['request_provenance']}
+    assert terminals['0'] == {'type': 'end', 'id': '0', 'stop': 'complete', 'text': 'same',
+                              'languages': ['fr'], 'untimed': 'recorded'}
+    assert terminals['warm-2'] == {'type': 'end', 'id': 'warm-2', 'stop': 'complete', 'text': 'same',
+                                   'languages': ['de']}
+    for request_id in ['warm-0', 'warm-1', '1', '2']:
+        assert terminals[request_id] == {'type': 'end', 'id': request_id, 'stop': 'complete', 'text': 'same'}
+    launch('pass-plain-schema', 4, None, 4, True)
+    assert 'request_provenance' not in json.loads((root / 'pass-plain-schema' / 'result.json').read_text())
+    _, _, messages = launch('pass-quality-warm-keywords', 4, None, 4, True, phase='quality',
+                            overrides={'warmup': [keyword_record('warm-alpha', 1., alpha)],
+                                       'records': [keyword_record('measured-plain', 1.)]},
+                            terminal={'0': {'tokens': [], 'segments': []}})
+    assert [m for m in messages if m['type'] == 'transcribe'] == [
+        {'type': 'transcribe', 'id': 'warm-0', 'sample_rate': 16000, 'timestamps': False, **alpha},
+        {'type': 'transcribe', 'id': '0', 'sample_rate': 16000, 'timestamps': True}]
+    report = json.loads((root / 'pass-quality-warm-keywords' / 'result.json').read_text())
+    assert [(entry['id'], entry['request_options'], entry['timestamps'], entry['terminal'])
+            for entry in report['request_provenance']] == [
+        ('warm-0', alpha, False, {'type': 'end', 'id': 'warm-0', 'stop': 'complete', 'text': 'same'}),
+        ('0', {}, True, {'type': 'end', 'id': '0', 'stop': 'complete', 'text': 'same', 'tokens': [], 'segments': []})]
+    for overrides, reason in [
+            ({'keywords': 'x'}, 'spec.keywords is misplaced'),
+            ({'request_options': {'keywords': 'x'}}, 'spec.request_options is misplaced'),
+            ({'records': [{**record, 'keywords': 'x'}]}, 'record.keywords is misplaced'),
+            ({'records': [{**record, 'request_options': ['keywords']}]}, 'must be a JSON object'),
+            ({'records': [{**record, 'request_options': None}]}, 'must be a JSON object'),
+            ({'records': [{**record, 'request_options': {'keywords': 3}}]}, 'must be a JSON string'),
+            ({'warmup': [{**record, 'request_options': {'keywords': '\n\t '}}]}, 'only whitespace'),
+            ({'records': [{**record, 'request_options': {'keywords': 'a\x00b'}}]}, 'NUL character'),
+            ({'records': [{**record, 'request_options': {'keywords': '\ud800'}}]}, 'strict UTF-8'),
+            ({'records': [{**record, 'request_options': {'keywords': '', 'keywords_alpha': 0.5}}]},
+             'keywords_alpha requires a nonempty'),
+            ({'records': [{**record, 'request_options': {'keywords_guard': True}}]}, 'keywords_guard requires a nonempty'),
+            ({'records': [{**record, 'request_options': {'keywords': 'x', 'keywords_alpha': True}}]}, 'finite number'),
+            ({'records': [{**record, 'request_options': {'keywords': 'x', 'keywords_alpha': 0}}]}, 'finite number'),
+            ({'records': [{**record, 'request_options': {'keywords': 'x', 'keywords_alpha': -0.5}}]}, 'finite number'),
+            ({'records': [{**record, 'request_options': {'keywords': 'x', 'keywords_alpha': float('nan')}}]}, 'finite number'),
+            ({'records': [{**record, 'request_options': {'keywords': 'x', 'keywords_alpha': float('inf')}}]}, 'finite number'),
+            ({'records': [{**record, 'request_options': {'keywords': 'x', 'keywords_alpha': 1e300}}]}, 'float32 cast'),
+            ({'records': [{**record, 'request_options': {'keywords': 'x', 'keywords_alpha': 1e-300}}]}, 'float32 cast'),
+            ({'records': [{**record, 'request_options': {'keywords': 'x', 'keywords_alpha': 10**400}}]}, 'float32 cast'),
+            ({'records': [{**record, 'request_options': {'keywords': 'x', 'keywords_guard': 'true'}}]}, 'JSON boolean'),
+            ({'records': [{**record, 'request_options': {'keywords': 'x', 'keywords_guard': 1}}]}, 'JSON boolean'),
+            ({'records': [{**record, 'request_options': {'keywords': 'x', 'keywords_beta': 1}}]},
+             'request_options.keywords_beta is not an allowed'),
+            ({'records': [{**record, 'request_options': {'keywords': 'x', 'timestamps': True}}]},
+             'request_options.timestamps is not an allowed'),
+            ({'records': [{**record, 'request_options': {'keywords': 'x'}, 'timestamps': False}]}, 'record.timestamps'),
+            ({'records': [{**record, 'request_options': {'keywords': 'x'}}, {**record, 'timestamps': False}]},
+             'record.timestamps'),
+            ({'phase': 'quality', 'records': [{**record, 'request_options': {'keywords': 'x'}}]}, 'measured quality')]:
+        with patch.object(worker.subprocess, 'Popen') as start:
+            try:
+                worker.run({**base, 'threads': 4, 'directory': str(root / 'invalid-options'), **overrides})
+            except ValueError as failure:
+                assert reason in str(failure), failure
+            else:
+                raise AssertionError('An invalid keyword request option was accepted.')
+            start.assert_not_called()
+            assert not (root / 'invalid-options').exists()

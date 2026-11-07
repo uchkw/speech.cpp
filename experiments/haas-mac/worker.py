@@ -3,11 +3,13 @@ import base64
 from datetime import datetime, timezone
 import json
 import hashlib
+import math
 import os
 from pathlib import Path
 import queue
 import re
 import signal
+import struct
 import subprocess
 import threading
 import time
@@ -54,6 +56,80 @@ def require_evaluation_build(build):
         raise ValueError('A build marked performance_evaluation_eligible=false cannot run an evaluation; use the dedicated pgo_train driver.')
 
 
+# The opt-in synthetic keyword experiment: request_options on individual warmup and measured records only. The flat
+# wire fields below are strictly allowlisted and validated pre-launch; raw keyword text is never coerced or logged.
+KEYWORD_REQUEST_OPTIONS = ('keywords', 'keywords_alpha', 'keywords_guard')
+
+
+def plan_requests(spec):
+    """Validate every warmup and measured record pre-launch; precompute the exact execution associations."""
+    for key in KEYWORD_REQUEST_OPTIONS:
+        if key in spec:
+            raise ValueError(f'spec.{key} is misplaced; keyword options belong in record.request_options.')
+    if 'request_options' in spec:
+        raise ValueError('spec.request_options is misplaced; keyword options belong in record.request_options.')
+    warm = sorted(spec['warmup'], key=lambda r: (-r['seconds'], r['file']))
+    records = spec['records']
+    shift = (spec['round'] * 7) % len(records)
+    ordered = ([(f'warm-{i}', record, False) for i, record in enumerate(warm)]
+               + [(str(i), record, spec['phase'] == 'quality')
+                  for i, record in enumerate(records[shift:] + records[:shift])])
+    opted_in = any('request_options' in record for record in (*spec['warmup'], *records))
+    for _, record, timestamps in ordered:
+        for key in KEYWORD_REQUEST_OPTIONS:
+            if key in record:
+                raise ValueError(f'record.{key} is misplaced; keyword options belong in record.request_options.')
+        if opted_in and 'timestamps' in record:
+            raise ValueError('record.timestamps is phase-controlled and would be silently ignored.')
+        if 'request_options' not in record:
+            continue
+        options = record['request_options']
+        if type(options) is not dict:
+            raise ValueError('record.request_options must be a JSON object.')
+        for key in options:
+            if key not in KEYWORD_REQUEST_OPTIONS:
+                raise ValueError(f'request_options.{key} is not an allowed keyword request option.')
+        if 'keywords' in options and type(options['keywords']) is not str:
+            raise ValueError('request_options.keywords must be a JSON string.')
+        keywords = options.get('keywords', '')
+        if keywords:
+            if not keywords.strip():
+                raise ValueError('request_options.keywords must not be only whitespace and blank lines.')
+            # The worker takes keywords as a c_str: a NUL would truncate it, and lone surrogates cannot cross the UTF-8 wire.
+            if '\x00' in keywords:
+                raise ValueError('request_options.keywords must not contain a NUL character.')
+            try:
+                keywords.encode('utf-8')
+            except UnicodeEncodeError:
+                raise ValueError('request_options.keywords must be strict UTF-8 text.') from None
+            if timestamps:
+                raise ValueError('request_options.keywords is not allowed on a measured quality request; '
+                                 'warmup requests may carry them.')
+        for key in ('keywords_alpha', 'keywords_guard'):
+            if key in options and not keywords:
+                raise ValueError(f'request_options.{key} requires a nonempty request_options.keywords.')
+        if 'keywords_alpha' in options:
+            alpha = options['keywords_alpha']
+            if type(alpha) not in (int, float) or alpha <= 0 or (type(alpha) is float and not math.isfinite(alpha)):
+                raise ValueError('request_options.keywords_alpha must be a finite number greater than 0.')
+            try:
+                alpha32 = struct.unpack('<f', struct.pack('<f', alpha))[0]
+            except (struct.error, OverflowError):
+                alpha32 = math.inf
+            if not math.isfinite(alpha32) or alpha32 <= 0:
+                raise ValueError('request_options.keywords_alpha must remain finite and greater than 0 '
+                                 'after the float32 cast.')
+        if 'keywords_guard' in options and type(options['keywords_guard']) is not bool:
+            raise ValueError('request_options.keywords_guard must be a JSON boolean.')
+    provenance = None
+    if opted_in:
+        provenance = [{'id': request_id, 'file': record['file'],
+                       'request_options': dict(record['request_options']) if 'request_options' in record else {},
+                       'timestamps': timestamps}
+                      for request_id, record, timestamps in ordered]
+    return ordered[:len(warm)], ordered[len(warm):], provenance
+
+
 def run(spec):
     decoder_device = spec.get('decoder_device', 'cpu')
     if decoder_device not in DECODER_DEVICES:
@@ -74,6 +150,7 @@ def run(spec):
         raise ValueError('expected_threads must equal the explicit thread count.')
     thread_selection = {'requested_mode': 'explicit' if threads else 'auto',
                         'requested_threads': threads, 'expected_threads': expected}
+    warm_order, measured_order, provenance = plan_requests(spec)
     for item in [spec['build']['speech'], spec['model']]:
         digest = hashlib.sha256()
         with Path(item['path']).open('rb') as f:
@@ -143,6 +220,28 @@ def run(spec):
                     'seconds': elapsed, 'reference': record['reference'], 'text': result['text'],
                     'tokens': result.get('tokens'), 'segments': result.get('segments')}
 
+        if provenance:
+            # Opt-in adapter only: plain controls keep their original bytes; the terminal is taken by reference, not copied.
+            entries = {entry['id']: entry for entry in provenance}
+            plain_send, plain_receive = send, receive
+
+            def keyword_send(message):
+                if message.get('type') == 'transcribe':
+                    options = entries[message['id']]['request_options']
+                    if options:
+                        message = {**message, **options}
+                plain_send(message)
+
+            def keyword_receive():
+                message = plain_receive()
+                if isinstance(message, dict) and message.get('type') == 'end':
+                    entry = entries.get(message.get('id'))
+                    if entry is not None:
+                        entry['terminal'] = message
+                return message
+
+            send, receive = keyword_send, keyword_receive
+
         try:
             ready = receive()
             load_seconds = time.perf_counter() - start
@@ -166,13 +265,10 @@ def run(spec):
                 if type(requested_decode) is not bool or requested_decode:
                     raise ValueError(f'Worker ready.defaults.decode_on_cpu is {requested_decode!r}; '
                                      'a metal decoder run requires the JSON boolean false.')
-            warm = sorted(spec['warmup'], key=lambda r: (-r['seconds'], r['file']))
-            warmed = [recognize(record, f'warm-{i}') for i, record in enumerate(warm)]
+            warmed = [recognize(record, request_id, timestamps) for request_id, record, timestamps in warm_order]
             measured = []
-            records = spec['records']
-            shift = (spec['round'] * 7) % len(records)
-            for i, record in enumerate(records[shift:] + records[:shift]):
-                measured.append(recognize(record, str(i), spec['phase'] == 'quality'))
+            for request_id, record, timestamps in measured_order:
+                measured.append(recognize(record, request_id, timestamps))
             process.stdin.close()
             if process.wait(timeout=30) != 0:
                 raise RuntimeError('Worker exited with failure.')
@@ -196,6 +292,9 @@ def run(spec):
                                    'model_option_default_decode_on_cpu': option_default},
               'load_seconds': load_seconds, 'first_request': warmed[0], 'warmup_count': len(warmed),
               'memory': memory, 'records': measured, 'thread_selection': thread_selection}
+    if provenance:
+        # Keyword launch defaults stay unobserved unless the worker reports them in ready, which the report already keeps.
+        report['request_provenance'] = provenance
     report['worker_source_sha256'] = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
     (directory / 'result.json').write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n')
     print(f"{spec['model']['type']} {spec['side']} {spec['phase']} round {spec['round']}: {len(measured)} requests", flush=True)
