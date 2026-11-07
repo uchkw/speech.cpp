@@ -1,12 +1,13 @@
 # Trial 016a: write attention products in merged-head order
 
-Status: builds and initial checks done, corrected checks pending. The product and helper builds completed, the
-allocation-only encoder diagnostic ran on the initial original and candidate snapshots with matching range records,
-and the initial CPU-reference comparisons passed 46/46 each. The initial original direct test aborted on a malformed
-fixture: case 47 used a transposed first operand that public `ggml_mul_mat` rejects for every backend, so it tested
-no kernel and no direct gate completed. The corrected fixture is committed and source-reviewed; its direct and
-reference runs, related regressions, normal encoder execution, fusion/dispatch counts and timing are pending. This
-is an independent experiment, not an adopted speed-up. Tracking issue:
+Status: complete and rejected; the default stays off (`GGML_METAL_HEAD_STORE=0`, unset=0) and nothing is adopted.
+The corrected checks, related regressions, normal encoder execution, official F32 stages and the worker runs all
+completed. The Q4_K screen (+2.786% paired median, 9/9 inputs faster, all three rounds improving) justified only the
+Q4_K full run, which measured +0.316% on 17/30 inputs with ON p90/p99 above OFF: insufficient full whole-request
+benefit, so the prototype is rejected. Q8_0 and F16 remain screen-only and short6 was not run. Final numbers and
+decision: `experiments/haas-mac/016-attention-head-store-evaluation.md` with machine-readable companion
+`experiments/haas-mac/016-attention-head-store-evaluation.json`. This is an independent experiment, not an adopted
+speed-up, and its results are never combined with the separate quantization study. Tracking issue:
 https://github.com/uchkw/speech.cpp/issues/1.
 
 ## Source boundary
@@ -24,7 +25,17 @@ https://github.com/uchkw/speech.cpp/issues/1.
   `9066e6f2471eabed8632ded32d4514b6429d9790`, with frozen runner `bc9198776ba66074d6fca55fa2c0a79be7690876`; the
   pins above remain historical.
 - Corrected original-kernel cases-only ggml: `ccadee2edb3db66f37e840e921f0d2b2c5940932`; corrected candidate ggml:
-  `f9d1f765dcc119403206775a137d5a03448c7e13`.
+`f9d1f765dcc119403206775a137d5a03448c7e13`; corrected check parent `d930bbf5185c41c85b8175834666a2532c4a157b`.
+The measured normal results used each side's retained product: the original ordinary-encoder helper was linked to
+the retained original product — speech parent `114c514430c8aa1455c077819f8e72e674a48b75` with ggml
+`e1a9ac12edbb57402618fd6936598603f5ee6266` — while the candidate normal helpers were linked to the retained
+candidate product — speech parent `efa6a4ea491a576198a1f0dc2a7d8159f3646a48` with ggml
+`9066e6f2471eabed8632ded32d4514b6429d9790`. Each ordinary helper is a distinct executable linked to the relevant
+product libraries, not one shared binary; only the primary OFF/ON worker timings used the same retained candidate
+executable. The corrected commits above are test-only — shared synthetic test header, linked ggml revision and
+experiment note — and served only the corrected standalone checks. Only the original and candidate product builds
+have matched 74/74 compile/link flags; the fixed anchor `f976ebd8e2fca1f15ddc2e6fc9f99e7090b0f9ea` used its own
+respective executable with implicit architecture/SDK flags and is context only.
 - Parent branch: `codex/exp-haas-016`; ggml branch: `codex/haas-mac-016-head-store`.
 - Worktree: `outputs/worktrees/haas-mac-016`.
 - ggml origin fetch: `https://github.com/uchkw/ggml.git`; push: `git@github.com:uchkw/ggml.git`.
@@ -67,8 +78,9 @@ d + 128*h + 1024*t
 Only the full-tile and tail-store addresses change: the row stride becomes `128*8` and the head offset becomes
 `h*128`. Input loads, half conversion, K iteration, all eight float accumulators, 64-by-32 tiles, threadgroups and
 shared-memory size stay unchanged. A function constant selects the new store, with a distinct pipeline cache key;
-the disabled pipeline retains its old key. The tensor-API implementation remains unchanged. Compiled byte equality
-must still be measured; source-level arithmetic identity alone does not prove it.
+the disabled pipeline retains its old key. The tensor-API implementation remains unchanged. Source-level arithmetic
+identity alone does not prove compiled byte equality; the recorded direct checks compare complete result bytes, not
+compiled kernel bytes.
 
 ## Fusion and allocation boundary
 
@@ -103,9 +115,9 @@ and the normal graph's OUTPUT flags and order preserved. Across Q4_K, Q8_0 and F
 ON covered 42 model/input pairs and 1,008 observed slot ranges: the 36 T>=64 pairs had 864/864 eligible ranges, all
 in the same underlying buffer and overlapping neither input, while the six T<64 pairs had 0/144 eligible. Original,
 OFF and ON matched across all 3,024 range records. Full data:
-`outputs/haas-mac-campaign/016/allocator/result.json`. This was allocation only; main encoder execution, actual
-fusion/dispatch counts and timing remain pending, and range eligibility is not a fusion count. A different
-allocation policy would require a separate proposal and measurement of its memory cost.
+`outputs/haas-mac-campaign/016/allocator/result.json`. This was allocation only, and range eligibility is not a
+fusion count; the later normal encoder execution, actual fusion/dispatch counts and worker timing are recorded in
+the evaluation. A different allocation policy would require a separate proposal and measurement of its memory cost.
 
 ## Checks prepared before the kernel
 
@@ -145,15 +157,15 @@ legal F32 head-stride-padding A negative at T=171, with rows and reduction conti
 between heads, separate from the existing row-padding strided_a; it is eligible for the CPU reference. The
 corrected inventory stays 52 direct cases (14 eligible, 38 controls), is now 47 CPU-reference, and only five mapped
 controls are Metal-direct-only. Corrected fixture bounds and unchanged guards/runtimes were independently source
-reviewed; the selector, allocator and threshold did not change. The corrected direct and reference runs, related
-regressions, normal encoder execution, official F32 stages and the worker screen are all pending; no numerical
-check of the corrected case has run, and no performance or quality conclusion is claimed. Repeat the direct checks
-from scratch before proceeding.
+reviewed; the selector, allocator and threshold did not change. The corrected runs then completed: 47 CPU-reference
+logical cases per original and candidate build, 52 direct cases plus two poison guards per original/OFF/ON process,
+14 actual ON synthetic fusions with none in original or OFF, identical complete dumps in all three processes, and
+2,755 related cases per build. Related regressions, normal encoder execution, official F32 stages and the worker
+runs also completed; see the evaluation record for numbers.
 
 Offset and strided output storage precedes its view in context creation order. Protected outputs and fusion counts
-are checked separately from numerical equality. Zero newly inserted allocation dependencies and disabled/M5 gates
-remain explicit validation requirements; M5 exclusion is presently source-reviewed only. No bound was relaxed after
-a run.
+are checked separately from numerical equality. Zero allocation dependencies were introduced, and M5 exclusion
+remains source-reviewed only. No bound was relaxed after a run.
 
 `016-encoder-layout.cpp` is a separate diagnostic source, linked against each recorded product build using that
 build's timing-target flags and libraries. It marks only the real final joint-projected output, allocates once with
@@ -163,24 +175,27 @@ fusion count. Its separate `compute` mode preserves normal command-buffer policy
 F32 bytes; it refuses to execute a T>=64 graph whose range-eligible count is zero. No new runtime diagnostics or
 intermediate retention are introduced into speech.cpp.
 
-## Deferred evaluation
+## Outcome
 
-1. Freeze source and runner snapshots before execution, retaining the original-kernel branch with identical check
-   bytes. After execution permission, build with `-j4` and hold the shared performance lock for builds and device runs.
-2. The ordinary allocator diagnostic ran first, with no added retention, and its result is preserved
-   (`outputs/haas-mac-campaign/016/allocator/result.json`): every T>=64 candidate range shared one buffer and
-   overlapped neither input, so the stop condition did not trigger and the gate was not loosened. T<64 inputs
-   remain ineligible controls.
-3. Allocation permitted fusion, but the initial direct gate aborted on the malformed fixture and no full direct
-   comparison completed; repeat the direct checks from scratch with the corrected fixture. Check direct
-   original/off/on bytes, fusion expectations, CPU references and related MUL_MAT/CONT/allocator cases. Observe
-   actual normal encoder dispatches and compare final projected output bytes.
-   Use graph-debug only in a separate diagnostic process; fusion statistics change command-buffer partitioning.
-   Do not claim normal-command-buffer fusion counts from a statistics-only run.
-4. Only if normal graphs use the fusion and correctness passes, run the warm alternating 9-input, 3-round screen
-   with explicit CPU decode and four threads for Q4_K/Q8_0/F16. Use `/usr/bin/python3` and a frozen strict runner that
-   records every `GGML_*`/`SPEECH_*` variable, binary SHA, source and model hashes. Include stage time, request latency,
-   memory, output identity and the fixed anchor; no speedup estimate is asserted here.
-5. Report the screen before requesting the full 30-input/650-quality and short6 supplement. A useful prototype needs
-   a separate no-switch production implementation and a fresh original-runtime comparison. Official F32 reference,
-   Windows/Vulkan and other Apple generations remain separate, unverified requirements.
+The plan below ran to completion and the prototype was rejected; the full record is
+`experiments/haas-mac/016-attention-head-store-evaluation.md` with machine-readable companion
+`experiments/haas-mac/016-attention-head-store-evaluation.json`.
+
+1. The ordinary allocator diagnostic confirmed eligibility with no loosened gate: every T>=64 candidate range shared
+   one buffer and overlapped neither input — 864/864 eligible ranges over 36 pairs — while T<64 inputs remained
+   ineligible controls (`outputs/haas-mac-campaign/016/allocator/result.json`).
+2. The corrected direct gate completed in all three processes: identical complete dumps, 14 actual ON synthetic
+   fusions with none in original or OFF, zero introduced allocation dependencies, 2,755 related cases per build, and
+   47/47 CPU references per build. Normal graphs used the fusion — 288 per model type, 1,152 total — with equal
+   complete final projected bytes across original/OFF/ON, and two local encoder index sequences matched every input;
+   runtime fusion counters were never initialized, so the command-buffer count is source-inferred only.
+3. The official F32 stages passed their SNR bounds through encoded output — CPU bound 90 dB with lowest printed
+   104.4 dB, GPU bound 25 dB with lowest printed 56.4 dB; full KDA/TDT was not run.
+4. The warm alternating 9-input, 3-round screen measured Q4_K +2.786% paired median with 9/9 inputs faster and all
+   three rounds improving, which justified only the Q4_K full run; Q8_0 (+0.678%, 5 faster/4 slower) and F16
+   (+0.779%, 6 faster/3 slower) stayed screen-only.
+5. The full Q4_K run measured +0.316% paired median on 17/30 inputs with ON p90/p99 above OFF and essentially
+   unchanged RTFx, so the prototype is rejected for insufficient full whole-request benefit; short6 was not run. A
+   useful prototype would still need a separate no-switch production implementation and a fresh original-runtime
+   comparison. Official F32 reference beyond encoded output, Windows/Vulkan and other Apple generations remain
+   separate, unverified requirements. No production integration or permanent ADR change was made.

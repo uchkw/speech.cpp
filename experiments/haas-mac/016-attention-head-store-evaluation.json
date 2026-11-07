@@ -1,0 +1,188 @@
+{
+  "trial": "016",
+  "record": "attention-head-store evaluation",
+  "date": "2026-11-07",
+  "decision": {
+    "outcome": "rejected",
+    "default": "off",
+    "selector": "GGML_METAL_HEAD_STORE=0|1, unset=0",
+    "reason": "insufficient full whole-request benefit",
+    "adopted": false,
+    "governing_results": "full Q4_K paired median +0.31607550808586127% with 17/30 input medians faster and ON p90/p99 above OFF",
+    "screen_justification_for_full_run": "q4_k only: +2.7859221612176466% paired median, 9/9 inputs faster, all three round medians improving",
+    "full_formats_run": ["q4_k"],
+    "screen_only_formats": ["q8_0", "f16"],
+    "short6": "not run"
+  },
+  "scope": "M2 SIMD-group F32 contiguous attention MUL_MAT -> PERMUTE -> CONT, shape [T,128,8], T>=64, same Metal buffer and no destination overlap; M5 tensor API excluded by source; model file type distinct from intermediate operand type.",
+  "sources": {
+    "base_speech": "114c514430c8aa1455c077819f8e72e674a48b75",
+    "base_ggml": "e1a9ac12edbb57402618fd6936598603f5ee6266",
+    "measured_candidate_speech": "efa6a4ea491a576198a1f0dc2a7d8159f3646a48",
+    "measured_candidate_ggml": "9066e6f2471eabed8632ded32d4514b6429d9790",
+    "candidate_speech_binary_sha256": "3d2eeacd00233c959e7564020a0458c4ace3aedd116a672f5daae2a7ae53ff67",
+    "test_only_commits": {
+      "corrected_check_parent": "d930bbf5185c41c85b8175834666a2532c4a157b",
+      "corrected_original_cases": "ccadee2edb3db66f37e840e921f0d2b2c5940932",
+      "corrected_candidate_ggml": "f9d1f765dcc119403206775a137d5a03448c7e13",
+      "initial_original_cases": "40830de1f9b83695cce372a387763ef3600b9951",
+      "note": "shared synthetic test header, linked ggml revision and experiment note only; corrected standalone checks only; no runtime change"
+    },
+    "fixed_campaign_anchor": "f976ebd8e2fca1f15ddc2e6fc9f99e7090b0f9ea",
+    "frozen_runner": "bc9198776ba66074d6fca55fa2c0a79be7690876",
+    "build_flag_match": "74/74 flags.make and link.txt match for original vs candidate product builds only, after normalizing source/build paths; the anchor uses implicit architecture/SDK flags and is context only"
+  },
+  "build_conditions": {
+    "machine": "Apple M2 Ultra",
+    "cpu_cores": 24,
+    "memory_bytes": 206158430208,
+    "macos": "26.7.2",
+    "python": "3.9.6",
+    "product": "Release, native, Metal, explicit arm64 and macOS SDK, -j4"
+  },
+  "worker_protocol": "Public FLEURS, warm persistent worker, Metal encoder, CPU decoding with four threads, alternating three rounds; timestamp-enabled quality is a separate pass; latency rounds also compare text; graph-debug disabled for worker timing. Metric per input: 100*(1 - median_ON_latency/median_OFF_latency) over three rounds; primary is the median across inputs.",
+  "screen": {
+    "latency_inputs_per_format": 9,
+    "rounds": 3,
+    "q4_k": {
+      "paired_median_reduction_percent": 2.7859221612176466,
+      "input_medians_faster": 9,
+      "input_medians_slower": 0,
+      "paired_round_medians_percent": [2.351689782818134, 3.5384337951408273, 2.0645412842664745]
+    },
+    "q8_0": {
+      "paired_median_reduction_percent": 0.6783151652278052,
+      "input_medians_faster": 5,
+      "input_medians_slower": 4,
+      "paired_round_medians_percent": [0.013647692825979885, 1.0171407222762774, 0.6946146447991741]
+    },
+    "f16": {
+      "paired_median_reduction_percent": 0.7787723683314596,
+      "input_medians_faster": 6,
+      "input_medians_slower": 3,
+      "paired_round_medians_percent": [-1.2148358503407453, 3.731038469719905, 0.15475526050873212]
+    },
+    "public_comparisons_per_format": {"count": 9, "text_changed": 0, "public_tokens_changed": 0, "segments_changed": 0},
+    "latency_text_comparisons_per_format": {"count": 27, "changed": 0}
+  },
+  "full_q4": {
+    "latency_inputs": 30,
+    "rounds": 3,
+    "paired_median_reduction_percent": 0.31607550808586127,
+    "input_medians_faster": 17,
+    "input_medians_slower": 13,
+    "paired_round_medians_percent": [0.0518916038039996, 0.2587902059144387, 0.529326692886195],
+    "faster_input_counts_by_round": [16, 16, 16],
+    "paired_strata_percent": {
+      "6-10s": 0.28464962965633056,
+      "10-20s": 0.31607550808586127,
+      "20-30s": 0.3249083605969094
+    },
+    "off": {
+      "p50_ms": 81.65702050000002,
+      "p90_ms": 129.6454205000005,
+      "p99_ms": 150.98329749999962,
+      "count": 30,
+      "rtfx": 168.74970256527777
+    },
+    "on": {
+      "p50_ms": 81.39866649999993,
+      "p90_ms": 130.4375410000005,
+      "p99_ms": 151.18360125,
+      "count": 30,
+      "rtfx": 168.84815827379194
+    },
+    "public_comparisons": {"count": 650, "text_changed": 0, "public_tokens_changed": 0, "segments_changed": 0},
+    "latency_text_comparisons": {"count": 90, "changed": 0},
+    "quality_identical_off_on": {
+      "literal_cer": 0.07466788822721027,
+      "repository_cer": 0.04655721636853712,
+      "literal_edits": 2608,
+      "literal_characters": 34928,
+      "repository_edits": 1520,
+      "repository_characters": 32648
+    }
+  },
+  "validation": {
+    "initial_fixture": {
+      "old_logical_passed_per_build": 46,
+      "old_original_direct_rows_before_abort": 46,
+      "old_full_direct_gates": 0,
+      "old_candidate_direct_started": false,
+      "cause": "case 47 transpose_a violated the common ggml_mul_mat construction precondition; SIGABRT and partial dump preserved",
+      "replacement": "legal padded_head_a, four floats between heads, CPU-reference eligible; all other cases and runtime gates preserved"
+    },
+    "corrected_direct": {
+      "cpu_reference_cases_per_build": 47,
+      "cpu_reference_nmse_bound": 0.0005,
+      "direct_cases_per_process": 52,
+      "positive_cases": 14,
+      "controls": 38,
+      "mapped_controls": 5,
+      "poison_guards_per_process": 2,
+      "observed_synthetic_fusions": {"original": 0, "off": 0, "on": 14},
+      "introduced_allocation_dependencies": 0,
+      "identical_dump_bytes_per_process": 31451648,
+      "identical_dump_sha256": "9ea64e550620942c00b5eef703c420d51e133b9e5c378823ee23b713788b8d5e",
+      "related_mul_mat_cont_cases_per_build": 2755
+    },
+    "ordinary_allocator_eligibility": {
+      "model_types": 3,
+      "model_input_pairs": 42,
+      "range_rows": 1008,
+      "all_side_allocator_rows": 3024,
+      "t_at_least_64": {"pairs": 36, "patterns": 864, "range_eligible": 864, "same_buffer": 864, "overlap_either": 0},
+      "short_controls_below_64": {"pairs": 6, "patterns": 144, "range_eligible": 0}
+    },
+    "normal_encoder": {
+      "model_types": ["q4_k", "q8_0", "f16", "f32"],
+      "inputs_per_type": 14,
+      "candidate_on_fusions_per_type": 288,
+      "candidate_on_fusions_total": 1152,
+      "short_control_fusions": 0,
+      "ordinary_executions": 168,
+      "model_input_groups_compared": 56,
+      "complete_projection_original_off_on_equal": true,
+      "first_q4_dispatches": {"original": 958, "off": 958, "on": 934},
+      "two_local_encoder_sequences_match_every_input": true,
+      "runtime_fusion_counters_initialized": false,
+      "actual_command_buffer_count_measured": false
+    },
+    "official_f32": {
+      "case_runs": 66,
+      "processes": 6,
+      "cases_per_process": 11,
+      "snr_bounds_db": {"cpu": 90, "gpu": 25},
+      "lowest_printed_encoder_snr_db": {"cpu": 104.4, "gpu": 56.4},
+      "full_tdt": false
+    }
+  },
+  "separation": [
+    "Screen (9 latency inputs per format) and full (30 Q4_K latency inputs) input counts are distinct from the separate 650 timestamp-enabled equality checks and 90 no-timestamp latency text comparisons.",
+    "The private-recording quantization study is independent, contributes no additive gain, and is never combined with these results.",
+    "Not adopted: no production integration or permanent ADR change; default remains off."
+  ],
+  "scope_limits": [
+    "M2 Ultra only; no Vulkan or other Apple-generation verification",
+    "official F32 reference check covers features through encoded output, not full KDA/TDT; final joint.enc byte equality is original-runtime differential",
+    "private-recording quantization study is independent and contributes no additive gain",
+    "no production integration or permanent ADR change"
+  ],
+  "raw_manifest_counts": {
+    "artifact_count": 641,
+    "artifact_bytes": 229662869,
+    "retained_binary_library_count": 34,
+    "retained_binary_library_bytes": 182288136
+  },
+  "evidence_root": "outputs/haas-mac-campaign/016",
+  "evidence": [
+    "outputs/haas-mac-campaign/016/execution/gates.json",
+    "outputs/haas-mac-campaign/016/checks/head-store/initial-failure-classification.json",
+    "outputs/haas-mac-campaign/016/execution/screen-assessment.json",
+    "outputs/haas-mac-campaign/016/execution/full-q4-assessment.json",
+    "outputs/haas-mac-campaign/016/execution/corrected-product-reuse.json",
+    "outputs/haas-mac-campaign/016/execution/raw-freeze.json",
+    "outputs/haas-mac-campaign/016/execution/result.json",
+    "outputs/haas-mac-campaign/016/allocator/result.json"
+  ]
+}
