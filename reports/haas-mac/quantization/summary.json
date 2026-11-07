@@ -1,0 +1,351 @@
+{
+  "schema_version": 1,
+  "dataset": "FLEURS Japanese test",
+  "gold_count": 650,
+  "timed_count": 30,
+  "rounds": 3,
+  "threads": 4,
+  "machine": {
+    "chip": "Apple M2 Ultra",
+    "cpu_cores": 24,
+    "gpu_cores": 76,
+    "memory_gb": 192
+  },
+  "source_commit": "114c514430c8aa1455c077819f8e72e674a48b75",
+  "ggml_commit": "e1a9ac12edbb57402618fd6936598603f5ee6266",
+  "speech_sha256": "4fccde1a19f26d91bd92d0296c19eb5ae75895c73684dc61017b81b90f9b0e61",
+  "build_manifest_sha256": "65eab691db2db5baafb1889157c79d78acc8ba016746a8a6b0b570729f3d39df",
+  "python_version": "3.9.6",
+  "catalog_repository": "sakasegawa/Haas-ja-v1.0-GGUF",
+  "catalog_revision": "6b965d5007ba780585de51549d57a8c1c0d67c7e",
+  "profiles": [
+    {
+      "id": "q4_k_cpu",
+      "weight_type": "q4_k",
+      "decoder": "cpu",
+      "model_id": "haas-ja-v1.0:q4_k",
+      "model_size_bytes": 351901216,
+      "model_sha256": "d24d53f29b75214a933ff482b0de1217e0a800f4118cca39ad6cf03609a89d6f",
+      "default_placement": true,
+      "quality": {
+        "literal_cer": 0.07466788822721027,
+        "literal_edits": 2608,
+        "literal_characters": 34928,
+        "repository_cer": 0.04655721636853712,
+        "repository_edits": 1520,
+        "repository_characters": 32648
+      },
+      "latency": {
+        "p50_ms": 83.40197950000005,
+        "p90_ms": 133.3028958000002,
+        "p99_ms": 152.0805381400004,
+        "rtfx": 167.96599975090874,
+        "paired_reduction": 0.0,
+        "peak_footprint_bytes": 460244000,
+        "load_ms": 148.484291,
+        "first_warm_ms": 169.684
+      },
+      "strata": {
+        "6-10s": {
+          "count": 10,
+          "p50_ms": 58.70262500000001,
+          "p90_ms": 61.9242121999997,
+          "p99_ms": 63.4470462199999
+        },
+        "10-20s": {
+          "count": 10,
+          "p50_ms": 83.40197950000005,
+          "p90_ms": 103.47453749999981,
+          "p99_ms": 112.33927874999979
+        },
+        "20-30s": {
+          "count": 10,
+          "p50_ms": 125.92237500000003,
+          "p90_ms": 147.7380493999999,
+          "p99_ms": 153.5043049400006
+        }
+      }
+    },
+    {
+      "id": "q5_k_cpu",
+      "weight_type": "q5_k",
+      "decoder": "cpu",
+      "model_id": "haas-ja-v1.0:q5_k",
+      "model_size_bytes": 428021280,
+      "model_sha256": "880ee2d3068b98834d88cff5794442a7f36f1808a6b365a5f6188a060b689658",
+      "default_placement": true,
+      "quality": {
+        "literal_cer": 0.076099404489235,
+        "literal_edits": 2658,
+        "literal_characters": 34928,
+        "repository_cer": 0.04701666258270032,
+        "repository_edits": 1535,
+        "repository_characters": 32648
+      },
+      "latency": {
+        "p50_ms": 86.39577100000007,
+        "p90_ms": 132.13071280000045,
+        "p99_ms": 156.45005031999978,
+        "rtfx": 163.2282366638227,
+        "paired_reduction": -0.030377693671389094,
+        "peak_footprint_bytes": 527156352,
+        "load_ms": 158.932916,
+        "first_warm_ms": 176.25054200000005
+      },
+      "strata": {
+        "6-10s": {
+          "count": 10,
+          "p50_ms": 60.739291500000014,
+          "p90_ms": 63.7515125000001,
+          "p99_ms": 64.76512624999997
+        },
+        "10-20s": {
+          "count": 10,
+          "p50_ms": 86.39577100000007,
+          "p90_ms": 105.93152920000017,
+          "p99_ms": 113.69865321999946
+        },
+        "20-30s": {
+          "count": 10,
+          "p50_ms": 129.5798545000002,
+          "p90_ms": 151.07821219999977,
+          "p99_ms": 158.2113087199998
+        }
+      }
+    },
+    {
+      "id": "q6_k_cpu",
+      "weight_type": "q6_k",
+      "decoder": "cpu",
+      "model_id": "haas-ja-v1.0:q6_k",
+      "model_size_bytes": 508898848,
+      "model_sha256": "19b33195b691abda293648a02702086754e1392728871d0dafcd3d50682f5dc3",
+      "default_placement": true,
+      "quality": {
+        "literal_cer": 0.07475377920293175,
+        "literal_edits": 2611,
+        "literal_characters": 34928,
+        "repository_cer": 0.04622028914481745,
+        "repository_edits": 1509,
+        "repository_characters": 32648
+      },
+      "latency": {
+        "p50_ms": 82.15352050000035,
+        "p90_ms": 130.6891422999999,
+        "p99_ms": 151.29577768000013,
+        "rtfx": 166.8800734251754,
+        "paired_reduction": -0.006570169768453482,
+        "peak_footprint_bytes": 610452680,
+        "load_ms": 167.692625,
+        "first_warm_ms": 172.51704199999995
+      },
+      "strata": {
+        "6-10s": {
+          "count": 10,
+          "p50_ms": 59.68950000000017,
+          "p90_ms": 64.03430479999975,
+          "p99_ms": 65.46776828
+        },
+        "10-20s": {
+          "count": 10,
+          "p50_ms": 82.15352050000035,
+          "p90_ms": 103.04516670000034,
+          "p99_ms": 112.79486697000021
+        },
+        "20-30s": {
+          "count": 10,
+          "p50_ms": 126.91958349999987,
+          "p90_ms": 148.45732080000033,
+          "p99_ms": 152.22641928000007
+        }
+      }
+    },
+    {
+      "id": "q8_0_cpu",
+      "weight_type": "q8_0",
+      "decoder": "cpu",
+      "model_id": "haas-ja-v1.0:q8_0",
+      "model_size_bytes": 656381472,
+      "model_sha256": "cd5f60b2f1c411404b83fca4a65e3ce30a26d9e951b6a346529e65f22758afeb",
+      "default_placement": true,
+      "quality": {
+        "literal_cer": 0.07509734310581768,
+        "literal_edits": 2623,
+        "literal_characters": 34928,
+        "repository_cer": 0.04576084293065425,
+        "repository_edits": 1494,
+        "repository_characters": 32648
+      },
+      "latency": {
+        "p50_ms": 79.6427085,
+        "p90_ms": 127.09315000000035,
+        "p99_ms": 147.1612243599999,
+        "rtfx": 174.96114724159273,
+        "paired_reduction": 0.043165063540897775,
+        "peak_footprint_bytes": 758138176,
+        "load_ms": 196.37116600000004,
+        "first_warm_ms": 171.17375
+      },
+      "strata": {
+        "6-10s": {
+          "count": 10,
+          "p50_ms": 56.35547950000009,
+          "p90_ms": 61.4942710999998,
+          "p99_ms": 62.34865180999986
+        },
+        "10-20s": {
+          "count": 10,
+          "p50_ms": 79.6427085,
+          "p90_ms": 96.59845890000004,
+          "p99_ms": 105.1186455900001
+        },
+        "20-30s": {
+          "count": 10,
+          "p50_ms": 121.42718750000014,
+          "p90_ms": 141.12532559999966,
+          "p99_ms": 149.14020755999996
+        }
+      }
+    },
+    {
+      "id": "f16_cpu",
+      "weight_type": "f16",
+      "decoder": "cpu",
+      "model_id": "haas-ja-v1.0:f16",
+      "model_size_bytes": 1233128832,
+      "model_sha256": "f752e02f68c1dfff795900e40aa82e5302976fb5360080fcbd330d8b3c992cd8",
+      "default_placement": false,
+      "quality": {
+        "literal_cer": 0.07504008245533669,
+        "literal_edits": 2621,
+        "literal_characters": 34928,
+        "repository_cer": 0.04588336192109777,
+        "repository_edits": 1498,
+        "repository_characters": 32648
+      },
+      "latency": {
+        "p50_ms": 77.85943750000057,
+        "p90_ms": 122.76160389999932,
+        "p99_ms": 144.00847468000018,
+        "rtfx": 178.12619346255136,
+        "paired_reduction": 0.05774903520089758,
+        "peak_footprint_bytes": 1360168688,
+        "load_ms": 285.08812500000005,
+        "first_warm_ms": 165.16224999999994
+      },
+      "strata": {
+        "6-10s": {
+          "count": 10,
+          "p50_ms": 55.29260399999991,
+          "p90_ms": 59.79111190000003,
+          "p99_ms": 60.93884868999981
+        },
+        "10-20s": {
+          "count": 10,
+          "p50_ms": 77.85943750000057,
+          "p90_ms": 100.22547910000013,
+          "p99_ms": 107.23383480999995
+        },
+        "20-30s": {
+          "count": 10,
+          "p50_ms": 118.8837705000001,
+          "p90_ms": 137.95653779999978,
+          "p99_ms": 145.9927162800003
+        }
+      }
+    },
+    {
+      "id": "f16_metal",
+      "weight_type": "f16",
+      "decoder": "metal",
+      "model_id": "haas-ja-v1.0:f16",
+      "model_size_bytes": 1233128832,
+      "model_sha256": "f752e02f68c1dfff795900e40aa82e5302976fb5360080fcbd330d8b3c992cd8",
+      "default_placement": true,
+      "quality": {
+        "literal_cer": 0.07504008245533669,
+        "literal_edits": 2621,
+        "literal_characters": 34928,
+        "repository_cer": 0.04588336192109777,
+        "repository_edits": 1498,
+        "repository_characters": 32648
+      },
+      "latency": {
+        "p50_ms": 100.54891649999975,
+        "p90_ms": 166.9725209000005,
+        "p99_ms": 187.87589878999995,
+        "rtfx": 137.60857761490755,
+        "paired_reduction": -0.2228584077187552,
+        "peak_footprint_bytes": 1332545216,
+        "load_ms": 289.49020800000005,
+        "first_warm_ms": 209.43358300000003
+      },
+      "strata": {
+        "6-10s": {
+          "count": 10,
+          "p50_ms": 71.92716650000008,
+          "p90_ms": 78.83542950000022,
+          "p99_ms": 79.41569325000067
+        },
+        "10-20s": {
+          "count": 10,
+          "p50_ms": 100.54891649999975,
+          "p90_ms": 126.7575086999999,
+          "p99_ms": 136.3284014699998
+        },
+        "20-30s": {
+          "count": 10,
+          "p50_ms": 157.02450049999993,
+          "p90_ms": 183.9744918999998,
+          "p99_ms": 189.15504858999998
+        }
+      }
+    }
+  ],
+  "f16_token_timing": {
+    "count": 650,
+    "text_changes": 0,
+    "segment_changes": 0,
+    "token_array_changes": 4,
+    "different_aligned_tokens": 6,
+    "token_text_changes": 0,
+    "token_count_changes": 0,
+    "maximum_time_delta_ms": 80.0
+  },
+  "evidence": {
+    "quality_cpu": {
+      "manifest_sha256": "3d1e04d2c7eb4ee185939d003044e30b05f63869d52d958b977ea1bcb7b0b570",
+      "input_sha256": "7196750a6d97b470abbcc6fc45bd3d82572473a5e778200a145fe82dbda03267",
+      "runner_commit": "9e0ec3e6026dae2bef08ac83a186ed6b66900a50",
+      "worker_sha256": "5adec9b5b01bd3ded959246146b37ec9dc63ff3d8184b674fdbc4b0d45d96599"
+    },
+    "quality_metal": {
+      "manifest_sha256": "018b9b77d4a843282d25058f3c86ba54198eafff62fea0f90829a80708f67b5a",
+      "input_sha256": "7196750a6d97b470abbcc6fc45bd3d82572473a5e778200a145fe82dbda03267",
+      "runner_commit": "927faeb8e60418c273a8f9e6edf6d2e3b7a043c4",
+      "worker_sha256": "38a2081c2cb433c2ee99e1e86a3848251ef30bff6946e7445a9cc9e24dca8518"
+    },
+    "latency": {
+      "manifest_sha256": "98e0d1424871ae443afc0acdf9699c02cb3b2fcb277a5340affb96fe879bfe69",
+      "input_sha256": "326afd81ebce11010e8f5bcc5d0176e5400fef559c347879286f6b0a61a25c83",
+      "runner_commit": "927faeb8e60418c273a8f9e6edf6d2e3b7a043c4",
+      "worker_sha256": "38a2081c2cb433c2ee99e1e86a3848251ef30bff6946e7445a9cc9e24dca8518"
+    },
+    "latency_aggregate": {
+      "manifest_sha256": "f9509053c22dd01fa8d527bd3fe6f9c1f1a4a50ae35ad6ce32cac3584a9302c7"
+    },
+    "f16_token_timing": {
+      "manifest_sha256": "233c3d44de0660bc6609749ee3c143ec5fa0cf373b1ee4f361e5e839fa0e58cc"
+    }
+  },
+  "method": {
+    "quality": "Public FLEURS Japanese test. All 650 utterances were recognized once with timestamps. Both scores are total character edits divided by the total reference character count.",
+    "literal_cer": "Unicode code points including punctuation, symbols and whitespace.",
+    "repository_cer": "Apply Unicode NFKC. Remove all characters in the punctuation, symbol and separator categories and other whitespace. No case folding or alternate-spelling credit.",
+    "latency": "One warmed model per worker, explicit four threads, MTL0 encoder and selected decoder. Time from sending the first PCM chunk through receipt of the terminal message. File reads, load and warmup are excluded. Each input contributes its three-round median to p50, p90, p99 and RTFx.",
+    "paired_reduction": "One minus the median of the input latency ratios to Q4_K CPU. Both sides use the per-input median over three rounds. A positive value is faster.",
+    "peak_footprint": "Maximum gross process peak across the three latency workers, in bytes.",
+    "first_warm_ms": "Median wall time for the first warmup request in each fresh worker.",
+    "platform": "The measured platform is macOS on one Apple M2 Ultra. Windows CPU has no measurement in this comparison."
+  }
+}
