@@ -111,7 +111,7 @@ in 32.0 s on Metal; with MAMBA1 in 15.1 s, and with the convolution below as wel
 
 ## Decision
 
-- **The submodule is the branch `speech.cpp` of github.com/nyosegawa/ggml**, pinned by commit: an upstream release tag,
+- **The submodule is the branch `speech.cpp` of github.com/uchkw/ggml**, pinned by commit: an upstream release tag,
   then one commit of `test-backend-ops` cases that show the defects, then one commit for each fix, then one commit for
   each speed-up, and nothing else.
 - **Metal runs matrix products on the matrix units of the chips that have them**, the M5, M6, A19 and A20, through the

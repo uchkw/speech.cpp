@@ -9,10 +9,12 @@ here claims a parent commit SHA, a whole-model result or release acceptance.
 
 ## Identities
 
-- Parent speech.cpp base: `114c514430c8aa1455c077819f8e72e674a48b75` on this public
-  fork (`uchkw/speech.cpp`, public `nyosegawa/speech.cpp` parent). This parent
-  change pins ggml to `d27e2a6bb32cf7e7e188375e2f58e7f6e1a5e524` and records the
-  correctness-only validation.
+- Measured parent context: `114c514430c8aa1455c077819f8e72e674a48b75`; its preserved
+  evidence parent is `6afe21a2fc87bea75ead59b492eb6ab9f69517b8`.
+- This clean parent change is based on `03555100287c118b41d1b475044e5ab1e07baa8c`
+  and keeps the same production runtime source and ggml pin
+  `d27e2a6bb32cf7e7e188375e2f58e7f6e1a5e524` as the preserved evidence parent; no
+  configure, build or test was rerun for this PR-scope/metadata correction.
 - Public ggml runtime base: `e1a9ac12edbb57402618fd6936598603f5ee6266`.
 - Old source, cases only: `082fda79273680640bc74803f0c4561bb3dfc1fa`, already checked
   out detached at `outputs/worktrees/ggml-fa-tail-pad-cases`.
