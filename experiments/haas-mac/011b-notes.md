@@ -1,180 +1,140 @@
-# 011b — Fuse the gate projection and GLU epilogue
+# 011b — Gate projection and GLU epilogue on Metal: final measured evaluation
 
-**Status: source-only final candidate — UNBUILT / UNMEASURED.** Source review is complete with
-no remaining blocking finding, and the kernel is committed. Nothing has been compiled, run or
-measured: compilation, runtime, math and performance checks are all **not run**. No numerical
-check is claimed to have passed, and shader compilation is not claimed to work.
+**Status: REJECTED — measured slower.** The fusion was verified active (24 fusions on each of
+the 48 eligible ON graphs, 1152 total), yet paired median request latency increased in all
+three M2 Ultra screen profiles. Nine public inputs, three rounds each, Q4_K/Q8_0/F16. The
+separate factor GEMM remains. The cause of the slowdown was not profiled. The speech gitlink
+is unchanged.
 
-## Identity and revisions
+## Screen result (ordinary worker timing, device MTL0)
 
-- Trial 011b, independent of 011a; no measured result is transferred from any other trial.
-- Speech base commit `114c514430c8aa1455c077819f8e72e674a48b75`.
-- ggml base commit `e1a9ac12edbb57402618fd6936598603f5ee6266` — the base, not the final pin.
-- Kernel commit `18d581ee87ae2830488d466b054581e94fea4ead` — the final ggml revision; the ggml
-  gitlink in the final parent speech commit pins exactly this revision.
-- Diagnostic cases commit `de13b1be95800eabfbadbc4a71d287a02d6758be` (final).
+Primary timing uses the ordinary worker without profiling or graph debug. The separate stage
+timers are diagnostic. Paired latency increase is $100 \times (\mathrm{median}_f \, r_f - 1)$,
+where $r_f$ is file $f$'s ON/OFF request-time ratio and each side's time is that file's median
+over three rounds. Positive means slower. In words, take each file's median ON and OFF request
+time over the rounds, form the ON/OFF ratio per file, take the median over the nine files,
+subtract one and scale by 100. RTFx is total audio duration divided by total request time.
+The paired median is not the ratio of the separate p50 columns. For Q8_0 the paired increase
+is +7.61% while the separate p50 columns (ON p50 over OFF p50) give +11.1%.
 
-## Candidate
+| Weight | p50 OFF→ON ms | p90 OFF→ON ms | p99 OFF→ON ms | RTFx OFF→ON | Paired latency increase | Peak process memory OFF→ON MB |
+| --- | --- | --- | --- | --- | --- | --- |
+| Q4_K | 79.68 → 84.72 | 127.10 → 131.35 | 151.90 → 155.26 | 170.2 → 162.8 | +6.32% | 465.8 → 457.5 |
+| Q8_0 | 75.63 → 84.05 | 124.15 → 131.68 | 146.29 → 155.34 | 177.7 → 165.8 | +7.61% | 761.9 → 759.4 |
+| F16 | 79.47 → 84.19 | 126.07 → 129.01 | 146.38 → 150.28 | 175.6 → 166.4 | +5.94% | 1349.3 → 1358.9 |
 
-The ordinary (non-tensor) simdgroup `kernel_mul_mm` gains a `MUL_MAT+UNARY+MUL` epilogue on
-its STORE: the gate projection `W_gate * x` is sigmoid-ed as F32 and multiplied by the factor
-`a` inside the gate mat-mul's store.
+Memory is the `/usr/bin/time -l` peak process memory footprint, in decimal MB (1 MB =
+1,000,000 bytes). Faster/slower inputs were Q4_K 1/8, Q8_0 0/9, F16 0/9. Per-round paired
+increases spanned 5.5–7.0% (Q4_K), 2.4–14.8% (Q8_0) and 5.2–10.1% (F16). The diagnostic stage
+timers show the ON encoder compute stage up 12–21% across short/medium/long inputs.
+Peak-memory moves are small and mixed (−8.3, −2.5, +9.6 MB) and carry no bandwidth or
+allocator-peak claim.
 
-- The epilogue elides the materialization of the gate-MM intermediate and of the sigmoid
-  intermediate, and elides the two standalone elementwise dispatches (SIGMOID and MUL). The
-  final MUL output is still materialized — written by the fused store.
-- The separate factor projection `a = Wa * x` and its materialization remain: this is **not**
-  a two-projection or concatenated-weight kernel, and it is more than 011a's standalone
-  sigmoid/MUL fusion.
-- Speech source site: `Encoder::convolution` builds `mul(pw1_a(h), sigmoid(pw1_gate(h)))` —
-  the factor projection first, then the consecutive gate MUL_MAT, SIGMOID and MUL nodes the
-  pattern matches (the `twoproj` fixture asserts this node order).
-- Kernel source: the non-tensor simdgroup branch of
-  `ggml/src/ggml-metal/kernels/mul_mm.metal` (`FC_mul_mm_glu` / `FC_mul_mm_glu_swap` function
-  constants, an extra `factor` argument). Pattern and gate:
-  `ggml/src/ggml-metal/ggml-metal-fusion.cpp` (`GGML_METAL_FUSION_MUL_MAT_GLU`).
-- The epilogue is **not implemented on the tensor API/M5 path**: the Metal kernel's tensor
-  branch is untouched, and the pattern is skipped on devices that report the tensor API.
-  M5 and Vulkan are untested by this trial.
-- No packing, dtype conversion, bias, new GEMM shape or altered multiplication loop; both MUL
-  operand orders (`mul(sigmoid, a)` and `mul(a, sigmoid)`) remain supported.
+| Weight | Load OFF→ON ms | First request OFF→ON ms |
+| --- | --- | --- |
+| Q4_K | 150.1 → 148.1 | 170.1 → 192.2 |
+| Q8_0 | 199.9 → 209.1 | 163.3 → 190.4 |
+| F16 | 299.5 → 313.4 | 164.9 → 200.6 |
 
-## Selector `GGML_METAL_MM_GLU`
+## Candidate retained for reproduction
 
-| Value | Effect |
-| --- | --- |
-| unset or literal `0` | candidate disabled (ordinary path) |
-| literal `1` | candidate enabled |
-| any other string, including empty | abort |
+The ordinary (non-tensor) simdgroup `kernel_mul_mm` in
+`ggml/src/ggml-metal/kernels/mul_mm.metal` gains a `MUL_MAT+UNARY+MUL` store epilogue
+(`FC_mul_mm_glu` / `FC_mul_mm_glu_swap` function constants, an extra `factor` argument). The
+gate projection `W_gate·x` is sigmoid-ed as F32 and multiplied by the factor `a` inside the
+gate mat-mul's store. The separate factor projection `a = Wa·x` and its materialization
+remain, so this is not a two-projection or concatenated-weight kernel. The pattern and gate
+are `GGML_METAL_FUSION_MUL_MAT_GLU` in `ggml/src/ggml-metal/ggml-metal-fusion.cpp`. The
+speech site is `Encoder::convolution`, `mul(pw1_a(h), sigmoid(pw1_gate(h)))`.
 
-Read once and cached on the first candidate pattern check; each original / candidate-OFF /
-candidate-ON side must run in a fresh process.
+- Selector `GGML_METAL_MM_GLU`. Unset or literal `0` disabled, literal `1` enabled, any other
+  string (including empty) aborts. Read once at the first pattern check, each side in a fresh
+  process. Invalid- and empty-name aborts were re-verified.
+- Eligibility is a backend gate on shape/type, not model identity. Gate weight contiguous
+  rank-2 F32/F16/Q8_0/Q4_K with K = M = 1024. x, factor and the MM/sigmoid/MUL outputs F32,
+  contiguous, equal shape. T in 17…384 (T ≤ 16 and T ≥ 385 stay ordinary). src[1] precision
+  hint UNDEFINED, so an explicit F32 hint does not fuse. Both projections accumulate in F32.
+- Device gate is `has_simdgroup_mm` and no tensor API. The tensor API/M5 path is untouched.
+  M5 and Vulkan are untested.
+- Theoretical saving only. Two elementwise dispatches per eligible layer (48 across the 24
+  layers) and 16 bytes of device traffic per output element (gate-MM and sigmoid write/read).
+  Both GEMMs' FLOPs, the factor read and the final write remain. Arithmetic counts, not
+  measured bandwidth or allocator-peak gains.
 
-## Device gate
+## Tested identities and exact scope
 
-Requires `has_simdgroup_mm` and no tensor API. Target device: Mac M2 Ultra.
+**Runtime sides.** Original runs speech `114c5144` with ggml `e1a9ac12`. Candidate OFF and ON
+both run speech `c8b524ef` with ggml `18d581ee`, explicit OFF=0 and ON=1, each side in a fresh
+process. The official, normal, API, CLI and worker headers and timing all originate from these
+two source pairs. The measured speech gitlink is unchanged at `18d581ee`.
 
-## Eligibility
+**Runner and binaries.** Runner `dfe7f1de`. The frozen digest `48844d0e…` is the SHA256 of the
+runner's `worker.py` source. The speech worker binary SHA256 is `4fccde1a…` on the original
+and `66dab2c9…` on the candidate.
 
-A backend gate on the shape/type signature — model identity is not a gate.
+**Direct-test identities.** The first direct runner build failed by reaching two opaque graph
+fields. The two-line accessor commits `de13b1be`→`e9bf25fc` (cases) and `18d581ee`→`b499a30b`
+(kernel) changed only testing lines, call the public APIs for the same positions and iteration
+order, and preserve test semantics. The standalone direct tests alone use them.
+`test-backend-ops` is separate: the original binary uses cases-only ggml `de13b1be` with the
+selector unset; the candidate OFF and ON both use the `18d581ee` binary, in fresh processes
+with `GGML_METAL_MM_GLU=0` and `=1` respectively.
 
-- Gate weight: contiguous rank-2, F32 / F16 / Q8_0 / Q4_K, K = M = 1024.
-- x, factor, MUL_MAT output, SIGMOID output and MUL output: F32 and contiguous, equal output
-  shape.
-- T (activation columns) in 17..384; T <= 16 takes the few-row MMA or mat-vec dispatch
-  instead, and T >= 385 stays on the ordinary path.
-- src[1] precision hint UNDEFINED: the gate conservatively requires the UNDEFINED hint for
-  each of its four eligible weight types (F32, F16, Q8_0, Q4_K); an explicit F32 hint does
-  not fuse.
-- The actual family requests F32 accumulation for both projections; the encoder helper checks
-  dtype, source hint and accumulation fields (`op_params`) separately.
-- This is a deliberately gated backend optimization, not a new family graph option.
+**Hardware and scope.** Apple M2 Ultra (76-core GPU, 192 GB unified memory), macOS 26.7.2,
+encoder device MTL0, CPU decoder with 4 worker threads, official CPU check at its default 16
+threads. Release build, GGML_NATIVE=ON, GGML_METAL=ON, explicit arm64 and matching SDK, -j4.
+Public FLEURS ja_jp only, nine screen inputs (three per duration stratum) × three rounds.
+Quality runs carry timestamps, latency runs do not.
 
-## Safety contract
+## Correctness coverage (measured, public aggregate)
 
-Implemented and source-reviewed; **unexecuted**. Generic public-output, view and
-extra-consumer protections are retained (the pattern is a regular elision chain, so the
-generic chain, subgraph elidable-use and memory-range checks still apply). All activations
-(x, factor, gate MM, sigmoid, MUL) must share one Metal buffer, while weights may be separate.
+1. Direct Metal fixtures. Original, OFF and ON each passed all 332 deterministic cases, and
+   the three-side snapshots (100,518,496 bytes each) are byte-equal. ON shows 132 positive
+   fusions and zero on the other 200 cases (raw and mapped alias negatives included), zero
+   allocation dependencies, and two poison controls per side held.
+2. Normal graphs. Four weight types × 16 lengths × 3 sides give 192 normal/retained projected
+   equality pairs, bit-exact across all sides. The 48 eligible ordinary ON graphs fuse 24 each
+   (1152 total). The 16 ineligible ordinary, the 64 retained-output ON and every original/OFF
+   graph fuse zero. Weighted snapshots match per weight per side (873,563,392 bytes) across
+   the three sides.
+3. CPU cross-backend (`test-backend-ops`, NMSE 5e-4). Each of the three sides is exactly
+   248 PASS / 20 FAIL of 268, with nine Q8_0 and eleven Q4_K failures, no new failure, no
+   changed printed node, NMSE or limit, and the 20 remain strict
+   failures. Eight transposed-X cases were excluded from the CPU-reference comparison. One F32
+   case among them was directly reproduced as SIGABRT in the original unfiltered run and in an
+   isolated invocation. All eight pass the separate Metal direct test, and no CPU pass is
+   claimed for them. CPU activation quantization versus Metal half staging is plausible, not
+   proved as the cause for all 20. Equal printed metrics do not prove bits for unsaved
+   intermediates.
+4. Official encoder. 11 datasets × 3 sides × 3 device/weight conditions give 99 complete runs
+   with unmodified strict thresholds. Lowest final SNR 104.4 dB on CPU F32 (>90) and 56.4 dB
+   on Metal F32 and F16 (>25). Within each precision/device condition the printed layer and
+   final metrics were identical across sides. No raw official tensor bit-identity is claimed.
+   CPU is an unchanged control.
+5. Public contracts. Three public stage clips exercised the raw TDT paths and fields (27
+   records of ids/frames/durations/text/tokens/graphs), plus F16 API cancellation and recovery
+   and the worker protocol. The CLI made 36 process invocations, 12 weight/mode combinations
+   across three process sides with three inputs each, giving 108 public recognition records in
+   four modes, all identical across sides. On the nine public inputs, quality
+   text/tokens/segments and latency text differ on zero pairs. CER values in prose are
+   fractions, literal 0.073–0.075 and repository 0.043–0.045, same on both sides.
 
-- FULL matching rejects the final output overlapping W or x, and rejects MM/sigmoid overlap
-  with the factor.
-- It rejects either elided MM/sigmoid output overlapping either W or x: the ordinary sequence
-  has already overwritten those bytes by the time a later consumer runs, while the fused
-  execution would skip the intermediate stores and expose the original mat-mul input.
-- Only the exact final-in-place factor is permitted; partial overlap is rejected.
-- Both Metal-buffer intervals and the underlying host addresses are checked, so multiple
-  wrappers over one host arena cannot hide an alias.
-- Rejecting aliases is conservative; the pattern is skipped in the allocation-dependency
-  pass, so it adds zero allocation dependencies and does not extend input lifetimes.
-- Implemented same-buffer negatives in the final cases commit, one Metal buffer with a
-  trailing `add(mul, ·)` that reads the aliased input back after the product, in both MUL
-  operand orders — none may fuse:
-  - `raw_sigmoid_x`: sigmoid storage placed exactly over the activation;
-  - `raw_sigmoid_x_partial`: sigmoid storage 16 bytes into the activation;
-  - `raw_sigmoid_w`: sigmoid storage over the head of the F32 weight, read back through a
-    legitimate view of the weight (no in-place matmul is constructed).
-  The runner binds the whole triple — the weight included, for `raw_sigmoid_w` — into a
-  single buffer object at page-aligned slots, so plain tensor identities carry the alias and
-  no `view_src` is forged.
-- Mapped-wrapper negatives (`mapped_out_x`, `mapped_sigmoid_x`, `mapped_mm_a`) bind the same
-  host arena through two distinct Metal mappings; they must also stay unfused.
+## Scope boundaries
 
-## Arithmetic and real limits
+The public 30-input latency set, the 650-input quality set, the 2 s/4 s short prefixes, M5,
+Vulkan and any fixed-anchor measurement were not run. No official full-decoder verdict and no
+full-corpus quality or adoption claim is made. Within the candidate, 27 OFF/ON quality pairs
+and 81 OFF/ON latency text pairs showed zero differences. Against the original, 54
+timestamp-quality and 162 latency-text record pairs across both sides showed zero differences.
 
-- Full tiles retain the original K loop, operand staging, accumulators, workgroup geometry
-  and stores; the factor tile is loaded at the same simdgroup tile origin and leading
-  dimension, pairing each thread element with the matching gate accumulator element.
-- Tail tiles keep the existing scratch and barriers and apply the epilogue only to valid
-  float4/scalar stores; the factor rows of a partial tile stay inside the valid tail.
-- Sigmoid is the ordinary expression `1/(1+exp(-gate))` evaluated with an intended F32
-  intermediate before a separately evaluated product; the multiply uses safe math and
-  contract-off semantics in the fused MUL's original operand order. The full-tile path
-  evaluates the sigmoid per scalar, while the existing standalone unary path operates on
-  float4 values.
-- Compiler math and rounding therefore require an actual hardware bit comparison of the
-  full-tile scalar sigmoid against the standalone float4 unary result; source equivalence is
-  not evidence of exact bits, and no such comparison has been run.
-- Staging on this pinned backend: with default source precision, this ordinary large-MM path
-  stages operands in half, including F32-weight × F32-activation storage; an explicit F32
-  src[1] hint selects F32 operand staging only for the F32-weight × F32-activation kernel.
-  The gate's UNDEFINED src[1] requirement is a conservative eligibility check applied to all
-  four weight types, separate from this staging selection. No precision threshold is relaxed.
-- Theoretical saving: 2 elementwise dispatches per eligible layer — 48 across the 24 layers —
-  and 16 bytes per output element of device traffic (gate-MM write/read plus sigmoid
-  write/read). Both GEMMs' FLOPs, the factor read and the final write remain. These are
-  arithmetic counts, not measured performance, memory-bandwidth or allocator-peak savings;
-  extra epilogue registers and factor loads may offset the benefit.
+## Artifacts
 
-## Candidate and diagnostic source (read-only inputs)
-
-| Path | Role |
-| --- | --- |
-| `src/families/fastconformer/encoder.cpp` | pinned speech source; the GLU site in `Encoder::convolution` |
-| `ggml/src/ggml-metal/kernels/mul_mm.metal` | committed kernel: the non-tensor simdgroup store epilogue |
-| `ggml/src/ggml-metal/ggml-metal-fusion.cpp` | committed pattern table and the `MUL_MAT+UNARY+MUL` gate |
-| `ggml/tests/test-mm-glu-cases.h` | shared case table, graph fixture, deterministic initialization |
-| `ggml/tests/test-metal-mm-glu.cpp` | Metal-only runner: counts, bit-exactness, poison, mapped and raw controls |
-| `experiments/haas-mac/011b-glu-check.cpp` | encoder helper `haas-mm-glu-check` |
-
-## Required validation (all not run; needs an exclusive compute lease)
-
-1. Build original and candidate identically; use the same diagnostic source and the same
-   synthetic values in separate fresh processes for original, candidate OFF and candidate ON;
-   original vs OFF must be exact.
-2. Direct Metal runner `test-metal-mm-glu [expect-fusion: 0|1] [output.bin]`: expected `0`
-   for the original/OFF builds and `1` for candidate ON on eligible hardware; the per-case
-   expected count is 1 only when the actual graph is eligible and 0 for every negative. It
-   checks final exact bytes and finite values, intended fusion counts, zero allocation
-   dependencies, original/OFF/ON binary snapshots, existing public intermediate retention,
-   raw and mapped alias negatives, and poison controls.
-3. `test-backend-ops` MUL_MAT_GLU: a numerical comparison of the final output plus explicitly
-   OUTPUT-protected intermediates at its pinned 5e-4 NMSE tolerance; never compare stale
-   elided intermediates. (The expected 0/1 fusion-count CLI belongs to `test-metal-mm-glu`,
-   not to `test-backend-ops`.)
-4. Encoder helper `haas-mm-glu-check model.gguf expected-eligible-fusions [output.bin]`
-   (0 or 24), compiled identically against all three sides: one actual GLU per layer, 24
-   normal fusions only for eligible T, zero retained-output fusions, and exact normal/retained
-   projected output. Its T list covers 1, 8, 16, 17, 31, 32, 33, 63, 64, 65, 171, 172, 375,
-   376, 384, 385. If the ordinary allocator yields fewer than the required 24 target fusions
-   at an eligible frame length in the ON run, record that the intended production path was
-   not reached and stop before performance measurement, keeping the guard and the expected
-   count fixed; this stop rule is distinct from the retained-output runs, which expect zero
-   fusions. The count helper is diagnostic and must not substitute for ordinary worker
-   timing.
-5. Official encoder thresholds unchanged: CPU F32 90 dB (an unchanged control, not a
-   GPU-fusion pass) and Metal F32/F16 25 dB.
-6. Recognition comparison with the same model variants/inputs on each side over the same 650
-   inputs: raw tensors/argmax, raw TDT ids/frames/durations, full public
-   text/tokens/times, and literal plus repository-normalized CER.
-7. Observe the unchanged selector OFF control and the invalid-selector rejection.
-8. Only after the numerical/path checks: ordinary non-instrumented paired
-   latency/RTFx/load/peak-memory measurements, enough alternating trials to distinguish round
-   noise; report p50/p90/p99.
-9. Vulkan and M5 remain untested and unapproved. No adoption decision is made here. Raw
-   artifacts later belong under `outputs/haas-mac-campaign/011b/`; publication and evaluation
-   import belong to the coordinator.
-
-## Execution state
-
-No code, build, tests or timings were run; this trial is unbuilt and unmeasured.
+Local artifacts live under `outputs/haas-mac-campaign/011b/`, with key gates in
+`execution/preperformance-gates.json`, `execution/cross-backend-three-side.json`,
+`official-encoder/gates.json`, `public-contracts/gates.json`, `screen/summary.json`,
+`screen-original-public-output-equality.json` and `execution/matched-flags-and-links.json`.
+The raw manifest `evidence-raw.json` (SHA256
+`97ce7f9a171e5ace5ae3469ef691de01b17ca0a47c701ae80549bbba452f7750`) covers 494 local files
+with 10,959,268,798 logical bytes plus 38 external retained files with 32,692,597 bytes.
+Logical sizes can include APFS-cloned snapshots, and `storage-clone-rpzgqHqc/result.json` is
+storage-only. No storage-clone effect enters any speed metric.
