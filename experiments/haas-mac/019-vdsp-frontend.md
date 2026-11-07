@@ -1,125 +1,77 @@
-# Use a double-precision vDSP transform in the Haas frontend
+# Double-precision vDSP frontend for Haas
 
-This is a source-only prototype on `codex/exp-haas-019`, from speech.cpp
-`114c514430c8aa1455c077819f8e72e674a48b75` and ggml
-`e1a9ac12edbb57402618fd6936598603f5ee6266`. No build, FFT execution, inference, performance measurement or adoption
-decision is completed by this checkpoint. Trial 018's frame parallelism is not included.
+The frozen trial source is `63b8a4e2e4f2895f8d026340c57d58d63732269e`, on the model repository base speech.cpp `114c514430c8aa1455c077819f8e72e674a48b75` with ggml `e1a9ac12edbb57402618fd6936598603f5ee6266`.
 
-## Selection and dependencies
+The strict selector `SPEECH_HAAS_FRONTEND_VDSP` accepts exactly 0 or 1. The FastConformer factory reads it only when `general.name` is `Haas-ja-v1.0` and `fastconformer.decoder.prediction` is `kda`. On an eligible model, unset or 0 uses the ordinary FFT, 1 selects vDSP, and all other present strings are invalid. Eligible selection constructs one vDSP setup at frontend construction, held for the frontend's lifetime.
 
-`SPEECH_HAAS_FRONTEND_VDSP` accepts exactly `0` or `1`; unset and `0` select the ordinary frontend. The FastConformer
-factory reads it only when `general.name` is `Haas-ja-v1.0` and `fastconformer.decoder.prediction` is `kda`. Other models
-do not read it, including an invalid value. The recognizer and its official frontend stage check use the same factory.
-Sortformer and Nemotron keep their three-argument `NemoFrontend` construction; the shared frontend does not read the
-environment. Explicit selection on a non-Apple platform is an error, not a fallback.
+Only the double FFT changes. The helper packs the windowed frame into real and imaginary halves of N/2 values and runs the double real DFT in place. Unpacking scales the ordinary N/2+1 spectrum by the binary-exact constant 0.5 to undo vDSP's real-forward factor of two, with DC from the real slot and Nyquist from the imaginary slot. The ordinary `RealFft` object remains constructed on both paths, and the other stages keep their existing precision and order. The selected path adds one setup per frontend and a per-call scratch of N doubles, 4,096 bytes at 512 points.
 
-The implementation is C++17. CMake links `speechcommon` explicitly to the system Accelerate framework on Apple
-platforms; it does not rely on ggml's transitive framework dependencies. No package or downloaded library is added.
-Non-Apple builds include the refusal path and need no Accelerate headers or library.
+Ordinary-versus-selected comparisons of the raw float64 log-mel and normalized float32 features require finite, equal-shaped values and a signal-to-noise ratio above 90 dB. The official features.npy comparison checks the final normalized features of each path at the same bound, with no official raw log-mel tensor in this check. The restricted repeated and split calls, unset against zero, and shared constructor cases compare bytes.
 
-The existing `RealFft` implementation and its positive-even-size contract are unchanged. The vDSP helper accepts the
-documented subset `N = f * 2^n`, where `f` is 1, 3, 5 or 15 and `n >= 4`. Haas's 512 is in this subset; 400 and 42 are
-examples supported by `RealFft` but refused by an explicitly selected vDSP helper. A setup allocation failure is an
-error. Neither an unsupported transform nor an allocation failure silently selects another implementation.
+## Decision and measurement
 
-## Transform layout and arithmetic
+Keep the default off and reject this candidate for the measured workload. All nine frontend stage comparisons were faster. Whole-request changes were small and each weight type changed direction across rounds.
 
-The helper uses `vDSP_DFT_zrop_CreateSetupD` and `vDSP_DFT_ExecuteD`, both double-precision APIs. The input is packed as
-`real[j] = input[2*j]` and `imag[j] = input[2*j+1]`, each with `N/2` values. Execution uses the supported in-place form,
-with exactly identical input/output real pointers and input/output imaginary pointers, and disjoint real/imaginary
-halves. The helper then writes every element of the ordinary `N/2+1` complex spectrum:
+Apple M2 Ultra with 24 CPU cores, 76 GPU cores and 192 GB. Native arm64 Release, Metal encoder and greedy CPU4 decoder. Fresh workers warmed all nine measured inputs. The same candidate binary ran with selector OFF and ON. Positive paired percentages mean a shorter request. Each input contributes its median over three rounds before the cohort percentiles and paired ratios are computed.
 
-```text
-spectrum[0]   = (real[0] / 2, 0)
-spectrum[N/2] = (imag[0] / 2, 0)
-spectrum[k]   = (real[k] / 2, imag[k] / 2), 1 <= k < N/2
-```
+## Nine-input worker screen
 
-The division by two corrects vDSP's real-forward scale, including DC and Nyquist. Multiplication by the binary-exact
-constant `0.5` occurs before the existing `std::norm` power calculation. There is no extra one-sided-spectrum factor.
-Pre-emphasis remains float32. Window multiplication, power, mel accumulation, the additive log guard, log and
-per-feature normalization remain double precision, in the existing loop order. The FFT's internal rounding order
-changes, so identical features or recognition output cannot be asserted from source inspection.
+| Weight | Paired reduction | Faster | p50 ms OFF / ON | p90 ms OFF / ON | p99 ms OFF / ON | RTFx OFF / ON |
+| --- | --- | --- | --- | --- | --- | --- |
+| Q4_K | -0.366% | 4/9 | 78.48 / 79.70 | 125.30 / 124.84 | 146.74 / 146.15 | 174.7 / 174.3 |
+| Q8_0 | -0.286% | 3/9 | 75.80 / 75.49 | 121.60 / 122.10 | 142.11 / 143.20 | 180.8 / 180.6 |
+| F16 | +0.236% | 6/9 | 76.06 / 75.88 | 121.99 / 120.85 | 141.77 / 142.73 | 182.3 / 182.7 |
 
-Apple's primary documentation establishes the packing, scaling and supported lengths:
+## Rounds and input lengths
 
-- [Data packing and scaling](https://developer.apple.com/documentation/accelerate/understanding-data-packing-for-fourier-transforms)
-  describes DC in the real slot, Nyquist in the imaginary slot, and the real-forward factor of two.
-- [Double real DFT setup](https://developer.apple.com/documentation/accelerate/vdsp_dft_zrop_createsetupd)
-  describes the supported lengths, forward direction, allocation failure and shared-setup alignment requirement.
-- [Double DFT execution](https://developer.apple.com/documentation/accelerate/vdsp_dft_executed)
-  identifies the double-pointer API. Some prose labels on that page say single precision; the declaration and the
-  Apple SDK header specify `double`.
+| Weight | Rounds 1 / 2 / 3 | 6–10 / 10–20 / 20–30 seconds | Separate anchor reduction |
+| --- | --- | --- | --- |
+| Q4_K | -1.52% / -0.12% / +2.63% | +0.12% / -1.42% / +0.36% | +0.508% |
+| Q8_0 | -0.12% / +0.37% / -0.22% | -0.53% / +0.41% / -0.29% | +0.469% |
+| F16 | +0.06% / -2.92% / +1.48% | -1.05% / +0.24% / +0.70% | +3.788% |
 
-## Ownership and setup lifetime
+## Frontend stage duration
 
-Each selected frontend constructs one vDSP setup with `Previous=nullptr`, owns it through RAII, and destroys it when
-the frontend is destroyed after its calls finish. There is no global setup cache or sharing with another frontend.
-The original `RealFft` member remains initialized on both paths; this prototype adds the vDSP setup without changing
-ordinary setup construction. Its additional retained setup memory and load time must be measured.
+| Weight | 7.98 s OFF / ON ms | 14.52 s OFF / ON ms | 24.72 s OFF / ON ms |
+| --- | --- | --- | --- |
+| Q4_K | 2.128 / 1.747 (+17.89%) | 3.597 / 3.171 (+11.86%) | 6.030 / 5.396 (+10.51%) |
+| Q8_0 | 1.976 / 1.748 (+11.50%) | 3.599 / 3.263 (+9.31%) | 6.057 / 5.405 (+10.76%) |
+| F16 | 1.986 / 1.761 (+11.34%) | 3.606 / 3.182 (+11.78%) | 6.040 / 5.412 (+10.41%) |
 
-Each `log_mel` call owns its scratch array of `N` doubles, reused across that call's frames. At `N=512` this adds
-4,096 bytes of working storage, beside the existing windowed input, spectrum and power vectors. No scratch is mutable
-frontend state, and no allocation or setup creation is added inside the frame loop. The prototype starts no threads
-and changes no process-wide thread settings. It uses a private setup, so the 64-byte alignment rule for setups that
-share storage through `Previous` does not apply; ordinary vector storage is valid, though alignment can affect speed.
+## Load and process memory
 
-[Apple's DFT guide](https://developer.apple.com/library/archive/documentation/Performance/Conceptual/vDSP_Programming_Guide/USingDFTFunctions/USingDFTFunctions.html)
-places setup creation outside real-time processing and permits repeated execution.
-[Double setup destruction](https://developer.apple.com/documentation/accelerate/vdsp_dft_destroysetupd)
-must not overlap an operation using that setup or one sharing its storage. The installed Apple SDK's `vDSP.h`, under
-“How to use the Discrete Fourier Transform (DFT) and Discrete Cosine Transform (DCT) interfaces”, additionally states
-that execution reads setup memory only and can run concurrently, while creation/destruction must not overlap users
-of shared storage. This was checked in the Command Line Tools SDK header on 2026-11-07; concurrent execution is not
-exercised by this trial. Frame-parallel interaction remains a separate future variant.
+| Weight | Ready ms OFF / ON | First request ms OFF / ON | Peak MiB OFF / ON |
+| --- | --- | --- | --- |
+| Q4_K | 144.32 / 142.63 | 169.14 / 165.61 | 430.47 / 431.88 |
+| Q8_0 | 204.64 / 186.75 | 161.06 / 161.51 | 725.19 / 721.20 |
+| F16 | 277.31 / 277.47 | 160.69 / 161.63 | 1290.08 / 1284.44 |
 
-Metadata-only `speech_model_info_open` goes through `read_file_info` and the metadata-only `ModelFile` constructor;
-it constructs neither a frontend nor an FFT setup. A normal recognizer constructs the frontend after its model has
-loaded. The CPU-only decoder copy has no frontend. None of these ownership boundaries is moved.
+## Nine-input public recognition quality
 
-## Prepared checks
+| Weight | Literal micro-CER | Repository micro-CER | Timestamp-enabled output matches | Latency text matches |
+| --- | --- | --- | --- | --- |
+| Q4_K | 40/532 (7.519%) | 22/493 (4.462%) | 9/9 | 27/27 |
+| Q8_0 | 39/532 (7.331%) | 21/493 (4.260%) | 9/9 | 27/27 |
+| F16 | 39/532 (7.331%) | 21/493 (4.260%) | 9/9 | 27/27 |
 
-These checks have been written but not compiled or run:
+## Checks
 
-- `fft-check` remains unchanged, including its arbitrary-even lengths 2, 6, 10, 14, 16, 42, 50, 400 and 512.
-- `fft-vdsp-check` compares 964 transform cases at sizes 16, 32, 48, 80, 240 and 512 against both the ordinary FFT and
-  a compensated direct DFT or an analytic impulse. It covers every impulse position, constant/DC, alternating/Nyquist,
-  bin-one and mixed tones, very quiet data and zeros. Output and scratch are poisoned before reuse, input and boundary
-  guards are checked, and the existing `6 * epsilon * floor(log2(N))` relative-norm bound is retained. Unsupported
-  lengths are explicitly refused. On non-Apple platforms it checks refusal and reports numerical cases as not run.
-- `fastconformer-frontend-vdsp-check` compares whole log-mel and normalized outputs, finite values and shapes, and
-  keeps a 90 dB floor for differential comparisons. It covers silence, DC, Nyquist, mixed tones, quiet audio, centered
-  zero padding, the two-frame minimum, repeated calls, long-to-short calls and split-frame calls using a nonzero input
-  origin. Repeated and split calls must be bit-identical within one implementation. Unset and zero must be exact, and
-  the shared constructor must ignore the flag. Running it with a non-Haas FastConformer model requires exact off/on
-  equality and verifies that an invalid selector is ignored there.
-- An optional reference directory runs both selected and ordinary outputs against each official frontend dump with
-  the unchanged `SNR > 90 dB` criterion. The existing `fastconformer-frontend-check` also keeps that exact criterion
-  and now selects the same path as the recognizer. A differential pass is not an official-reference pass.
+- The original FFT check passed 27 cases. The vDSP check passed 964 cases across six transform sizes under its existing relative error bound, including DC and Nyquist bins, buffer guards and explicit refusal cases.
+- F32, Q4_K, Q8_0 and F16 each passed 163 frontend checks. Ordinary and selected features each exceeded 90 dB for all eleven pinned official inputs, with a minimum of 103.3 dB. The finite differential measurements reached at least 275.7 dB with maximum absolute difference 2.27e-12. The byte comparison applies to the designated constructor, selector, repeat, split and revisited-frame cases.
+- On three public recordings, 72 new candidate launches and 24 source-114 controls retained from trial 018 accounted for 288 requests. Unset, OFF and ON matched the complete reference JSON for three weight types on CPU and Metal in plain, timestamp and both keyword-guard modes. The in-scope invalid selector returned invalid_argument.
+- Eight new F16 C API and worker checks and four retained original controls passed on CPU and Metal. All six worker runs, including the two retained controls, observed collecting, waiting and running cancellation plus the next successful request. The API used automatic load threads and the worker used four.
+- The matched original supplied nine retained joint.enc tensors from three public inputs and three weights. Each of the nine candidate OFF tensors and each of the nine ON tensors was finite and matched its original F32 bytes. Greedy public text also matched. The helper exposes the projected encoder output and final text.
+- For each type, all nine timestamp-enabled texts, public tokens and segments and all 27 timestamp-disabled texts matched between OFF, ON and the historical anchor. Every type also matched the nine stage rows for visible text, token count and graph count.
 
-Examples for the coordinator's later serialized compute slot, not commands executed at this checkpoint:
+## Interpreting the measurements
 
-```sh
-./build/fft-check
-./build/fft-vdsp-check
-./build/fastconformer-frontend-vdsp-check "$MODEL" "$REFERENCE_OUT"
-SPEECH_HAAS_FRONTEND_VDSP=0 ./build/fastconformer-frontend-check "$MODEL" "$REFERENCE_OUT"
-SPEECH_HAAS_FRONTEND_VDSP=1 ./build/fastconformer-frontend-check "$MODEL" "$REFERENCE_OUT"
-```
+- Each type timed nine FLEURS inputs spanning three duration strata, with three inputs in each. The three stage clips last 7.98, 14.52 and 24.72 seconds. Timestamps were off for timing and on for the separate nine-input quality comparison.
+- The matched original and candidate used native arm64 Release with explicit SDK and architecture. After normalizing build paths, 73 of 74 common compiler flag files and 15 of 74 common link files matched literally. The entire token comparison accounted for one SDK framework search path, a change in Accelerate link order in 57 files, the frontend factory object in one archive and the vDSP object in a second archive. The remaining architecture, SDK and optimization flags matched.
+- The fixed historical timing anchor used source f976ebd8 with a different SDK selection. Its direct comparison uses the same public screen and is shown separately. The source-114 original controls establish semantic continuity only.
+- The worker timer starts before the first PCM16 chunk and ends at receipt of the terminal result. Loading, input file reads and warmup are outside it. The stage timer covers the complete host frontend. First request, ready and peak process memory describe separate parts of the run.
 
-## Pending evaluation
+## Coverage limits
 
-Build and execution must hold `/usr/bin/lockf -k /private/tmp/speech-haas-mac-perf.lock`, with builds bounded to `-j4`.
-The runner owner has the final selector name for a new allowlist checkpoint. Preserve every existing run's frozen
-runner and provenance.
-
-First verify candidate-off against the fixed base, then off/on with the same weights, audio and options. Run the
-official Haas frontend dumps without loosening 90 dB; the same frontend weights occur in Q4_K, Q8_0 and F16, but all
-end-to-end variants still need their own output checks. Check text, token IDs, frames and timestamps, and use the
-campaign's CER/WER evaluation if any recognition decision changes. Non-Haas FastConformer and Sortformer stage
-controls, Linux/Windows builds and explicit non-Apple refusal remain unverified.
-
-Measure pure load, ready warmup, first request, frontend stage time, whole-request RTFx and peak memory separately.
-Alternate off/on under the same lease and require a gain beyond round variation. Arithmetic in another FFT and fewer
-host instructions are hypotheses, not measured improvements. This checkpoint contains no result HTML or acceptance
-claim.
+- The full 30-input latency and 650-input accuracy evaluation and the six 2/4-second prefixes were not run. Percentiles and CER in this report use the nine-input screen only. Each duration stratum has three inputs.
+- Official reference comparisons cover the frontend of the pinned encoder path. Full official KDA/TDT, raw decoder IDs, frame indices and durations remain unverified. Real non-Haas and Sortformer runtime, Windows/Vulkan, non-Apple refusal and allocation-fault injection were untested.
+- The screen used a Metal encoder and greedy CPU4 decoder on one Mac. Voimem default decoder placement and automatic thread settings were untested. Gross process peak memory includes every worker allocation, including the opaque Accelerate setup.
