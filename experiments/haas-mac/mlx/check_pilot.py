@@ -73,17 +73,23 @@ class FakeStdout:
 
     def __init__(self):
         self.lines = queue.Queue()
+        self.closed = False       # close() is idempotent, like a dead child's pipe
+        self.read_to_eof = False  # set by the consumer when iteration ends
 
     def emit(self, message):
         self.lines.put(json.dumps(message, ensure_ascii=False))
 
     def close(self):
+        if self.closed:
+            return
+        self.closed = True
         self.lines.put(None)
 
     def __iter__(self):
         while True:
             line = self.lines.get()
             if line is None:
+                self.read_to_eof = True
                 return
             yield line
 
@@ -97,11 +103,16 @@ class FakeProcess:
         self.done, self.shutdowns = False, 0
         self.pid = -424242
 
+    def die(self):
+        """A dead child's stdout means EOF; repeated close stays a single EOF."""
+        self.done = True
+        self.stdout.close()
+
     def poll(self):
         return None if not self.done else self.exit_code
 
     def wait(self, timeout=None):
-        self.done = True
+        self.die()
         if self.memory_log is not None:
             self.memory_log.write_text('  4242  peak memory footprint\n')
         return self.exit_code
@@ -109,7 +120,7 @@ class FakeProcess:
 
 def recording_shutdown(process):
     process.shutdowns += 1
-    process.done = True
+    process.die()
 
 
 class FakeChild:
@@ -140,6 +151,9 @@ class FakeChild:
         child = self
 
         class _Stdin:
+            def __init__(self):
+                self.closed = False
+
             def write(self, text):
                 for line in text.splitlines():
                     child.handle(json.loads(line))
@@ -148,6 +162,9 @@ class FakeChild:
                 pass
 
             def close(self):
+                if self.closed:  # one EOF, like a real pipe wrapper
+                    return
+                self.closed = True
                 child.events.append(('stdin_closed',))
 
         return _Stdin()
@@ -419,6 +436,12 @@ class DriverTest(unittest.TestCase):
         self.assertTrue((directory / 'result.json').exists())
         return result, directory
 
+    def assert_pipes_closed(self, process):
+        """Cleanup closed both fake pipe ends and the reader drained to EOF."""
+        self.assertTrue(process.stdin.closed)
+        self.assertTrue(process.stdout.closed)
+        self.assertTrue(process.stdout.read_to_eof)
+
     def assert_request_boundaries(self, request_ids):
         clocks = [i for i, event in enumerate(self.events) if event[0] == 'clock']
         for request_id in request_ids:
@@ -458,6 +481,8 @@ class DriverTest(unittest.TestCase):
             self.assertEqual(message['sample_rate'], 16000)
             self.assertIs(message['timestamps'], False)
         self.assert_request_boundaries(['warm-0', 'warm-1', 'warm-2', '0', '1', '2'])
+        self.assert_pipes_closed(child.process)
+        self.assertEqual(self.events.count(('stdin_closed',)), 1)  # one EOF, not two closes
 
     def test_mlx_round_uses_the_same_outer_request_function(self):
         records = self.make_records(2, [60, 80])
@@ -502,6 +527,7 @@ class DriverTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'Recognition failed'):
             self.run_round(child, records)
         self.assertEqual(child.process.shutdowns, 1)  # the child was cleaned up
+        self.assert_pipes_closed(child.process)
         self.assertFalse((self.root / 'native-0' / 'result.json').exists())
         partial = json.loads((self.root / 'native-0' / 'partial.json').read_text())
         self.assertEqual(partial['active_request_id'], 'warm-0')
@@ -549,6 +575,8 @@ class DriverTest(unittest.TestCase):
                 read_pcm=lambda record: long_pcm, receive_timeout=5.0, watchdog_seconds=1.0)
         process, = spawned
         self.assertIsNotNone(process.poll())  # killed, not a leftover
+        self.assertTrue(process.stdin.closed)    # both real pipe handles were closed
+        self.assertTrue(process.stdout.closed)
         partial = json.loads((self.root / 'native-blocked' / 'partial.json').read_text())
         self.assertTrue(partial['timed_out'])
         self.assertEqual(partial['ready'], NATIVE_READY)
@@ -561,10 +589,14 @@ class DriverTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'Timed out'):
             self.run_round(silent, records, receive_timeout=0.05)
         self.assertEqual(silent.process.shutdowns, 1)
+        self.assert_pipes_closed(silent.process)
+        self.assertFalse((self.root / 'native-0' / 'result.json').exists())
         closing = FakeChild(self.events, NATIVE_READY, close_after_ready=True)
         with self.assertRaisesRegex(RuntimeError, 'stdout closed'):
-            self.run_round(closing, records, receive_timeout=5.0)
+            self.run_round(closing, records, round_index=1, receive_timeout=5.0)  # fresh directory
         self.assertEqual(closing.process.shutdowns, 1)
+        self.assert_pipes_closed(closing.process)
+        self.assertFalse((self.root / 'native-1' / 'result.json').exists())
 
     def test_nonzero_child_exit_fails_after_measurements(self):
         records = self.make_records(1, [40])
@@ -594,9 +626,9 @@ class DriverTest(unittest.TestCase):
                 'memory': {'peak_memory_footprint': 4096}}
 
     def test_round_helpers_shift_and_side_order(self):
-        self.assertEqual(pilot.round_order(0), ['mlx', 'native'])
-        self.assertEqual(pilot.round_order(1), ['native', 'mlx'])
-        self.assertEqual(pilot.round_order(2), ['mlx', 'native'])
+        self.assertEqual(pilot.round_order(0), ('mlx', 'native'))
+        self.assertEqual(pilot.round_order(1), ('native', 'mlx'))
+        self.assertEqual(pilot.round_order(2), ('mlx', 'native'))
         clips = list(range(9))
         self.assertEqual(pilot.shifted(clips, 0), clips)
         self.assertEqual(pilot.shifted(clips, 1), [7, 8, 0, 1, 2, 3, 4, 5, 6])

@@ -377,8 +377,14 @@ def run_side_round(side, round_index, directory, command, env, verify_ready, ide
                 messages.put(RuntimeError('Worker stdout closed before the next message.'))
             except Exception as error:
                 messages.put(error)
+            finally:
+                # Reached only after the iteration ended (EOF or shutdown), so
+                # this thread is no longer reading the pipe it closes here.
+                with contextlib.suppress(OSError, ValueError):
+                    process.stdout.close()
 
-        threading.Thread(target=read_stdout, daemon=True).start()
+        reader = threading.Thread(target=read_stdout, daemon=True)
+        reader.start()
 
         def receive():
             try:
@@ -449,7 +455,14 @@ def run_side_round(side, round_index, directory, command, env, verify_ready, ide
             raise failure
         finally:
             timer.cancel()
+            # Kill and wait first: the dead group delivers the stdout EOF that
+            # ends the reader and unblocks a write stuck in the pipe.
             shutdown(process)
+            timer.join()
+            reader.join()  # the reader saw that EOF and closed stdout itself
+            if not process.stdin.closed:
+                with contextlib.suppress(OSError, ValueError):
+                    process.stdin.close()
     result = {'started_utc': started, 'side': side, 'round': round_index, 'conditions': conditions,
               'command': command, 'spawn_prefix': ['/usr/bin/time', '-l', '-o', str(memory_log)],
               'environment': environment_note, 'ready': ready, 'identities': identities,
