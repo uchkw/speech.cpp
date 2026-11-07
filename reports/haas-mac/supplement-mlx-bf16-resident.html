@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <meta name="dcterms.date" content="2026-11-07" />
+  <title>Haas Japanese recognition on M2 Ultra with the MLX BF16 port</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Haas Japanese recognition on M2 Ultra with the MLX BF16 port</h1>
+<p class="date">2026-11-07</p>
+</header>
+<h2 id="decision">Decision</h2>
+<p>The engineering decision for this product and workload is to keep the native F16 worker for this workload. MLX had the slower median latency on 9 of nine files. Each file has a ratio of its three-round median MLX latency to its three-round median native latency. 1.32066 is the median of those nine ratios. 1.216 to 1.480 is the range across those nine ratios. This is a product-level comparison using independently converted weights. Feature and decoder arithmetic may differ between the builds.</p>
+<h2 id="workload-and-builds">Workload and builds</h2>
+<p>Inputs are nine distinct public FLEURS ja_jp test recordings. Durations span 6.36 to 28.20 s with three recordings in each of the 6–10, 10–20 and 20–30 s bands. All runs share one M2 Ultra host.</p>
+<p>The MLX side runs the pinned port with the published BF16 weights on native arm64 Python 3.12.11 with mlx 0.32.4 and mlx-metal 0.32.4. Code is pinned at <a href="https://github.com/matsuurajun/haas-mlx/tree/cde96d263f56aad75c1de70282f71a91562092dd">haas-mlx cde96d2</a> and weights at <a href="https://huggingface.co/mrjnzzz/Haas-ja-v1.0-mlx/tree/15ef4f11618c6a1ee50e0eafaae13beded8ecdf9">Haas-ja-v1.0-mlx 15ef4f1</a>.</p>
+<p>The native side runs speech.cpp with the Metal encoder and the TDT decoder on CPU with four threads using F16 GGUF weights. Code is pinned at <a href="https://github.com/uchkw/speech.cpp/tree/114c514430c8aa1455c077819f8e72e674a48b75">speech.cpp 114c514</a> and weights at <a href="https://huggingface.co/sakasegawa/Haas-ja-v1.0-GGUF/tree/6b965d5007ba780585de51549d57a8c1c0d67c7e">Haas-ja-v1.0-GGUF 6b965d5</a>.</p>
+<h2 id="method">Method</h2>
+<p>Timed latency begins immediately before the first base64/JSON encoding and the first pipe send of the 32768-byte PCM transport. It ends after terminal text receipt. File reading and hash validation occur before it. No inference trace is active during timing. Warm figures are p50, p90 and p99 in ms plus RTFx where larger is faster. Each of the three rounds used a fresh process per side. Each side ran nine warmups followed by nine measured requests per round. That gives 27 measured requests per side and 54 total rows for the nine distinct recordings. Rounds ran in AB/BA/AB order with A as MLX. Fresh figures are the spawn-to-ready median, the first request median and the gross peak memory footprint in bytes. Spawn-to-ready covers process startup plus model and tokenizer preparation. It is not an isolated model-load time. The gross peak covers startup, loading, warmups and all measured requests. It is the maximum of three process peaks per product. No baseline is subtracted. It is not a GPU-only measure. Every fresh process received the longest 28.20 s input first. That first request was a warmup. It sits outside the 27 measured requests. The MLX first request in round 1 was 552.54 ms. The filesystem cache was not reset. The experimental paired harness is pinned at <a href="https://github.com/uchkw/speech.cpp/tree/9fc6dcf3f294aa5e447409fe31a1b79194d32510/experiments/haas-mac/mlx">speech.cpp 9fc6dcf</a>.</p>
+<h2 id="results">Results</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>MLX</th>
+<th>Native</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Warm p50 (ms)</td>
+<td>108.43</td>
+<td>73.28</td>
+</tr>
+<tr>
+<td>Warm p90 (ms)</td>
+<td>173.47</td>
+<td>127.45</td>
+</tr>
+<tr>
+<td>Warm p99 (ms)</td>
+<td>184.24</td>
+<td>144.55</td>
+</tr>
+<tr>
+<td>RTFx (larger is faster)</td>
+<td>136.99</td>
+<td>183.11</td>
+</tr>
+<tr>
+<td>Fresh spawn-to-ready median (ms)</td>
+<td>258.44</td>
+<td>259.54</td>
+</tr>
+<tr>
+<td>Fresh first request median (ms)</td>
+<td>213.59</td>
+<td>159.49</td>
+</tr>
+<tr>
+<td>Gross peak memory footprint (bytes)</td>
+<td>1,992,787,936</td>
+<td>1,348,552,408</td>
+</tr>
+</tbody>
+</table>
+<h2 id="output-agreement">Output agreement</h2>
+<p>Raw plain text matched on 27 of 27 pairs. Both sides were individually stable across repeated runs. A separate public 7.98 s FLEURS smoke input outside the nine test recordings produced identical plain output from the resident process and the unmodified upstream MLX CLI.</p>
+<p>These observations cover raw strings only. The full 650-recording test set, normalized CER for both products, raw token IDs and timestamps remain unmeasured. Keyword and segment comparison is out of scope.</p>
+</body>
+</html>
