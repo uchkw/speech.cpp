@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "measure_id": "011b",
+  "title": "Fuse the gate projection and GLU epilogue",
+  "status": "source-prepared",
+  "source_review": "complete; no remaining blocking finding",
+  "reason": "Source-only final checkpoint. The kernel is committed and source review is complete with no remaining blocking finding, but nothing was compiled, executed or measured: compilation, runtime, math and performance checks are all not run, no numerical check is claimed to have passed, and shader compilation is not claimed to work. The scope is epilogue-only and independent of 011a: the gate projection W_gate*x -> F32 sigmoid -> MUL with the factor a is fused into the STORE of the ordinary (non-tensor) simdgroup matrix-multiply kernel, eliding the gate-MM and sigmoid intermediates and their two standalone elementwise dispatches while still materializing the final MUL output. The separate factor projection a = Wa*x and its materialization remain, so this is not a two-projection or concatenated-weight kernel. No measured result is transferred from any other trial.",
+  "baseline_commit": "114c514430c8aa1455c077819f8e72e674a48b75",
+  "ggml_base_commit": "e1a9ac12edbb57402618fd6936598603f5ee6266",
+  "ggml_commit": "18d581ee87ae2830488d466b054581e94fea4ead",
+  "ggml_pin_source": "ggml gitlink in the final speech.cpp parent commit",
+  "cases_commit": "de13b1be95800eabfbadbc4a71d287a02d6758be",
+  "independent_of": ["011a"],
+  "device": {
+    "target": "Mac M2 Ultra",
+    "requires": ["has_simdgroup_mm", "no tensor API"],
+    "epilogue_not_implemented_on": "the tensor API (M5) mat-mul path; the Metal kernel's tensor branch is untouched",
+    "untested_by_this_trial": ["Vulkan", "M5"]
+  },
+  "selector": {
+    "name": "GGML_METAL_MM_GLU",
+    "unset_or_literal_0": "disable (ordinary path)",
+    "literal_1": "enable",
+    "any_other_string_including_empty": "abort",
+    "caching": "read once and cached on the first candidate pattern check",
+    "process_rule": "fresh process for each original / OFF / ON side"
+  },
+  "candidate": {
+    "fusion": "MUL_MAT+UNARY+MUL store epilogue on the gate mat-mul",
+    "fused": "W_gate*x -> F32 sigmoid -> MUL with factor a",
+    "elides": ["the gate-MM intermediate materialization", "the sigmoid intermediate materialization", "the two standalone elementwise dispatches (SIGMOID and MUL)"],
+    "still_materializes": "the final MUL output, written by the fused store",
+    "kept_separate": "the factor projection a = Wa*x and its materialization",
+    "is_not": ["a two-projection kernel", "a concatenated-weight kernel"],
+    "relation_to_011a": "more than 011a's standalone sigmoid/MUL fusion",
+    "kernel_source": "ggml/src/ggml-metal/kernels/mul_mm.metal, non-tensor simdgroup branch (FC_mul_mm_glu, FC_mul_mm_glu_swap, extra factor argument)",
+    "pattern_source": "ggml/src/ggml-metal/ggml-metal-fusion.cpp (GGML_METAL_FUSION_MUL_MAT_GLU)",
+    "speech_source_site": "Encoder::convolution: mul(pw1_a(h), sigmoid(pw1_gate(h))), factor projection first",
+    "unchanged": ["no packing", "no dtype conversion", "no bias", "no new GEMM shape", "no altered multiplication loop", "both MUL operand orders remain supported"]
+  },
+  "eligibility": {
+    "gate_basis": "backend gate on the shape/type signature; model identity is not a gate",
+    "weights": "contiguous rank-2 F32/F16/Q8_0/Q4_K, K = M = 1024",
+    "tensors": "F32 contiguous x/factor/MUL_MAT/SIGMOID/MUL outputs, equal output shape",
+    "t_range": "17..384 eligible; T <= 16 takes the few-row MMA or mat-vec dispatch, T >= 385 stays ordinary",
+    "src1_precision_hint": "UNDEFINED, required conservatively for each of the four eligible weight types (F32, F16, Q8_0, Q4_K); an explicit F32 hint does not fuse",
+    "accumulation": "the actual family requests F32 accumulation; the helper separately checks dtype, source hint and accumulation fields",
+    "position": "a deliberately gated backend optimization, not a new family graph option"
+  },
+  "safety_contract": [
+    "Implemented and source-reviewed; unexecuted. Generic public-output, view and extra-consumer protections are retained: the pattern is a regular elision chain, so the generic chain, subgraph elidable-use and memory-range checks still apply.",
+    "All activations (x, factor, gate MM, sigmoid, MUL) must share one Metal buffer, while weights may be separate.",
+    "FULL matching rejects final-output overlap with W or x, and MM/sigmoid overlap with the factor.",
+    "FULL matching rejects either elided MM/sigmoid output overlapping either W or x: the ordinary sequence has already overwritten those bytes by the time a later consumer runs, while the fused execution would skip the intermediate stores.",
+    "Only the exact final-in-place factor is permitted; partial overlap is rejected.",
+    "Both Metal-buffer intervals and underlying host addresses are checked, so multiple wrappers over one host arena cannot hide an alias.",
+    "The pattern is skipped in the allocation-dependency pass: zero new allocation dependencies and no extended input lifetimes; unsafe aliases are rejected at full matching after allocation.",
+    "Implemented same-buffer negatives (final cases commit), one Metal buffer with a trailing add(mul, aliased input) and both MUL operand orders, none of which may fuse: raw_sigmoid_x (sigmoid storage exactly over the activation), raw_sigmoid_x_partial (16 bytes into the activation) and raw_sigmoid_w (over the F32 weight head, read back through a legitimate view of the weight). The runner binds the whole triple, weight included, into a single buffer object at page-aligned slots, so plain tensor identities carry the alias and no view_src is forged.",
+    "Mapped-wrapper negatives mapped_out_x / mapped_sigmoid_x / mapped_mm_a bind one host arena through two distinct Metal mappings and must stay unfused."
+  ],
+  "numerics": [
+    "Full tiles retain the original K loop, operand staging, accumulators, workgroup geometry and stores; the factor tile is loaded at the same simdgroup tile origin and leading dimension, pairing each thread element with the matching gate accumulator element.",
+    "Tail tiles keep the existing scratch and barriers and apply the epilogue only to valid float4/scalar stores; the factor rows of a partial tile stay inside the valid tail.",
+    "Sigmoid is the ordinary 1/(1+exp(-gate)) evaluated with an intended F32 intermediate before a separately evaluated product; the multiply uses safe math and contract-off semantics in the fused MUL's original operand order. The full-tile path evaluates the sigmoid per scalar, while the existing standalone unary path operates on float4 values.",
+    "Compiler math and rounding therefore require an actual hardware bit comparison of the full-tile scalar sigmoid against the standalone float4 unary result; source equivalence is not evidence of exact bits, and no such comparison has been run.",
+    "Staging on this pinned backend: with default source precision, this ordinary large-MM path stages operands in half, including F32-weight × F32-activation storage; an explicit F32 src[1] hint selects F32 operand staging only for the F32-weight × F32-activation kernel. The gate's UNDEFINED src[1] requirement is a conservative eligibility check applied to all four weight types, separate from this staging selection. No precision threshold is relaxed."
+  ],
+  "arithmetic": {
+    "dispatches_saved_per_eligible_layer": 2,
+    "dispatches_saved_across_24_layers": 48,
+    "device_traffic_saved_per_output_element_bytes": 16,
+    "traffic_basis": "gate-MM write+read and sigmoid write+read (F32)",
+    "still_present": ["both GEMMs' FLOPs", "the factor read", "the final write"],
+    "caveat": "Arithmetic counts only, not measured performance, memory-bandwidth or allocator-peak savings; extra epilogue registers and factor loads may offset the benefit."
+  },
+  "diagnostics_source": [
+    { "path": "src/families/fastconformer/encoder.cpp", "role": "pinned speech source; the GLU site in Encoder::convolution" },
+    { "path": "ggml/src/ggml-metal/kernels/mul_mm.metal", "role": "committed kernel: the non-tensor simdgroup store epilogue" },
+    { "path": "ggml/src/ggml-metal/ggml-metal-fusion.cpp", "role": "committed pattern table and the MUL_MAT+UNARY+MUL gate" },
+    { "path": "ggml/tests/test-mm-glu-cases.h", "role": "shared case table, graph fixture and deterministic initialization" },
+    { "path": "ggml/tests/test-metal-mm-glu.cpp", "role": "Metal-only runner: fusion counts, bit-exactness, poison, mapped and raw alias controls" },
+    { "path": "experiments/haas-mac/011b-glu-check.cpp", "role": "encoder helper haas-mm-glu-check" }
+  ],
+  "checks": [
+    { "name": "compilation", "status": "not-run", "detail": "Nothing at ggml commit 18d581ee87ae2830488d466b054581e94fea4ead has been compiled in this trial; no claim that Metal shader compilation works." },
+    { "name": "identical-builds-fresh-processes", "status": "not-run", "detail": "Build original and candidate identically; same diagnostic source and same synthetic values in separate fresh processes for original, candidate OFF and candidate ON; original vs OFF must be exact." },
+    { "name": "selector-controls", "status": "not-run", "detail": "Observe the unchanged selector OFF control and the invalid-selector (any non-0/1 string, including empty) rejection." },
+    { "name": "metal-direct-cases", "status": "not-run", "detail": "test-metal-mm-glu [expect-fusion: 0|1]: expected 0 for the original/OFF builds and 1 for candidate ON on eligible hardware; the per-case expected count is 1 only when the actual graph is eligible and 0 for every negative. Checks final exact bytes and finite values, intended fusion counts, zero allocation dependencies, original/OFF/ON binary snapshots, existing public intermediate retention, raw and mapped alias negatives, and poison controls." },
+    { "name": "test-backend-ops-mul_mat_glu", "status": "not-run", "detail": "Numerical comparison of the final output plus explicitly OUTPUT-protected intermediates at the pinned 5e-4 NMSE tolerance; never compare stale elided intermediates. The expected 0/1 fusion-count CLI belongs to test-metal-mm-glu, not here." },
+    { "name": "haas-mm-glu-check-encoder-helper", "status": "not-run", "detail": "Compile the identical helper against all three sides; its expected-eligible-fusions argument is 0 or 24: one actual GLU per layer, 24 normal fusions only for eligible T, zero retained-output fusions, exact normal/retained projected output; T list 1, 8, 16, 17, 31, 32, 33, 63, 64, 65, 171, 172, 375, 376, 384, 385. If the ordinary allocator yields fewer than the required 24 target fusions at an eligible frame length in the ON run, record that the intended production path was not reached and stop before performance measurement, keeping the guard and the expected count fixed; this stop rule is distinct from the retained-output runs, which expect zero fusions. Diagnostic counts, not a substitute for ordinary worker timing." },
+    { "name": "encoder-thresholds-unchanged", "status": "not-run", "detail": "Keep the official CPU F32 90 dB (unchanged control, not a GPU-fusion pass) and Metal F32/F16 25 dB thresholds." },
+    { "name": "recognition-parity-650", "status": "not-run", "detail": "Same model variants/inputs on each side over the same 650 recognition inputs: raw tensors/argmax, raw TDT ids/frames/durations, full public text/tokens/times, literal and repository-normalized CER." },
+    { "name": "paired-performance", "status": "not-run", "detail": "Only after numerical/path checks: ordinary non-instrumented paired latency/RTFx/load/peak-memory measurements, enough alternating trials to distinguish round noise; report p50/p90/p99." },
+    { "name": "vulkan-and-m5", "status": "not-run", "detail": "Vulkan and M5 remain untested and unapproved." }
+  ],
+  "artifacts_policy": {
+    "raw_artifacts_later": "outputs/haas-mac-campaign/011b/",
+    "publication_and_evaluation_import": "coordinator"
+  },
+  "adoption_decision": "none made here",
+  "execution_note": "No code, build, tests or timings were run; compilation, runtime, math and performance checks are all not run, and this trial is unbuilt and unmeasured."
+}
