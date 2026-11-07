@@ -279,11 +279,15 @@ jobs:
           name: speech-linux-x64-${{ matrix.backend }}
           path: ${{ env.ARCHIVE }}
 
+  # This source-only fork has no published binary releases. Release installation and updates are not tested;
+  # the platform build, package and archive checks still run. A fork release channel needs its own installer checks.
   # install.sh as a user runs it, against the published releases, in home folders of the job's own: a first install of
   # an earlier release, an update to the latest that removes it, a run that finds it installed, a build of another
   # archive of the same version replaced, the line it adds to PATH once however often it runs, and an archive whose
   # SHA-256 differs from SHA256SUMS refused with nothing installed. It checks the script, not this commit's build.
   installer:
+    name: 'Release installer (skipped: source-only fork)'
+    if: ${{ false }}
     strategy:
       matrix:
         os: [ubuntu-22.04, macos-15]

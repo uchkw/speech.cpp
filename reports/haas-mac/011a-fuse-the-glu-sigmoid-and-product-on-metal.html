@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>011a · Fuse the GLU sigmoid and product on Metal</title><style>
+:root{color-scheme:light;font:16px/1.55 system-ui,sans-serif;color:#172738;background:#f3f6f9}
+*{box-sizing:border-box}body{margin:0}main{max-width:1180px;margin:auto;padding:34px 22px 64px}
+a{color:#075ca8;text-underline-offset:3px}a:focus-visible,summary:focus-visible{outline:3px solid #c36b00;outline-offset:4px}
+h1{font-size:clamp(1.8rem,4vw,2.7rem);line-height:1.18;margin:12px 0 18px}h2{font-size:1.35rem;margin:30px 0 12px}
+h3{font-size:1.05rem;margin:22px 0 10px}p{max-width:90ch}small,.muted{color:#506174}.eyebrow{font-size:.8rem;letter-spacing:.12em;text-transform:uppercase;color:#506174}
+.panel{background:white;border:1px solid #d5dfe8;border-radius:10px;padding:20px;margin:18px 0}.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}th,td{text-align:left;vertical-align:top;padding:11px 10px;border-bottom:1px solid #dce4eb}th{font-size:.85rem;background:#f2f6fa}td.num,th.num{text-align:right;white-space:nowrap}
+caption{text-align:left;font-weight:600;padding:8px 0}code{font: .87em ui-monospace,monospace;overflow-wrap:anywhere}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.83rem}
+.status{display:inline-block;border:1px solid;border-radius:5px;padding:2px 8px;font-size:.8rem;font-weight:650;text-transform:uppercase}
+.pending,.not_applicable{color:#405269;background:#edf1f5}.in_progress{color:#174c7b;background:#e8f2ff}.accepted,.validated_mac{color:#16572f;background:#e7f5eb}.rejected{color:#8a2631;background:#fff0f0}.conditional,.pending_official_reference{color:#754700;background:#fff4d8}.blocked{color:#663c83;background:#f4eafa}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}.metric strong{display:block;font-size:1.55rem;line-height:1.2}.metric span{font-size:.85rem;color:#506174}
+details{margin:14px 0}summary{cursor:pointer;font-weight:600}.warning{border-left:4px solid #bc7600;padding-left:15px}svg{max-width:100%;height:auto;display:block}footer{margin-top:36px;font-size:.85rem;color:#506174}
+@media(max-width:600px){main{padding:22px 12px}.panel{padding:14px}th,td{padding:9px 7px}h1{overflow-wrap:anywhere}}
+</style></head><body><main><nav><a href="index.html">← All measures</a></nav><p class="eyebrow">Haas on Apple Silicon</p><h1>011a · Fuse the GLU sigmoid and product on Metal</h1><span class="status rejected">rejected</span><p>Reject the GLU-only variant after the bounded CPU4 request screen. Median paired reductions are +0.516% for Q4_K, +1.628% for Q8_0 and -1.219% for F16; the changes do not establish a stable benefit beyond observed round variation. Checked outputs match, including all 81 latency texts and 27 timestamped public results. No implementation is adopted. Pointwise projection plus GLU remains a separate unfinished candidate under measure 011.</p><p><a href="011a-fuse-the-glu-sigmoid-and-product-on-metal.json">Machine-readable report JSON</a> · <a href="https://github.com/uchkw/speech.cpp/issues/1">Tracking issue</a></p><p><strong>Measured scope:</strong> 9 inputs × 3 latency rounds per side; 9 quality inputs per side. CPU decoding with 4 threads.</p><p class="muted">Four CPU threads are an explicit tuned campaign setting, not the runtime default. Unspecified threads (threads=0) use performance cores: 16 on this M2 Ultra. Code gains compare the tuned anchor and do not include the preliminary thread-tuning gain; measure 021 evaluates automatic versus four threads separately.</p><section class="panel"><h2>Q4_K</h2><svg viewBox="0 0 520 159" role="img" aria-label="Median warm request latency in milliseconds, lower is faster"><title>Median warm request latency, lower is faster</title><text x="0" y="39" fill="#172738" font-size="13">baseline</text><rect x="110" y="22" width="297.2" height="24" rx="3" fill="#637d94"/><text x="417.2" y="39" fill="#172738" font-size="13">78.18 ms</text><text x="0" y="77" fill="#172738" font-size="13">candidate</text><rect x="110" y="60" width="295.2" height="24" rx="3" fill="#1765a5"/><text x="415.2" y="77" fill="#172738" font-size="13">77.66 ms</text><text x="0" y="115" fill="#172738" font-size="13">anchor</text><rect x="110" y="98" width="300.0" height="24" rx="3" fill="#637d94"/><text x="420.0" y="115" fill="#172738" font-size="13">78.93 ms</text></svg><div class="scroll" tabindex="0" role="region" aria-label="Warm latency and recognition error"><table><caption>Warm latency and recognition error</caption><thead><tr><th scope="col">Build</th><th scope="col">p50 ms</th><th scope="col">p90 ms</th><th scope="col">p99 ms</th><th scope="col">Literal CER</th><th scope="col">Repository CER</th><th scope="col">Peak GiB</th></tr></thead><tbody><tr><td>baseline</td><td>78.18</td><td>124.99</td><td>146.10</td><td>7.5188%</td><td>4.4625%</td><td>0.419</td></tr><tr><td>candidate</td><td>77.66</td><td>124.19</td><td>144.06</td><td>7.5188%</td><td>4.4625%</td><td>0.421</td></tr><tr><td>anchor</td><td>78.93</td><td>128.06</td><td>149.87</td><td>7.5188%</td><td>4.4625%</td><td>0.421</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="Relative: the same verified candidate binary with GGML_METAL_GLU=1 against 0. Cumulative: a separate direct comparison with the explicitly specified fixed anchor; it is not an integrated campaign gain."><table><caption>Relative: the same verified candidate binary with GGML_METAL_GLU=1 against 0. Cumulative: a separate direct comparison with the explicitly specified fixed anchor; it is not an integrated campaign gain.</caption><thead><tr><th scope="col">Reference</th><th scope="col">Median paired reduction</th><th scope="col">Quality texts changed</th><th scope="col">Latency texts changed / requests</th><th scope="col">Tokens/times changed</th><th scope="col">Segments changed</th><th scope="col">Literal better / worse</th><th scope="col">Repository better / worse</th></tr></thead><tbody><tr><td>relative</td><td>0.52%</td><td>0</td><td>0 / 27</td><td>0</td><td>0</td><td>0 / 0</td><td>0 / 0</td></tr><tr><td>cumulative</td><td>1.49%</td><td>0</td><td>0 / 27</td><td>0</td><td>0</td><td>0 / 0</td><td>0 / 0</td></tr></tbody></table></div><p class="muted">For each input, first take each build’s median latency over rounds, then divide candidate by baseline. Subtract the median of these paired ratios from one and express it as a percentage: positive is faster. This differs from comparing the aggregate p50 values above. A cumulative gain appears only for an explicitly specified anchor. Gains are direct paired comparisons, not added percentages. A matching CER does not mean matching transcripts.</p><details><summary>Text equality for every latency round (timestamps disabled)</summary><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Reference</th><th scope="col">Round</th><th scope="col">Requests compared</th><th scope="col">Texts changed</th></tr></thead><tbody><tr><td>relative</td><td>0</td><td>9</td><td>0</td></tr><tr><td>relative</td><td>1</td><td>9</td><td>0</td></tr><tr><td>relative</td><td>2</td><td>9</td><td>0</td></tr><tr><td>cumulative</td><td>0</td><td>9</td><td>0</td></tr><tr><td>cumulative</td><td>1</td><td>9</td><td>0</td></tr><tr><td>cumulative</td><td>2</td><td>9</td><td>0</td></tr></tbody></table></div></details><div class="scroll" tabindex="0" role="region" aria-label="Latency by input length"><table><caption>Latency by input length</caption><thead><tr><th scope="col">Build</th><th scope="col">Audio length</th><th scope="col">p50 ms</th><th scope="col">p90 ms</th><th scope="col">p99 ms</th><th scope="col">Inputs</th></tr></thead><tbody><tr><td>baseline</td><td>10-20s</td><td>78.18</td><td>102.19</td><td>107.59</td><td>3</td></tr><tr><td>baseline</td><td>20-30s</td><td>119.13</td><td>142.58</td><td>147.86</td><td>3</td></tr><tr><td>baseline</td><td>6-10s</td><td>56.31</td><td>60.71</td><td>61.70</td><td>3</td></tr><tr><td>candidate</td><td>10-20s</td><td>77.66</td><td>102.03</td><td>107.51</td><td>3</td></tr><tr><td>candidate</td><td>20-30s</td><td>118.67</td><td>140.74</td><td>145.71</td><td>3</td></tr><tr><td>candidate</td><td>6-10s</td><td>55.95</td><td>60.61</td><td>61.66</td><td>3</td></tr><tr><td>anchor</td><td>10-20s</td><td>78.93</td><td>101.91</td><td>107.08</td><td>3</td></tr><tr><td>anchor</td><td>20-30s</td><td>122.00</td><td>146.24</td><td>151.69</td><td>3</td></tr><tr><td>anchor</td><td>6-10s</td><td>56.40</td><td>60.84</td><td>61.83</td><td>3</td></tr></tbody></table></div><details><summary>Load, first request and stage timings</summary><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Build</th><th scope="col">Load to ready ms</th><th scope="col">First request ms</th><th scope="col">RTFx</th><th scope="col">Stage evidence</th></tr></thead><tbody><tr><td>baseline</td><td>139.15</td><td>168.39</td><td>175.46</td><td>measured</td></tr><tr><td>candidate</td><td>138.48</td><td>166.53</td><td>176.51</td><td>measured</td></tr><tr><td>anchor</td><td>143.74</td><td>166.82</td><td>173.41</td><td>measured</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="baseline: 1321491767934942997"><table><caption>baseline: 1321491767934942997</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>32.35</td></tr><tr><td>frontend</td><td>1.98</td></tr><tr><td>encoder build</td><td>0.28</td></tr><tr><td>encoder compute</td><td>26.41</td></tr><tr><td>encoder read</td><td>0.01</td></tr><tr><td>decoder</td><td>3.66</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="baseline: 2330237947966115273"><table><caption>baseline: 2330237947966115273</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>45.46</td></tr><tr><td>frontend</td><td>3.59</td></tr><tr><td>encoder build</td><td>1.38</td></tr><tr><td>encoder compute</td><td>36.21</td></tr><tr><td>encoder read</td><td>0.02</td></tr><tr><td>decoder</td><td>4.27</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="baseline: 8675814957598723431"><table><caption>baseline: 8675814957598723431</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>67.96</td></tr><tr><td>frontend</td><td>6.04</td></tr><tr><td>encoder build</td><td>2.22</td></tr><tr><td>encoder compute</td><td>49.90</td></tr><tr><td>encoder read</td><td>0.03</td></tr><tr><td>decoder</td><td>9.80</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="candidate: 1321491767934942997"><table><caption>candidate: 1321491767934942997</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>31.31</td></tr><tr><td>frontend</td><td>1.98</td></tr><tr><td>encoder build</td><td>0.27</td></tr><tr><td>encoder compute</td><td>26.42</td></tr><tr><td>encoder read</td><td>0.01</td></tr><tr><td>decoder</td><td>2.54</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="candidate: 2330237947966115273"><table><caption>candidate: 2330237947966115273</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>45.95</td></tr><tr><td>frontend</td><td>3.59</td></tr><tr><td>encoder build</td><td>1.45</td></tr><tr><td>encoder compute</td><td>36.07</td></tr><tr><td>encoder read</td><td>0.02</td></tr><tr><td>decoder</td><td>4.29</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="candidate: 8675814957598723431"><table><caption>candidate: 8675814957598723431</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>66.36</td></tr><tr><td>frontend</td><td>6.05</td></tr><tr><td>encoder build</td><td>1.99</td></tr><tr><td>encoder compute</td><td>49.69</td></tr><tr><td>encoder read</td><td>0.06</td></tr><tr><td>decoder</td><td>8.50</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="anchor: 1321491767934942997"><table><caption>anchor: 1321491767934942997</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>31.46</td></tr><tr><td>frontend</td><td>1.98</td></tr><tr><td>encoder build</td><td>0.27</td></tr><tr><td>encoder compute</td><td>26.64</td></tr><tr><td>encoder read</td><td>0.01</td></tr><tr><td>decoder</td><td>2.54</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="anchor: 2330237947966115273"><table><caption>anchor: 2330237947966115273</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>45.59</td></tr><tr><td>frontend</td><td>3.60</td></tr><tr><td>encoder build</td><td>1.37</td></tr><tr><td>encoder compute</td><td>36.21</td></tr><tr><td>encoder read</td><td>0.04</td></tr><tr><td>decoder</td><td>4.37</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="anchor: 8675814957598723431"><table><caption>anchor: 8675814957598723431</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>66.87</td></tr><tr><td>frontend</td><td>6.05</td></tr><tr><td>encoder build</td><td>2.01</td></tr><tr><td>encoder compute</td><td>50.11</td></tr><tr><td>encoder read</td><td>0.06</td></tr><tr><td>decoder</td><td>8.82</td></tr></tbody></table></div></details></section><section class="panel"><h2>Q8_0</h2><svg viewBox="0 0 520 159" role="img" aria-label="Median warm request latency in milliseconds, lower is faster"><title>Median warm request latency, lower is faster</title><text x="0" y="39" fill="#172738" font-size="13">baseline</text><rect x="110" y="22" width="300.0" height="24" rx="3" fill="#637d94"/><text x="420.0" y="39" fill="#172738" font-size="13">75.41 ms</text><text x="0" y="77" fill="#172738" font-size="13">candidate</text><rect x="110" y="60" width="297.9" height="24" rx="3" fill="#1765a5"/><text x="417.9" y="77" fill="#172738" font-size="13">74.89 ms</text><text x="0" y="115" fill="#172738" font-size="13">anchor</text><rect x="110" y="98" width="296.8" height="24" rx="3" fill="#637d94"/><text x="416.8" y="115" fill="#172738" font-size="13">74.60 ms</text></svg><div class="scroll" tabindex="0" role="region" aria-label="Warm latency and recognition error"><table><caption>Warm latency and recognition error</caption><thead><tr><th scope="col">Build</th><th scope="col">p50 ms</th><th scope="col">p90 ms</th><th scope="col">p99 ms</th><th scope="col">Literal CER</th><th scope="col">Repository CER</th><th scope="col">Peak GiB</th></tr></thead><tbody><tr><td>baseline</td><td>75.41</td><td>119.68</td><td>139.68</td><td>7.3308%</td><td>4.2596%</td><td>0.701</td></tr><tr><td>candidate</td><td>74.89</td><td>122.13</td><td>142.43</td><td>7.3308%</td><td>4.2596%</td><td>0.697</td></tr><tr><td>anchor</td><td>74.60</td><td>119.62</td><td>139.45</td><td>7.3308%</td><td>4.2596%</td><td>0.705</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="Relative: the same verified candidate binary with GGML_METAL_GLU=1 against 0. Cumulative: a separate direct comparison with the explicitly specified fixed anchor; it is not an integrated campaign gain."><table><caption>Relative: the same verified candidate binary with GGML_METAL_GLU=1 against 0. Cumulative: a separate direct comparison with the explicitly specified fixed anchor; it is not an integrated campaign gain.</caption><thead><tr><th scope="col">Reference</th><th scope="col">Median paired reduction</th><th scope="col">Quality texts changed</th><th scope="col">Latency texts changed / requests</th><th scope="col">Tokens/times changed</th><th scope="col">Segments changed</th><th scope="col">Literal better / worse</th><th scope="col">Repository better / worse</th></tr></thead><tbody><tr><td>relative</td><td>1.63%</td><td>0</td><td>0 / 27</td><td>0</td><td>0</td><td>0 / 0</td><td>0 / 0</td></tr><tr><td>cumulative</td><td>0.15%</td><td>0</td><td>0 / 27</td><td>0</td><td>0</td><td>0 / 0</td><td>0 / 0</td></tr></tbody></table></div><p class="muted">For each input, first take each build’s median latency over rounds, then divide candidate by baseline. Subtract the median of these paired ratios from one and express it as a percentage: positive is faster. This differs from comparing the aggregate p50 values above. A cumulative gain appears only for an explicitly specified anchor. Gains are direct paired comparisons, not added percentages. A matching CER does not mean matching transcripts.</p><details><summary>Text equality for every latency round (timestamps disabled)</summary><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Reference</th><th scope="col">Round</th><th scope="col">Requests compared</th><th scope="col">Texts changed</th></tr></thead><tbody><tr><td>relative</td><td>0</td><td>9</td><td>0</td></tr><tr><td>relative</td><td>1</td><td>9</td><td>0</td></tr><tr><td>relative</td><td>2</td><td>9</td><td>0</td></tr><tr><td>cumulative</td><td>0</td><td>9</td><td>0</td></tr><tr><td>cumulative</td><td>1</td><td>9</td><td>0</td></tr><tr><td>cumulative</td><td>2</td><td>9</td><td>0</td></tr></tbody></table></div></details><div class="scroll" tabindex="0" role="region" aria-label="Latency by input length"><table><caption>Latency by input length</caption><thead><tr><th scope="col">Build</th><th scope="col">Audio length</th><th scope="col">p50 ms</th><th scope="col">p90 ms</th><th scope="col">p99 ms</th><th scope="col">Inputs</th></tr></thead><tbody><tr><td>baseline</td><td>10-20s</td><td>75.41</td><td>97.73</td><td>102.76</td><td>3</td></tr><tr><td>baseline</td><td>20-30s</td><td>114.12</td><td>136.35</td><td>141.35</td><td>3</td></tr><tr><td>baseline</td><td>6-10s</td><td>56.75</td><td>59.37</td><td>59.95</td><td>3</td></tr><tr><td>candidate</td><td>10-20s</td><td>74.89</td><td>98.09</td><td>103.32</td><td>3</td></tr><tr><td>candidate</td><td>20-30s</td><td>116.49</td><td>139.05</td><td>144.12</td><td>3</td></tr><tr><td>candidate</td><td>6-10s</td><td>53.34</td><td>57.75</td><td>58.74</td><td>3</td></tr><tr><td>anchor</td><td>10-20s</td><td>74.60</td><td>98.17</td><td>103.48</td><td>3</td></tr><tr><td>anchor</td><td>20-30s</td><td>114.11</td><td>136.14</td><td>141.10</td><td>3</td></tr><tr><td>anchor</td><td>6-10s</td><td>53.42</td><td>57.88</td><td>58.88</td><td>3</td></tr></tbody></table></div><details><summary>Load, first request and stage timings</summary><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Build</th><th scope="col">Load to ready ms</th><th scope="col">First request ms</th><th scope="col">RTFx</th><th scope="col">Stage evidence</th></tr></thead><tbody><tr><td>baseline</td><td>183.66</td><td>161.70</td><td>181.55</td><td>measured</td></tr><tr><td>candidate</td><td>184.11</td><td>159.04</td><td>182.56</td><td>measured</td></tr><tr><td>anchor</td><td>186.02</td><td>160.98</td><td>183.73</td><td>measured</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="baseline: 1321491767934942997"><table><caption>baseline: 1321491767934942997</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>28.78</td></tr><tr><td>frontend</td><td>1.98</td></tr><tr><td>encoder build</td><td>0.28</td></tr><tr><td>encoder compute</td><td>23.87</td></tr><tr><td>encoder read</td><td>0.01</td></tr><tr><td>decoder</td><td>2.57</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="baseline: 2330237947966115273"><table><caption>baseline: 2330237947966115273</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>42.93</td></tr><tr><td>frontend</td><td>3.59</td></tr><tr><td>encoder build</td><td>1.39</td></tr><tr><td>encoder compute</td><td>32.56</td></tr><tr><td>encoder read</td><td>0.04</td></tr><tr><td>decoder</td><td>5.29</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="baseline: 8675814957598723431"><table><caption>baseline: 8675814957598723431</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>62.01</td></tr><tr><td>frontend</td><td>6.02</td></tr><tr><td>encoder build</td><td>2.00</td></tr><tr><td>encoder compute</td><td>45.15</td></tr><tr><td>encoder read</td><td>0.03</td></tr><tr><td>decoder</td><td>8.57</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="candidate: 1321491767934942997"><table><caption>candidate: 1321491767934942997</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>30.25</td></tr><tr><td>frontend</td><td>1.99</td></tr><tr><td>encoder build</td><td>0.28</td></tr><tr><td>encoder compute</td><td>23.83</td></tr><tr><td>encoder read</td><td>0.03</td></tr><tr><td>decoder</td><td>4.04</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="candidate: 2330237947966115273"><table><caption>candidate: 2330237947966115273</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>43.55</td></tr><tr><td>frontend</td><td>4.24</td></tr><tr><td>encoder build</td><td>1.55</td></tr><tr><td>encoder compute</td><td>32.48</td></tr><tr><td>encoder read</td><td>0.01</td></tr><tr><td>decoder</td><td>5.70</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="candidate: 8675814957598723431"><table><caption>candidate: 8675814957598723431</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>63.01</td></tr><tr><td>frontend</td><td>6.03</td></tr><tr><td>encoder build</td><td>1.99</td></tr><tr><td>encoder compute</td><td>45.04</td></tr><tr><td>encoder read</td><td>0.07</td></tr><tr><td>decoder</td><td>9.75</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="anchor: 1321491767934942997"><table><caption>anchor: 1321491767934942997</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>28.84</td></tr><tr><td>frontend</td><td>1.97</td></tr><tr><td>encoder build</td><td>0.28</td></tr><tr><td>encoder compute</td><td>24.00</td></tr><tr><td>encoder read</td><td>0.03</td></tr><tr><td>decoder</td><td>2.51</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="anchor: 2330237947966115273"><table><caption>anchor: 2330237947966115273</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>41.87</td></tr><tr><td>frontend</td><td>3.60</td></tr><tr><td>encoder build</td><td>1.37</td></tr><tr><td>encoder compute</td><td>32.61</td></tr><tr><td>encoder read</td><td>0.04</td></tr><tr><td>decoder</td><td>4.20</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="anchor: 8675814957598723431"><table><caption>anchor: 8675814957598723431</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>61.92</td></tr><tr><td>frontend</td><td>6.02</td></tr><tr><td>encoder build</td><td>2.00</td></tr><tr><td>encoder compute</td><td>45.26</td></tr><tr><td>encoder read</td><td>0.03</td></tr><tr><td>decoder</td><td>8.62</td></tr></tbody></table></div></details></section><section class="panel"><h2>F16</h2><svg viewBox="0 0 520 159" role="img" aria-label="Median warm request latency in milliseconds, lower is faster"><title>Median warm request latency, lower is faster</title><text x="0" y="39" fill="#172738" font-size="13">baseline</text><rect x="110" y="22" width="288.6" height="24" rx="3" fill="#637d94"/><text x="408.6" y="39" fill="#172738" font-size="13">72.83 ms</text><text x="0" y="77" fill="#172738" font-size="13">candidate</text><rect x="110" y="60" width="288.8" height="24" rx="3" fill="#1765a5"/><text x="408.8" y="77" fill="#172738" font-size="13">72.88 ms</text><text x="0" y="115" fill="#172738" font-size="13">anchor</text><rect x="110" y="98" width="300.0" height="24" rx="3" fill="#637d94"/><text x="420.0" y="115" fill="#172738" font-size="13">75.71 ms</text></svg><div class="scroll" tabindex="0" role="region" aria-label="Warm latency and recognition error"><table><caption>Warm latency and recognition error</caption><thead><tr><th scope="col">Build</th><th scope="col">p50 ms</th><th scope="col">p90 ms</th><th scope="col">p99 ms</th><th scope="col">Literal CER</th><th scope="col">Repository CER</th><th scope="col">Peak GiB</th></tr></thead><tbody><tr><td>baseline</td><td>72.83</td><td>118.58</td><td>139.95</td><td>7.3308%</td><td>4.2596%</td><td>1.251</td></tr><tr><td>candidate</td><td>72.88</td><td>119.18</td><td>140.49</td><td>7.3308%</td><td>4.2596%</td><td>1.253</td></tr><tr><td>anchor</td><td>75.71</td><td>120.60</td><td>141.90</td><td>7.3308%</td><td>4.2596%</td><td>1.250</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="Relative: the same verified candidate binary with GGML_METAL_GLU=1 against 0. Cumulative: a separate direct comparison with the explicitly specified fixed anchor; it is not an integrated campaign gain."><table><caption>Relative: the same verified candidate binary with GGML_METAL_GLU=1 against 0. Cumulative: a separate direct comparison with the explicitly specified fixed anchor; it is not an integrated campaign gain.</caption><thead><tr><th scope="col">Reference</th><th scope="col">Median paired reduction</th><th scope="col">Quality texts changed</th><th scope="col">Latency texts changed / requests</th><th scope="col">Tokens/times changed</th><th scope="col">Segments changed</th><th scope="col">Literal better / worse</th><th scope="col">Repository better / worse</th></tr></thead><tbody><tr><td>relative</td><td>-1.22%</td><td>0</td><td>0 / 27</td><td>0</td><td>0</td><td>0 / 0</td><td>0 / 0</td></tr><tr><td>cumulative</td><td>1.24%</td><td>0</td><td>0 / 27</td><td>0</td><td>0</td><td>0 / 0</td><td>0 / 0</td></tr></tbody></table></div><p class="muted">For each input, first take each build’s median latency over rounds, then divide candidate by baseline. Subtract the median of these paired ratios from one and express it as a percentage: positive is faster. This differs from comparing the aggregate p50 values above. A cumulative gain appears only for an explicitly specified anchor. Gains are direct paired comparisons, not added percentages. A matching CER does not mean matching transcripts.</p><details><summary>Text equality for every latency round (timestamps disabled)</summary><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Reference</th><th scope="col">Round</th><th scope="col">Requests compared</th><th scope="col">Texts changed</th></tr></thead><tbody><tr><td>relative</td><td>0</td><td>9</td><td>0</td></tr><tr><td>relative</td><td>1</td><td>9</td><td>0</td></tr><tr><td>relative</td><td>2</td><td>9</td><td>0</td></tr><tr><td>cumulative</td><td>0</td><td>9</td><td>0</td></tr><tr><td>cumulative</td><td>1</td><td>9</td><td>0</td></tr><tr><td>cumulative</td><td>2</td><td>9</td><td>0</td></tr></tbody></table></div></details><div class="scroll" tabindex="0" role="region" aria-label="Latency by input length"><table><caption>Latency by input length</caption><thead><tr><th scope="col">Build</th><th scope="col">Audio length</th><th scope="col">p50 ms</th><th scope="col">p90 ms</th><th scope="col">p99 ms</th><th scope="col">Inputs</th></tr></thead><tbody><tr><td>baseline</td><td>10-20s</td><td>72.83</td><td>96.41</td><td>101.71</td><td>3</td></tr><tr><td>baseline</td><td>20-30s</td><td>112.64</td><td>136.39</td><td>141.73</td><td>3</td></tr><tr><td>baseline</td><td>6-10s</td><td>52.58</td><td>56.80</td><td>57.75</td><td>3</td></tr><tr><td>candidate</td><td>10-20s</td><td>72.88</td><td>97.53</td><td>103.08</td><td>3</td></tr><tr><td>candidate</td><td>20-30s</td><td>113.26</td><td>136.94</td><td>142.27</td><td>3</td></tr><tr><td>candidate</td><td>6-10s</td><td>53.22</td><td>59.47</td><td>60.87</td><td>3</td></tr><tr><td>anchor</td><td>10-20s</td><td>75.71</td><td>101.29</td><td>107.04</td><td>3</td></tr><tr><td>anchor</td><td>20-30s</td><td>114.68</td><td>138.35</td><td>143.67</td><td>3</td></tr><tr><td>anchor</td><td>6-10s</td><td>54.72</td><td>58.61</td><td>59.49</td><td>3</td></tr></tbody></table></div><details><summary>Load, first request and stage timings</summary><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Build</th><th scope="col">Load to ready ms</th><th scope="col">First request ms</th><th scope="col">RTFx</th><th scope="col">Stage evidence</th></tr></thead><tbody><tr><td>baseline</td><td>273.91</td><td>162.47</td><td>186.26</td><td>measured</td></tr><tr><td>candidate</td><td>274.40</td><td>161.25</td><td>184.29</td><td>measured</td></tr><tr><td>anchor</td><td>274.94</td><td>161.13</td><td>181.05</td><td>measured</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="baseline: 1321491767934942997"><table><caption>baseline: 1321491767934942997</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>28.22</td></tr><tr><td>frontend</td><td>1.98</td></tr><tr><td>encoder build</td><td>0.28</td></tr><tr><td>encoder compute</td><td>22.91</td></tr><tr><td>encoder read</td><td>0.03</td></tr><tr><td>decoder</td><td>3.02</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="baseline: 2330237947966115273"><table><caption>baseline: 2330237947966115273</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>39.81</td></tr><tr><td>frontend</td><td>3.60</td></tr><tr><td>encoder build</td><td>1.37</td></tr><tr><td>encoder compute</td><td>29.83</td></tr><tr><td>encoder read</td><td>0.02</td></tr><tr><td>decoder</td><td>5.02</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="baseline: 8675814957598723431"><table><caption>baseline: 8675814957598723431</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>59.85</td></tr><tr><td>frontend</td><td>6.06</td></tr><tr><td>encoder build</td><td>1.98</td></tr><tr><td>encoder compute</td><td>41.85</td></tr><tr><td>encoder read</td><td>0.03</td></tr><tr><td>decoder</td><td>9.89</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="candidate: 1321491767934942997"><table><caption>candidate: 1321491767934942997</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>28.09</td></tr><tr><td>frontend</td><td>1.98</td></tr><tr><td>encoder build</td><td>0.27</td></tr><tr><td>encoder compute</td><td>22.76</td></tr><tr><td>encoder read</td><td>0.02</td></tr><tr><td>decoder</td><td>3.05</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="candidate: 2330237947966115273"><table><caption>candidate: 2330237947966115273</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>39.83</td></tr><tr><td>frontend</td><td>3.60</td></tr><tr><td>encoder build</td><td>1.39</td></tr><tr><td>encoder compute</td><td>29.64</td></tr><tr><td>encoder read</td><td>0.02</td></tr><tr><td>decoder</td><td>5.14</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="candidate: 8675814957598723431"><table><caption>candidate: 8675814957598723431</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>59.71</td></tr><tr><td>frontend</td><td>6.05</td></tr><tr><td>encoder build</td><td>1.99</td></tr><tr><td>encoder compute</td><td>41.68</td></tr><tr><td>encoder read</td><td>0.03</td></tr><tr><td>decoder</td><td>9.89</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="anchor: 1321491767934942997"><table><caption>anchor: 1321491767934942997</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>28.32</td></tr><tr><td>frontend</td><td>1.98</td></tr><tr><td>encoder build</td><td>0.28</td></tr><tr><td>encoder compute</td><td>22.96</td></tr><tr><td>encoder read</td><td>0.03</td></tr><tr><td>decoder</td><td>3.04</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="anchor: 2330237947966115273"><table><caption>anchor: 2330237947966115273</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>39.81</td></tr><tr><td>frontend</td><td>3.61</td></tr><tr><td>encoder build</td><td>1.41</td></tr><tr><td>encoder compute</td><td>29.70</td></tr><tr><td>encoder read</td><td>0.02</td></tr><tr><td>decoder</td><td>5.09</td></tr></tbody></table></div><div class="scroll" tabindex="0" role="region" aria-label="anchor: 8675814957598723431"><table><caption>anchor: 8675814957598723431</caption><thead><tr><th scope="col">Stage</th><th scope="col">Median ms</th></tr></thead><tbody><tr><td>core total</td><td>63.94</td></tr><tr><td>frontend</td><td>5.71</td></tr><tr><td>encoder build</td><td>2.11</td></tr><tr><td>encoder compute</td><td>42.00</td></tr><tr><td>encoder read</td><td>0.04</td></tr><tr><td>decoder</td><td>14.07</td></tr></tbody></table></div></details></section><h2>Paired screen reductions and observed round variation</h2><p>Pair the same nine recordings within each round. The combined result first takes each input median over three rounds, then the median ON/OFF ratio. Positive means lower latency.</p><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Type</th><th scope="col">Combined</th><th scope="col">Round 1</th><th scope="col">Round 2</th><th scope="col">Round 3</th><th scope="col">Inputs faster / slower</th><th scope="col">OFF / ON median round range</th></tr></thead><tbody><tr><td>Q4_K</td><td>0.516%</td><td>2.034%</td><td>0.011%</td><td>0.721%</td><td>9 / 0</td><td>1.570% / 3.320%</td></tr><tr><td>Q8_0</td><td>1.628%</td><td>0.065%</td><td>0.633%</td><td>4.159%</td><td>6 / 3</td><td>7.208% / 3.700%</td></tr><tr><td>F16</td><td>-1.219%</td><td>0.174%</td><td>-1.219%</td><td>-1.236%</td><td>1 / 8</td><td>1.047% / 3.191%</td></tr></tbody></table></div><ul><li>Round range is (maximum minus minimum) / median for each input, then the median over inputs. It is descriptive variation, not a confidence interval.</li><li>The 20-30 second paired reductions are Q4_K +0.455%, Q8_0 -1.964% and F16 -0.375%. No full or short-prefix follow-up is run.</li></ul><h2>Direct kernel and ordinary graph coverage</h2><p>Independent original kernel, candidate OFF and candidate ON executions; exact byte comparisons and dispatch counts are correctness observations, excluded from request timing.</p><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Configuration</th><th scope="col">Direct comparisons / guards</th><th scope="col">Direct fusions</th><th scope="col">CPU-reference cases</th><th scope="col">Supported / excluded regressions</th><th scope="col">Normal / retained fusions per graph</th></tr></thead><tbody><tr><td>original 0</td><td>76 / 2</td><td>0</td><td>64</td><td>158 / 111</td><td>0 / 0</td></tr><tr><td>candidate 0</td><td>76 / 2</td><td>0</td><td>64</td><td>158 / 111</td><td>0 / 0</td></tr><tr><td>candidate 1</td><td>76 / 2</td><td>38</td><td>64</td><td>158 / 111</td><td>24 / 0</td></tr></tbody></table></div><ul><li>38 eligible direct cases and 38 controls, including 12 distinct-wrapper controls. Poison guards emulate faulty stores; they are not extra GPU cases. Unsupported regressions are excluded, not passes.</li><li>The normal/retained matrix covers three weight types and seven encoded lengths: 1, 31, 32, 33, 171, 172 and 375. All normal versus retained projections and six independent original/OFF/ON output-file comparisons are exact. Total graph executions: 126.</li></ul><h2>Official stage checks</h2><p>Pinned NeMo dump inputs, each checked at the existing bound. Retained encoder outputs do not establish ordinary graph fusion counts.</p><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Stage</th><th scope="col">Configuration</th><th scope="col">Type / device</th><th scope="col">Cases</th><th scope="col">Minimum SNR</th><th scope="col">Existing bound</th></tr></thead><tbody><tr><td>encoder</td><td>candidate 0</td><td>F16 / gpu</td><td>11</td><td>56.4 dB</td><td>25 dB</td></tr><tr><td>encoder</td><td>candidate 0</td><td>F32 / gpu</td><td>11</td><td>56.4 dB</td><td>25 dB</td></tr><tr><td>encoder</td><td>candidate 1</td><td>F16 / gpu</td><td>11</td><td>56.4 dB</td><td>25 dB</td></tr><tr><td>encoder</td><td>candidate 1</td><td>F32 / cpu</td><td>11</td><td>104.4 dB</td><td>90 dB</td></tr><tr><td>encoder</td><td>candidate 1</td><td>F32 / gpu</td><td>11</td><td>56.4 dB</td><td>25 dB</td></tr><tr><td>encoder</td><td>original 0</td><td>F16 / gpu</td><td>11</td><td>56.4 dB</td><td>25 dB</td></tr><tr><td>encoder</td><td>original 0</td><td>F32 / cpu</td><td>11</td><td>104.4 dB</td><td>90 dB</td></tr><tr><td>encoder</td><td>original 0</td><td>F32 / gpu</td><td>11</td><td>56.4 dB</td><td>25 dB</td></tr><tr><td>frontend</td><td>candidate 1</td><td>F32 / cpu</td><td>11</td><td>103.3 dB</td><td>90 dB</td></tr></tbody></table></div><ul><li>88 encoder plus 11 frontend case executions pass. No separate official joint.enc, KDA/prediction or complete TDT result is claimed. Windows Vulkan execution remains unavailable.</li></ul><h2>Separate graph-log diagnostic and retained failed capture</h2><p>The first capture uses the default sink and records zero node lines. The corrected log-only launcher uses the unchanged stage source, one warmup and one loop per side.</p><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Capture</th><th scope="col">OFF / ON node lines</th><th scope="col">OFF / ON fused UNARY + MUL</th><th scope="col">Encoder executions per side</th><th scope="col">Used for timing</th></tr></thead><tbody><tr><td>Initial failed capture</td><td>0 / not run</td><td>No usable trace</td><td>2 / not run</td><td>No</td></tr><tr><td>Corrected diagnostic</td><td>1964 / 1916</td><td>0 / 48</td><td>2</td><td>No</td></tr></tbody></table></div><ul><li>The 48 observed fusions span two normal encoder executions, not 48 per graph. No fusion counter, FUSION_DEBUG or retained intermediates are used in this separate capture.</li></ul><h2>Build identity</h2><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Build</th><th scope="col">Source commit</th><th scope="col">ggml commit</th><th scope="col">Binary SHA-256</th><th scope="col">Explicit environment</th><th scope="col">Build flags</th></tr></thead><tbody><tr><td>baseline</td><td><a href="https://github.com/uchkw/speech.cpp/commit/54dd7a5df9b3646b03581c9b4cd27cb3a3b55600"><code>54dd7a5df9b3</code></a></td><td><code>232e507d0c35312b77a57720a4c7095b3c77ff5e</code></td><td><code>7465dd5514360883496bf30556da7bc5d5febc3414d7b62230b4da55b3b09966</code></td><td><code>{&quot;GGML_METAL_GLU&quot;: &quot;0&quot;}</code></td><td><code>{&quot;configure&quot;: [&quot;-DCMAKE_BUILD_TYPE=Release&quot;, &quot;-DGGML_NATIVE=ON&quot;, &quot;-DGGML_METAL=ON&quot;, &quot;-DCMAKE_OSX_ARCHITECTURES=arm64&quot;, &quot;-DCMAKE_OSX_SYSROOT=&lt;recorded Xcode macOS SDK&gt;&quot;, &quot;-DCMAKE_EXPORT_COMPILE_COMMANDS=ON&quot;], &quot;build&quot;: [&quot;--target&quot;, &quot;speech-cli&quot;, &quot;fastconformer-timing&quot;, &quot;fastconformer-encoder-check&quot;, &quot;fastconformer-frontend-check&quot;, &quot;-j4&quot;]}</code></td></tr><tr><td>candidate</td><td><a href="https://github.com/uchkw/speech.cpp/commit/54dd7a5df9b3646b03581c9b4cd27cb3a3b55600"><code>54dd7a5df9b3</code></a></td><td><code>232e507d0c35312b77a57720a4c7095b3c77ff5e</code></td><td><code>7465dd5514360883496bf30556da7bc5d5febc3414d7b62230b4da55b3b09966</code></td><td><code>{&quot;GGML_METAL_GLU&quot;: &quot;1&quot;}</code></td><td><code>{&quot;configure&quot;: [&quot;-DCMAKE_BUILD_TYPE=Release&quot;, &quot;-DGGML_NATIVE=ON&quot;, &quot;-DGGML_METAL=ON&quot;, &quot;-DCMAKE_OSX_ARCHITECTURES=arm64&quot;, &quot;-DCMAKE_OSX_SYSROOT=&lt;recorded Xcode macOS SDK&gt;&quot;, &quot;-DCMAKE_EXPORT_COMPILE_COMMANDS=ON&quot;], &quot;build&quot;: [&quot;--target&quot;, &quot;speech-cli&quot;, &quot;fastconformer-timing&quot;, &quot;fastconformer-encoder-check&quot;, &quot;fastconformer-frontend-check&quot;, &quot;-j4&quot;]}</code></td></tr><tr><td>anchor</td><td><a href="https://github.com/uchkw/speech.cpp/commit/f976ebd8e2fca1f15ddc2e6fc9f99e7090b0f9ea"><code>f976ebd8e2fc</code></a></td><td><code>e1a9ac12edbb57402618fd6936598603f5ee6266</code></td><td><code>d493b968e7a94e45f93054bc899c9d20802bb781a19f8dc76cfd4fa6dd91413f</code></td><td><code>{}</code></td><td><code>{&quot;configure&quot;: [&quot;-DCMAKE_BUILD_TYPE=Release&quot;, &quot;-DGGML_NATIVE=ON&quot;, &quot;-DGGML_METAL=ON&quot;], &quot;build&quot;: [&quot;--target&quot;, &quot;speech-cli&quot;, &quot;fastconformer-timing&quot;, &quot;-j4&quot;]}</code></td></tr></tbody></table></div><h2>Checks</h2><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Check</th><th scope="col">Required</th><th scope="col">Status</th><th scope="col">Evidence</th></tr></thead><tbody><tr><td>Matched original and candidate builds</td><td>yes</td><td>passed</td><td>011a/matched-build-flags.json<br>Clean Release/native/Metal builds, explicit arm64 and SDK, -j4; all 74 speech and 28 ggml flags.make files match after path normalization. The fixed anchor has implicit arch/SDK settings.</td></tr><tr><td>direct-original-0</td><td>yes</td><td>passed</td><td>011a/ggml-checks/direct-original-0/result.json<br>76 strict Metal comparisons (38 eligible and 38 controls), including 12 mapped-buffer controls; two emulated poison guards pass. All expected counts are nonzero and checked.</td></tr><tr><td>CPU-reference CONFORMER_GLU original 0</td><td>yes</td><td>passed</td><td>011a/ggml-checks/backend-original-0-MTL0-CONFORMER_GLU/result.json<br>All 64 Metal-vs-CPU graph cases pass the existing bounds; mapped-buffer controls are not CPU-reference cases.</td></tr><tr><td>SIGMOID_MUL original 0</td><td>yes</td><td>passed</td><td>011a/ggml-checks/backend-original-0-MTL0-SIGMOID_MUL/result.json<br>26 supported cases pass; 13 unsupported cases are excluded, not counted as passes.</td></tr><tr><td>SILU_MUL original 0</td><td>yes</td><td>passed</td><td>011a/ggml-checks/backend-original-0-MTL0-SILU_MUL/result.json<br>26 supported cases pass; 13 unsupported cases are excluded, not counted as passes.</td></tr><tr><td>SIGMOID original 0</td><td>yes</td><td>passed</td><td>011a/ggml-checks/backend-original-0-MTL0-SIGMOID/result.json<br>8 supported cases pass; 4 unsupported cases are excluded, not counted as passes.</td></tr><tr><td>MUL original 0</td><td>yes</td><td>passed</td><td>011a/ggml-checks/backend-original-0-MTL0-MUL/result.json<br>74 supported cases pass; 69 unsupported cases are excluded, not counted as passes.</td></tr><tr><td>SWIGLU original 0</td><td>yes</td><td>passed</td><td>011a/ggml-checks/backend-original-0-MTL0-SWIGLU/result.json<br>24 supported cases pass; 12 unsupported cases are excluded, not counted as passes.</td></tr><tr><td>Normal and retained encoder original 0 q4_k</td><td>yes</td><td>passed</td><td>011a/normal-checks/original-0-q4_k/result.json<br>Seven lengths; normal graph has 0 fusions, retained graph has zero; projected outputs are byte-exact. Counters preserve normal two-command-buffer encoding and are excluded from timing.</td></tr><tr><td>Normal and retained encoder original 0 q8_0</td><td>yes</td><td>passed</td><td>011a/normal-checks/original-0-q8_0/result.json<br>Seven lengths; normal graph has 0 fusions, retained graph has zero; projected outputs are byte-exact. Counters preserve normal two-command-buffer encoding and are excluded from timing.</td></tr><tr><td>Normal and retained encoder original 0 f16</td><td>yes</td><td>passed</td><td>011a/normal-checks/original-0-f16/result.json<br>Seven lengths; normal graph has 0 fusions, retained graph has zero; projected outputs are byte-exact. Counters preserve normal two-command-buffer encoding and are excluded from timing.</td></tr><tr><td>direct-candidate-0</td><td>yes</td><td>passed</td><td>011a/ggml-checks/direct-candidate-0/result.json<br>76 strict Metal comparisons (38 eligible and 38 controls), including 12 mapped-buffer controls; two emulated poison guards pass. All expected counts are nonzero and checked.</td></tr><tr><td>CPU-reference CONFORMER_GLU candidate 0</td><td>yes</td><td>passed</td><td>011a/ggml-checks/backend-candidate-0-MTL0-CONFORMER_GLU/result.json<br>All 64 Metal-vs-CPU graph cases pass the existing bounds; mapped-buffer controls are not CPU-reference cases.</td></tr><tr><td>SIGMOID_MUL candidate 0</td><td>yes</td><td>passed</td><td>011a/ggml-checks/backend-candidate-0-MTL0-SIGMOID_MUL/result.json<br>26 supported cases pass; 13 unsupported cases are excluded, not counted as passes.</td></tr><tr><td>SILU_MUL candidate 0</td><td>yes</td><td>passed</td><td>011a/ggml-checks/backend-candidate-0-MTL0-SILU_MUL/result.json<br>26 supported cases pass; 13 unsupported cases are excluded, not counted as passes.</td></tr><tr><td>SIGMOID candidate 0</td><td>yes</td><td>passed</td><td>011a/ggml-checks/backend-candidate-0-MTL0-SIGMOID/result.json<br>8 supported cases pass; 4 unsupported cases are excluded, not counted as passes.</td></tr><tr><td>MUL candidate 0</td><td>yes</td><td>passed</td><td>011a/ggml-checks/backend-candidate-0-MTL0-MUL/result.json<br>74 supported cases pass; 69 unsupported cases are excluded, not counted as passes.</td></tr><tr><td>SWIGLU candidate 0</td><td>yes</td><td>passed</td><td>011a/ggml-checks/backend-candidate-0-MTL0-SWIGLU/result.json<br>24 supported cases pass; 12 unsupported cases are excluded, not counted as passes.</td></tr><tr><td>Normal and retained encoder candidate 0 q4_k</td><td>yes</td><td>passed</td><td>011a/normal-checks/candidate-0-q4_k/result.json<br>Seven lengths; normal graph has 0 fusions, retained graph has zero; projected outputs are byte-exact. Counters preserve normal two-command-buffer encoding and are excluded from timing.</td></tr><tr><td>Normal and retained encoder candidate 0 q8_0</td><td>yes</td><td>passed</td><td>011a/normal-checks/candidate-0-q8_0/result.json<br>Seven lengths; normal graph has 0 fusions, retained graph has zero; projected outputs are byte-exact. Counters preserve normal two-command-buffer encoding and are excluded from timing.</td></tr><tr><td>Normal and retained encoder candidate 0 f16</td><td>yes</td><td>passed</td><td>011a/normal-checks/candidate-0-f16/result.json<br>Seven lengths; normal graph has 0 fusions, retained graph has zero; projected outputs are byte-exact. Counters preserve normal two-command-buffer encoding and are excluded from timing.</td></tr><tr><td>direct-candidate-1</td><td>yes</td><td>passed</td><td>011a/ggml-checks/direct-candidate-1/result.json<br>76 strict Metal comparisons (38 eligible and 38 controls), including 12 mapped-buffer controls; two emulated poison guards pass. All expected counts are nonzero and checked.</td></tr><tr><td>CPU-reference CONFORMER_GLU candidate 1</td><td>yes</td><td>passed</td><td>011a/ggml-checks/backend-candidate-1-MTL0-CONFORMER_GLU/result.json<br>All 64 Metal-vs-CPU graph cases pass the existing bounds; mapped-buffer controls are not CPU-reference cases.</td></tr><tr><td>SIGMOID_MUL candidate 1</td><td>yes</td><td>passed</td><td>011a/ggml-checks/backend-candidate-1-MTL0-SIGMOID_MUL/result.json<br>26 supported cases pass; 13 unsupported cases are excluded, not counted as passes.</td></tr><tr><td>SILU_MUL candidate 1</td><td>yes</td><td>passed</td><td>011a/ggml-checks/backend-candidate-1-MTL0-SILU_MUL/result.json<br>26 supported cases pass; 13 unsupported cases are excluded, not counted as passes.</td></tr><tr><td>SIGMOID candidate 1</td><td>yes</td><td>passed</td><td>011a/ggml-checks/backend-candidate-1-MTL0-SIGMOID/result.json<br>8 supported cases pass; 4 unsupported cases are excluded, not counted as passes.</td></tr><tr><td>MUL candidate 1</td><td>yes</td><td>passed</td><td>011a/ggml-checks/backend-candidate-1-MTL0-MUL/result.json<br>74 supported cases pass; 69 unsupported cases are excluded, not counted as passes.</td></tr><tr><td>SWIGLU candidate 1</td><td>yes</td><td>passed</td><td>011a/ggml-checks/backend-candidate-1-MTL0-SWIGLU/result.json<br>24 supported cases pass; 12 unsupported cases are excluded, not counted as passes.</td></tr><tr><td>Normal and retained encoder candidate 1 q4_k</td><td>yes</td><td>passed</td><td>011a/normal-checks/candidate-1-q4_k/result.json<br>Seven lengths; normal graph has 24 fusions, retained graph has zero; projected outputs are byte-exact. Counters preserve normal two-command-buffer encoding and are excluded from timing.</td></tr><tr><td>Normal and retained encoder candidate 1 q8_0</td><td>yes</td><td>passed</td><td>011a/normal-checks/candidate-1-q8_0/result.json<br>Seven lengths; normal graph has 24 fusions, retained graph has zero; projected outputs are byte-exact. Counters preserve normal two-command-buffer encoding and are excluded from timing.</td></tr><tr><td>Normal and retained encoder candidate 1 f16</td><td>yes</td><td>passed</td><td>011a/normal-checks/candidate-1-f16/result.json<br>Seven lengths; normal graph has 24 fusions, retained graph has zero; projected outputs are byte-exact. Counters preserve normal two-command-buffer encoding and are excluded from timing.</td></tr><tr><td>ggml-checks original/off/on exact</td><td>yes</td><td>passed</td><td>011a/ggml-checks/direct-byte-comparisons.json<br>2 external cmp comparisons pass; byte identity is not inferred from hash equality.</td></tr><tr><td>normal-checks original/off/on exact</td><td>yes</td><td>passed</td><td>011a/normal-checks/byte-comparisons.json<br>6 external cmp comparisons pass; byte identity is not inferred from hash equality.</td></tr><tr><td>Regression unsupported layouts</td><td>no</td><td>skipped</td><td>011a/verified-inputs.json<br>The same 111 unsupported cases per side remain unsupported; the supported regression count is 158 per side.</td></tr><tr><td>Pinned input identity</td><td>yes</td><td>passed</td><td>011a/verified-inputs.json<br>SHA-256 verified Q4_K/Q8_0/F16 and official F32 models, 11 official dump directories and all 66 arrays before execution.</td></tr><tr><td>encoder-candidate-0-f16-gpu</td><td>yes</td><td>passed</td><td>011a/official-checks/encoder-candidate-0-f16-gpu/result.json<br>Eleven official NeMo encoder cases at the existing 25 dB bound; minimum 56.4 dB. Encoder checks retain layer outputs and are distinct from the normal-graph fusion check.</td></tr><tr><td>encoder-candidate-0-f32-gpu</td><td>yes</td><td>passed</td><td>011a/official-checks/encoder-candidate-0-f32-gpu/result.json<br>Eleven official NeMo encoder cases at the existing 25 dB bound; minimum 56.4 dB. Encoder checks retain layer outputs and are distinct from the normal-graph fusion check.</td></tr><tr><td>encoder-candidate-1-f16-gpu</td><td>yes</td><td>passed</td><td>011a/official-checks/encoder-candidate-1-f16-gpu/result.json<br>Eleven official NeMo encoder cases at the existing 25 dB bound; minimum 56.4 dB. Encoder checks retain layer outputs and are distinct from the normal-graph fusion check.</td></tr><tr><td>encoder-candidate-1-f32-cpu</td><td>yes</td><td>passed</td><td>011a/official-checks/encoder-candidate-1-f32-cpu/result.json<br>Eleven official NeMo encoder cases at the existing 90 dB bound; minimum 104.4 dB. Encoder checks retain layer outputs and are distinct from the normal-graph fusion check.</td></tr><tr><td>encoder-candidate-1-f32-gpu</td><td>yes</td><td>passed</td><td>011a/official-checks/encoder-candidate-1-f32-gpu/result.json<br>Eleven official NeMo encoder cases at the existing 25 dB bound; minimum 56.4 dB. Encoder checks retain layer outputs and are distinct from the normal-graph fusion check.</td></tr><tr><td>encoder-original-0-f16-gpu</td><td>yes</td><td>passed</td><td>011a/official-checks/encoder-original-0-f16-gpu/result.json<br>Eleven official NeMo encoder cases at the existing 25 dB bound; minimum 56.4 dB. Encoder checks retain layer outputs and are distinct from the normal-graph fusion check.</td></tr><tr><td>encoder-original-0-f32-cpu</td><td>yes</td><td>passed</td><td>011a/official-checks/encoder-original-0-f32-cpu/result.json<br>Eleven official NeMo encoder cases at the existing 90 dB bound; minimum 104.4 dB. Encoder checks retain layer outputs and are distinct from the normal-graph fusion check.</td></tr><tr><td>encoder-original-0-f32-gpu</td><td>yes</td><td>passed</td><td>011a/official-checks/encoder-original-0-f32-gpu/result.json<br>Eleven official NeMo encoder cases at the existing 25 dB bound; minimum 56.4 dB. Encoder checks retain layer outputs and are distinct from the normal-graph fusion check.</td></tr><tr><td>frontend-candidate-1-f32-cpu</td><td>yes</td><td>passed</td><td>011a/official-checks/frontend-candidate-1-f32-cpu/result.json<br>Eleven official NeMo frontend cases at the existing 90 dB bound; minimum 103.3 dB. Encoder checks retain layer outputs and are distinct from the normal-graph fusion check.</td></tr><tr><td>Initial GRAPH_DEBUG capture</td><td>no</td><td>failed</td><td>011a/graph-debug/result.json<br>Inference exited successfully, but the default speech log sink discarded Debug messages, so no node trace was captured. Original failure is preserved.</td></tr><tr><td>GRAPH_DEBUG capture with diagnostic log sink</td><td>yes</td><td>passed</td><td>011a/graph-debug-v2/result.json<br>Unchanged stage source plus a diagnostic-only log-sink launcher shows 0/48 GLU fusions across two normal encoder executions. No counters or FUSION_DEBUG; no diagnostic timing or flags enter the screen.</td></tr><tr><td>Worker screen output q4_k</td><td>yes</td><td>passed</td><td>011a/screen-analysis.json<br>Nine timestamp-enabled public text/token/time/segment results and all 27 latency texts match across OFF, ON and anchor; repeated text is stable. Raw private TDT IDs and durations are not exposed.</td></tr><tr><td>Worker screen output q8_0</td><td>yes</td><td>passed</td><td>011a/screen-analysis.json<br>Nine timestamp-enabled public text/token/time/segment results and all 27 latency texts match across OFF, ON and anchor; repeated text is stable. Raw private TDT IDs and durations are not exposed.</td></tr><tr><td>Worker screen output f16</td><td>yes</td><td>passed</td><td>011a/screen-analysis.json<br>Nine timestamp-enabled public text/token/time/segment results and all 27 latency texts match across OFF, ON and anchor; repeated text is stable. Raw private TDT IDs and durations are not exposed.</td></tr><tr><td>Windows Vulkan</td><td>yes</td><td>unavailable</td><td>011a/source-checkpoints.json<br>No Windows Vulkan machine is available; no Vulkan execution or correctness claim.</td></tr><tr><td>Official KDA and full TDT reference</td><td>yes</td><td>unavailable</td><td>011a/verified-inputs.json<br>Official frontend/encoder/joint.enc dumps exist, but complete KDA/prediction and TDT reference validation is unavailable; frontend and encoder were checked.</td></tr><tr><td>Full 650-input and sub-6-second follow-up</td><td>no</td><td>skipped</td><td>011a/screen-analysis.json<br>Screen rejects this GLU-only variant: no stable latency benefit beyond round variation. Coordinator approved no full or short run.</td></tr></tbody></table></div><h2>Conditions and limitations</h2><p>Time from before sending the first PCM16 chunk through receipt of the terminal result. File reading, model loading and warmup are excluded. Each measured input is warmed once per fresh worker.</p><p>Median over rounds for each input, then linearly interpolated p50, p90 and p99 across the measured input medians. RTFx divides total audio duration by summed request time.</p><p><strong>Literal CER:</strong> Total Unicode code-point Levenshtein edits divided by total reference code points, including punctuation, symbols and whitespace.</p><p><strong>Repository CER:</strong> NFKC followed by removing Unicode punctuation, symbols, separators and whitespace; no case folding or alternate-spelling substitutions. Edits and reference lengths are summed before division.</p><ul><li>The current corpus is FLEURS Japanese test, with inputs from 6.36 to 28.2 seconds.</li><li>The p99 of a small duration-stratified sample is not a precise estimate of production tail latency.</li><li>The repository CER is not the published metric accepting alternative spellings of words.</li><li>Fresh-process load and first-request times do not reset filesystem or system Metal caches.</li><li>This screen rejects only the GLU sigmoid/product prototype. Pointwise projection plus GLU remains unfinished. The production default, fixed anchor and cumulative campaign baseline are unchanged.</li><li>Nine balanced recordings per type and three alternating rounds can reject a variant but cannot establish a production tail improvement. The observed round range is descriptive variation, not a confidence interval.</li><li>Quality scores cover nine recordings per type only. Full 650-input quality and sub-6-second follow-up are not run after this rejection.</li><li>The same-binary OFF/ON comparison is primary. Fresh original/candidate builds explicitly set arm64 and the Xcode macOS SDK, and all 74 speech plus 28 ggml flags.make files match after source/build path normalization. The fixed anchor uses implicit architecture/SDK settings; equivalent effective defaults are unverified. Exact SDK paths remain in frozen build evidence.</li><li>Direct original/OFF/ON checks each cover 76 cases and two emulated poison guards. The 38 eligible cases fuse only with candidate ON; 38 controls include 12 mapped-buffer cases. The extra mapped-buffer controls are not CPU-reference cases.</li><li>Final mapped-buffer controls correctly reject fusion, but the intermediate pre-guard kernel is not run to reproduce the missing-guard failure.</li><li>Normal and retained encoder/joint projection helpers cover three weight types and seven lengths. They verify 24 fusions per normal ON graph and zero per retained graph. Their counters preserve the normal two-command-buffer policy; helper timings are excluded.</li><li>The executed official checks are frontend F32 CPU and encoder F32 CPU/Metal plus F16 Metal. The 99 case executions are separate from 126 normal/retained differential graph executions. Official checks retain intermediates and do not prove ordinary fusion counts.</li><li>Official joint.enc tensors exist but this trial does not run a separate official joint.enc check. Normal joint projection is differential only. Complete KDA/prediction and TDT reference checks and Windows Vulkan execution are unrun.</li><li>The initial GRAPH_DEBUG capture records no node trace because the default sink filters Debug logs. Its failure is retained. A separate log-only launcher captures the corrected diagnostic; neither diagnostic binary nor its timing contributes to the worker screen.</li><li>The public worker comparison checks text, public token text/times and segments, not private TDT IDs, frame indices or duration decisions.</li><li>Peak memory is gross process footprint, not separately measured GPU VRAM. Load and first-request results use fresh workers but do not reset filesystem or system Metal caches.</li></ul><details><summary>Reproduction metadata and local evidence paths</summary><p>Large logs, models and audio are not included in the versioned report.</p><pre>{
+  &quot;scope&quot;: &quot;screen&quot;,
+  &quot;conditions&quot;: {
+    &quot;name&quot;: &quot;Haas on Apple Silicon&quot;,
+    &quot;repository&quot;: &quot;https://github.com/uchkw/speech.cpp&quot;,
+    &quot;tracking_issue&quot;: &quot;https://github.com/uchkw/speech.cpp/issues/1&quot;,
+    &quot;purpose&quot;: &quot;Reduce warm latency for one Japanese voice input of a few seconds to 30 seconds while preserving recognition quality.&quot;,
+    &quot;threads&quot;: 4,
+    &quot;rounds&quot;: 3,
+    &quot;decode_on_cpu&quot;: true,
+    &quot;quality_policy&quot;: &quot;exact&quot;,
+    &quot;latency_count&quot;: 9,
+    &quot;quality_count&quot;: 9,
+    &quot;latency_definition&quot;: &quot;Time from before sending the first PCM16 chunk through receipt of the terminal result. File reading, model loading and warmup are excluded. Each measured input is warmed once per fresh worker.&quot;,
+    &quot;aggregation&quot;: &quot;Median over rounds for each input, then linearly interpolated p50, p90 and p99 across the measured input medians. RTFx divides total audio duration by summed request time.&quot;,
+    &quot;literal_cer&quot;: &quot;Total Unicode code-point Levenshtein edits divided by total reference code points, including punctuation, symbols and whitespace.&quot;,
+    &quot;repository_cer&quot;: &quot;NFKC followed by removing Unicode punctuation, symbols, separators and whitespace; no case folding or alternate-spelling substitutions. Edits and reference lengths are summed before division.&quot;,
+    &quot;quality_comparison&quot;: &quot;The same quality files on both builds; text and public token/segment text and times are compared exactly. Text from every timestamp-disabled latency round is also compared. A changed CER is not evidence of exact output equality.&quot;,
+    &quot;latency_timestamps&quot;: false,
+    &quot;quality_timestamps&quot;: true,
+    &quot;unobserved_fields&quot;: &quot;The worker does not expose raw TDT token IDs, frame indices or duration decisions. These are not claimed to match by this harness.&quot;,
+    &quot;limitations&quot;: [
+      &quot;The current corpus is FLEURS Japanese test, with inputs from 6.36 to 28.2 seconds.&quot;,
+      &quot;The p99 of a small duration-stratified sample is not a precise estimate of production tail latency.&quot;,
+      &quot;The repository CER is not the published metric accepting alternative spellings of words.&quot;,
+      &quot;Fresh-process load and first-request times do not reset filesystem or system Metal caches.&quot;,
+      &quot;This screen rejects only the GLU sigmoid/product prototype. Pointwise projection plus GLU remains unfinished. The production default, fixed anchor and cumulative campaign baseline are unchanged.&quot;,
+      &quot;Nine balanced recordings per type and three alternating rounds can reject a variant but cannot establish a production tail improvement. The observed round range is descriptive variation, not a confidence interval.&quot;,
+      &quot;Quality scores cover nine recordings per type only. Full 650-input quality and sub-6-second follow-up are not run after this rejection.&quot;,
+      &quot;The same-binary OFF/ON comparison is primary. Fresh original/candidate builds explicitly set arm64 and the Xcode macOS SDK, and all 74 speech plus 28 ggml flags.make files match after source/build path normalization. The fixed anchor uses implicit architecture/SDK settings; equivalent effective defaults are unverified. Exact SDK paths remain in frozen build evidence.&quot;,
+      &quot;Direct original/OFF/ON checks each cover 76 cases and two emulated poison guards. The 38 eligible cases fuse only with candidate ON; 38 controls include 12 mapped-buffer cases. The extra mapped-buffer controls are not CPU-reference cases.&quot;,
+      &quot;Final mapped-buffer controls correctly reject fusion, but the intermediate pre-guard kernel is not run to reproduce the missing-guard failure.&quot;,
+      &quot;Normal and retained encoder/joint projection helpers cover three weight types and seven lengths. They verify 24 fusions per normal ON graph and zero per retained graph. Their counters preserve the normal two-command-buffer policy; helper timings are excluded.&quot;,
+      &quot;The executed official checks are frontend F32 CPU and encoder F32 CPU/Metal plus F16 Metal. The 99 case executions are separate from 126 normal/retained differential graph executions. Official checks retain intermediates and do not prove ordinary fusion counts.&quot;,
+      &quot;Official joint.enc tensors exist but this trial does not run a separate official joint.enc check. Normal joint projection is differential only. Complete KDA/prediction and TDT reference checks and Windows Vulkan execution are unrun.&quot;,
+      &quot;The initial GRAPH_DEBUG capture records no node trace because the default sink filters Debug logs. Its failure is retained. A separate log-only launcher captures the corrected diagnostic; neither diagnostic binary nor its timing contributes to the worker screen.&quot;,
+      &quot;The public worker comparison checks text, public token text/times and segments, not private TDT IDs, frame indices or duration decisions.&quot;,
+      &quot;Peak memory is gross process footprint, not separately measured GPU VRAM. Load and first-request results use fresh workers but do not reset filesystem or system Metal caches.&quot;
+    ],
+    &quot;thread_setting_note&quot;: &quot;Four CPU threads are an explicit tuned campaign setting, not the runtime default. Unspecified threads (threads=0) use performance cores: 16 on this M2 Ultra. Code gains compare the tuned anchor and do not include the preliminary thread-tuning gain; measure 021 evaluates automatic versus four threads separately.&quot;,
+    &quot;hardware&quot;: {
+      &quot;chip&quot;: &quot;Apple M2 Ultra&quot;,
+      &quot;cpu_cores&quot;: 24,
+      &quot;performance_cores&quot;: 16,
+      &quot;efficiency_cores&quot;: 8,
+      &quot;gpu_cores&quot;: 76,
+      &quot;memory_gb&quot;: 192,
+      &quot;source&quot;: &quot;system_profiler SPHardwareDataType SPDisplaysDataType&quot;
+    },
+    &quot;current_machine&quot;: {
+      &quot;chip&quot;: &quot;Apple M2 Ultra&quot;,
+      &quot;cpu_cores&quot;: &quot;24&quot;,
+      &quot;memory_bytes&quot;: &quot;206158430208&quot;,
+      &quot;macos&quot;: &quot;26.7.2&quot;
+    },
+    &quot;python&quot;: &quot;3.9.6&quot;,
+    &quot;python_executable&quot;: &quot;/Applications/Xcode.app/Contents/Developer/usr/bin/python3&quot;,
+    &quot;runner_sha256&quot;: {
+      &quot;compare.py&quot;: &quot;f638e5c4914231e8957ca05513366b06cb2dfb7914922a276b5affb07e4fcc21&quot;,
+      &quot;worker.py&quot;: &quot;46483a7bde5bf3d09f0898224b71e99288f17acec33912a4b09752b0acc09c9b&quot;,
+      &quot;campaign.json&quot;: &quot;2a03d0e925e3433b437ec908326db42e5576c585abd5da8929f4c2b24b20d840&quot;
+    },
+    &quot;created_utc&quot;: &quot;2026-11-06T22:34:01.013983+00:00&quot;,
+    &quot;comparison_reference&quot;: &quot;Relative: the same verified candidate binary with GGML_METAL_GLU=1 against 0. Cumulative: a separate direct comparison with the explicitly specified fixed anchor; it is not an integrated campaign gain.&quot;
+  },
+  &quot;models&quot;: {
+    &quot;q4_k&quot;: {
+      &quot;type&quot;: &quot;q4_k&quot;,
+      &quot;sha256&quot;: &quot;d24d53f29b75214a933ff482b0de1217e0a800f4118cca39ad6cf03609a89d6f&quot;,
+      &quot;size&quot;: 351901216,
+      &quot;revision&quot;: &quot;6b965d5007ba780585de51549d57a8c1c0d67c7e&quot;
+    },
+    &quot;q8_0&quot;: {
+      &quot;type&quot;: &quot;q8_0&quot;,
+      &quot;sha256&quot;: &quot;cd5f60b2f1c411404b83fca4a65e3ce30a26d9e951b6a346529e65f22758afeb&quot;,
+      &quot;size&quot;: 656381472,
+      &quot;revision&quot;: &quot;6b965d5007ba780585de51549d57a8c1c0d67c7e&quot;
+    },
+    &quot;f16&quot;: {
+      &quot;type&quot;: &quot;f16&quot;,
+      &quot;sha256&quot;: &quot;f752e02f68c1dfff795900e40aa82e5302976fb5360080fcbd330d8b3c992cd8&quot;,
+      &quot;size&quot;: 1233128832,
+      &quot;revision&quot;: &quot;6b965d5007ba780585de51549d57a8c1c0d67c7e&quot;
+    }
+  },
+  &quot;builds&quot;: {
+    &quot;baseline&quot;: {
+      &quot;source_commit&quot;: &quot;54dd7a5df9b3646b03581c9b4cd27cb3a3b55600&quot;,
+      &quot;source_tree&quot;: &quot;95d3bfb0f54d7a7550ae82b61194b6b0c7b26626&quot;,
+      &quot;ggml_commit&quot;: &quot;232e507d0c35312b77a57720a4c7095b3c77ff5e&quot;,
+      &quot;source_status&quot;: &quot;&quot;,
+      &quot;ggml_status&quot;: &quot;&quot;,
+      &quot;side&quot;: &quot;candidate&quot;,
+      &quot;kind&quot;: &quot;speech&quot;,
+      &quot;source_verified&quot;: true,
+      &quot;started_unix&quot;: 1794004113.369816,
+      &quot;returncodes&quot;: [
+        0,
+        0
+      ],
+      &quot;created_unix&quot;: 1794004159.4039328,
+      &quot;build_flags&quot;: {
+        &quot;configure&quot;: [
+          &quot;-DCMAKE_BUILD_TYPE=Release&quot;,
+          &quot;-DGGML_NATIVE=ON&quot;,
+          &quot;-DGGML_METAL=ON&quot;,
+          &quot;-DCMAKE_OSX_ARCHITECTURES=arm64&quot;,
+          &quot;-DCMAKE_OSX_SYSROOT=&lt;recorded Xcode macOS SDK&gt;&quot;,
+          &quot;-DCMAKE_EXPORT_COMPILE_COMMANDS=ON&quot;
+        ],
+        &quot;build&quot;: [
+          &quot;--target&quot;,
+          &quot;speech-cli&quot;,
+          &quot;fastconformer-timing&quot;,
+          &quot;fastconformer-encoder-check&quot;,
+          &quot;fastconformer-frontend-check&quot;,
+          &quot;-j4&quot;
+        ]
+      },
+      &quot;cmake_cache_sha256&quot;: &quot;6a16d63675dd32bad305813634d9f1ba498a2c13cfada117bb97919d1fec7969&quot;,
+      &quot;build_log_sha256&quot;: &quot;65f5abba5374cff3e80ceffbd5d9e3bf57e41e48cafcd1e274cabdfed084c6f9&quot;,
+      &quot;stage_threads_argument&quot;: true,
+      &quot;speech&quot;: {
+        &quot;sha256&quot;: &quot;7465dd5514360883496bf30556da7bc5d5febc3414d7b62230b4da55b3b09966&quot;,
+        &quot;artifact_path&quot;: &quot;011a/builds/candidate-speech/speech&quot;
+      },
+      &quot;stage_tool&quot;: {
+        &quot;sha256&quot;: &quot;607fe0f53f7cae4cdce2baa0de650ff05c81d1697264cfe79aa26d349f716045&quot;,
+        &quot;artifact_path&quot;: &quot;011a/builds/candidate-speech/fastconformer-timing&quot;
+      },
+      &quot;encoder_check&quot;: {
+        &quot;sha256&quot;: &quot;09369c5ec2608225629a338ff9d878fc0f59ed355f8ff4883c07ca52f4fe84e8&quot;,
+        &quot;artifact_path&quot;: &quot;011a/builds/candidate-speech/fastconformer-encoder-check&quot;
+      },
+      &quot;frontend_check&quot;: {
+        &quot;sha256&quot;: &quot;44c456e8d1fd356f22f21724dd3077d2b3d462378da0e74b64c2c758f6bafb8b&quot;,
+        &quot;artifact_path&quot;: &quot;011a/builds/candidate-speech/fastconformer-frontend-check&quot;
+      }
+    },
+    &quot;candidate&quot;: {
+      &quot;source_commit&quot;: &quot;54dd7a5df9b3646b03581c9b4cd27cb3a3b55600&quot;,
+      &quot;source_tree&quot;: &quot;95d3bfb0f54d7a7550ae82b61194b6b0c7b26626&quot;,
+      &quot;ggml_commit&quot;: &quot;232e507d0c35312b77a57720a4c7095b3c77ff5e&quot;,
+      &quot;source_status&quot;: &quot;&quot;,
+      &quot;ggml_status&quot;: &quot;&quot;,
+      &quot;side&quot;: &quot;candidate&quot;,
+      &quot;kind&quot;: &quot;speech&quot;,
+      &quot;source_verified&quot;: true,
+      &quot;started_unix&quot;: 1794004113.369816,
+      &quot;returncodes&quot;: [
+        0,
+        0
+      ],
+      &quot;created_unix&quot;: 1794004159.4039328,
+      &quot;build_flags&quot;: {
+        &quot;configure&quot;: [
+          &quot;-DCMAKE_BUILD_TYPE=Release&quot;,
+          &quot;-DGGML_NATIVE=ON&quot;,
+          &quot;-DGGML_METAL=ON&quot;,
+          &quot;-DCMAKE_OSX_ARCHITECTURES=arm64&quot;,
+          &quot;-DCMAKE_OSX_SYSROOT=&lt;recorded Xcode macOS SDK&gt;&quot;,
+          &quot;-DCMAKE_EXPORT_COMPILE_COMMANDS=ON&quot;
+        ],
+        &quot;build&quot;: [
+          &quot;--target&quot;,
+          &quot;speech-cli&quot;,
+          &quot;fastconformer-timing&quot;,
+          &quot;fastconformer-encoder-check&quot;,
+          &quot;fastconformer-frontend-check&quot;,
+          &quot;-j4&quot;
+        ]
+      },
+      &quot;cmake_cache_sha256&quot;: &quot;6a16d63675dd32bad305813634d9f1ba498a2c13cfada117bb97919d1fec7969&quot;,
+      &quot;build_log_sha256&quot;: &quot;65f5abba5374cff3e80ceffbd5d9e3bf57e41e48cafcd1e274cabdfed084c6f9&quot;,
+      &quot;stage_threads_argument&quot;: true,
+      &quot;speech&quot;: {
+        &quot;sha256&quot;: &quot;7465dd5514360883496bf30556da7bc5d5febc3414d7b62230b4da55b3b09966&quot;,
+        &quot;artifact_path&quot;: &quot;011a/builds/candidate-speech/speech&quot;
+      },
+      &quot;stage_tool&quot;: {
+        &quot;sha256&quot;: &quot;607fe0f53f7cae4cdce2baa0de650ff05c81d1697264cfe79aa26d349f716045&quot;,
+        &quot;artifact_path&quot;: &quot;011a/builds/candidate-speech/fastconformer-timing&quot;
+      },
+      &quot;encoder_check&quot;: {
+        &quot;sha256&quot;: &quot;09369c5ec2608225629a338ff9d878fc0f59ed355f8ff4883c07ca52f4fe84e8&quot;,
+        &quot;artifact_path&quot;: &quot;011a/builds/candidate-speech/fastconformer-encoder-check&quot;
+      },
+      &quot;frontend_check&quot;: {
+        &quot;sha256&quot;: &quot;44c456e8d1fd356f22f21724dd3077d2b3d462378da0e74b64c2c758f6bafb8b&quot;,
+        &quot;artifact_path&quot;: &quot;011a/builds/candidate-speech/fastconformer-frontend-check&quot;
+      }
+    },
+    &quot;anchor&quot;: {
+      &quot;source_commit&quot;: &quot;f976ebd8e2fca1f15ddc2e6fc9f99e7090b0f9ea&quot;,
+      &quot;source_tree&quot;: &quot;dee6405fbb3c50eb5f3113f76e6745f59c21b919&quot;,
+      &quot;source_verified&quot;: true,
+      &quot;ggml_commit&quot;: &quot;e1a9ac12edbb57402618fd6936598603f5ee6266&quot;,
+      &quot;created_utc&quot;: &quot;2026-11-06T17:35:25.712263+00:00&quot;,
+      &quot;cmake_cache_sha256&quot;: &quot;c3af3223b29cbc28d05f6c379b935c738fc1ccd8b53e553bb0d9d5a88829a171&quot;,
+      &quot;build_log_sha256&quot;: &quot;c13da50cb07e637c4858e256fb0eff3c80a4f1be693e01093cfda3ac589943e8&quot;,
+      &quot;stage_threads_argument&quot;: true,
+      &quot;speech&quot;: {
+        &quot;sha256&quot;: &quot;d493b968e7a94e45f93054bc899c9d20802bb781a19f8dc76cfd4fa6dd91413f&quot;,
+        &quot;artifact_path&quot;: &quot;builds/campaign-anchor/speech&quot;
+      },
+      &quot;stage_tool&quot;: {
+        &quot;sha256&quot;: &quot;3dc5c6f19a78153b5f8d0bbd3f08f6106825e5ebd9d9465283b6ebd01553f768&quot;,
+        &quot;artifact_path&quot;: &quot;builds/campaign-anchor/fastconformer-timing&quot;
+      },
+      &quot;build_flags&quot;: {
+        &quot;configure&quot;: [
+          &quot;-DCMAKE_BUILD_TYPE=Release&quot;,
+          &quot;-DGGML_NATIVE=ON&quot;,
+          &quot;-DGGML_METAL=ON&quot;
+        ],
+        &quot;build&quot;: [
+          &quot;--target&quot;,
+          &quot;speech-cli&quot;,
+          &quot;fastconformer-timing&quot;,
+          &quot;-j4&quot;
+        ]
+      }
+    }
+  },
+  &quot;fixed_anchor&quot;: {
+    &quot;measured_side&quot;: &quot;anchor&quot;,
+    &quot;source_commit&quot;: &quot;f976ebd8e2fca1f15ddc2e6fc9f99e7090b0f9ea&quot;,
+    &quot;speech_sha256&quot;: &quot;d493b968e7a94e45f93054bc899c9d20802bb781a19f8dc76cfd4fa6dd91413f&quot;,
+    &quot;environment&quot;: {},
+    &quot;build_manifest_sha256&quot;: &quot;47ff498e173967caf11c67571f38a6a0efe67e3d649bbfafb2738089951cd553&quot;
+  },
+  &quot;implementation_checkpoint&quot;: {
+    &quot;measured_source_commit&quot;: &quot;54dd7a5df9b3646b03581c9b4cd27cb3a3b55600&quot;,
+    &quot;evaluation_commit&quot;: &quot;7d309ac2ba4e82a79064340ceda02fdfe9b04ab9&quot;,
+    &quot;ggml_commit&quot;: &quot;232e507d0c35312b77a57720a4c7095b3c77ff5e&quot;,
+    &quot;original_source_commit&quot;: &quot;d8971602369b9fe4478d52e797bde48d718729cb&quot;,
+    &quot;original_ggml_commit&quot;: &quot;caa352ff64190598e6661a383c4768110dc47fd9&quot;,
+    &quot;runner_commit&quot;: &quot;a239cdb483ff90e05969bdecfb5efe39137119da&quot;,
+    &quot;runtime_unchanged_by_evaluation_notes&quot;: true,
+    &quot;integrated&quot;: false,
+    &quot;switch&quot;: &quot;GGML_METAL_GLU=0/1&quot;,
+    &quot;source_manifest&quot;: &quot;011a/source-checkpoints.json&quot;,
+    &quot;matched_build_flags&quot;: &quot;011a/matched-build-flags.json&quot;,
+    &quot;evaluation_notes&quot;: &quot;experiments/haas-mac/011a-results.md at evaluation commit&quot;
+  },
+  &quot;diagnostics&quot;: [
+    {
+      &quot;title&quot;: &quot;Paired screen reductions and observed round variation&quot;,
+      &quot;method&quot;: &quot;Pair the same nine recordings within each round. The combined result first takes each input median over three rounds, then the median ON/OFF ratio. Positive means lower latency.&quot;,
+      &quot;headers&quot;: [
+        &quot;Type&quot;,
+        &quot;Combined&quot;,
+        &quot;Round 1&quot;,
+        &quot;Round 2&quot;,
+        &quot;Round 3&quot;,
+        &quot;Inputs faster / slower&quot;,
+        &quot;OFF / ON median round range&quot;
+      ],
+      &quot;rows&quot;: [
+        [
+          &quot;Q4_K&quot;,
+          &quot;0.516%&quot;,
+          &quot;2.034%&quot;,
+          &quot;0.011%&quot;,
+          &quot;0.721%&quot;,
+          &quot;9 / 0&quot;,
+          &quot;1.570% / 3.320%&quot;
+        ],
+        [
+          &quot;Q8_0&quot;,
+          &quot;1.628%&quot;,
+          &quot;0.065%&quot;,
+          &quot;0.633%&quot;,
+          &quot;4.159%&quot;,
+          &quot;6 / 3&quot;,
+          &quot;7.208% / 3.700%&quot;
+        ],
+        [
+          &quot;F16&quot;,
+          &quot;-1.219%&quot;,
+          &quot;0.174%&quot;,
+          &quot;-1.219%&quot;,
+          &quot;-1.236%&quot;,
+          &quot;1 / 8&quot;,
+          &quot;1.047% / 3.191%&quot;
+        ]
+      ],
+      &quot;notes&quot;: [
+        &quot;Round range is (maximum minus minimum) / median for each input, then the median over inputs. It is descriptive variation, not a confidence interval.&quot;,
+        &quot;The 20-30 second paired reductions are Q4_K +0.455%, Q8_0 -1.964% and F16 -0.375%. No full or short-prefix follow-up is run.&quot;
+      ]
+    },
+    {
+      &quot;title&quot;: &quot;Direct kernel and ordinary graph coverage&quot;,
+      &quot;method&quot;: &quot;Independent original kernel, candidate OFF and candidate ON executions; exact byte comparisons and dispatch counts are correctness observations, excluded from request timing.&quot;,
+      &quot;headers&quot;: [
+        &quot;Configuration&quot;,
+        &quot;Direct comparisons / guards&quot;,
+        &quot;Direct fusions&quot;,
+        &quot;CPU-reference cases&quot;,
+        &quot;Supported / excluded regressions&quot;,
+        &quot;Normal / retained fusions per graph&quot;
+      ],
+      &quot;rows&quot;: [
+        [
+          &quot;original 0&quot;,
+          &quot;76 / 2&quot;,
+          &quot;0&quot;,
+          &quot;64&quot;,
+          &quot;158 / 111&quot;,
+          &quot;0 / 0&quot;
+        ],
+        [
+          &quot;candidate 0&quot;,
+          &quot;76 / 2&quot;,
+          &quot;0&quot;,
+          &quot;64&quot;,
+          &quot;158 / 111&quot;,
+          &quot;0 / 0&quot;
+        ],
+        [
+          &quot;candidate 1&quot;,
+          &quot;76 / 2&quot;,
+          &quot;38&quot;,
+          &quot;64&quot;,
+          &quot;158 / 111&quot;,
+          &quot;24 / 0&quot;
+        ]
+      ],
+      &quot;notes&quot;: [
+        &quot;38 eligible direct cases and 38 controls, including 12 distinct-wrapper controls. Poison guards emulate faulty stores; they are not extra GPU cases. Unsupported regressions are excluded, not passes.&quot;,
+        &quot;The normal/retained matrix covers three weight types and seven encoded lengths: 1, 31, 32, 33, 171, 172 and 375. All normal versus retained projections and six independent original/OFF/ON output-file comparisons are exact. Total graph executions: 126.&quot;
+      ]
+    },
+    {
+      &quot;title&quot;: &quot;Official stage checks&quot;,
+      &quot;method&quot;: &quot;Pinned NeMo dump inputs, each checked at the existing bound. Retained encoder outputs do not establish ordinary graph fusion counts.&quot;,
+      &quot;headers&quot;: [
+        &quot;Stage&quot;,
+        &quot;Configuration&quot;,
+        &quot;Type / device&quot;,
+        &quot;Cases&quot;,
+        &quot;Minimum SNR&quot;,
+        &quot;Existing bound&quot;
+      ],
+      &quot;rows&quot;: [
+        [
+          &quot;encoder&quot;,
+          &quot;candidate 0&quot;,
+          &quot;F16 / gpu&quot;,
+          &quot;11&quot;,
+          &quot;56.4 dB&quot;,
+          &quot;25 dB&quot;
+        ],
+        [
+          &quot;encoder&quot;,
+          &quot;candidate 0&quot;,
+          &quot;F32 / gpu&quot;,
+          &quot;11&quot;,
+          &quot;56.4 dB&quot;,
+          &quot;25 dB&quot;
+        ],
+        [
+          &quot;encoder&quot;,
+          &quot;candidate 1&quot;,
+          &quot;F16 / gpu&quot;,
+          &quot;11&quot;,
+          &quot;56.4 dB&quot;,
+          &quot;25 dB&quot;
+        ],
+        [
+          &quot;encoder&quot;,
+          &quot;candidate 1&quot;,
+          &quot;F32 / cpu&quot;,
+          &quot;11&quot;,
+          &quot;104.4 dB&quot;,
+          &quot;90 dB&quot;
+        ],
+        [
+          &quot;encoder&quot;,
+          &quot;candidate 1&quot;,
+          &quot;F32 / gpu&quot;,
+          &quot;11&quot;,
+          &quot;56.4 dB&quot;,
+          &quot;25 dB&quot;
+        ],
+        [
+          &quot;encoder&quot;,
+          &quot;original 0&quot;,
+          &quot;F16 / gpu&quot;,
+          &quot;11&quot;,
+          &quot;56.4 dB&quot;,
+          &quot;25 dB&quot;
+        ],
+        [
+          &quot;encoder&quot;,
+          &quot;original 0&quot;,
+          &quot;F32 / cpu&quot;,
+          &quot;11&quot;,
+          &quot;104.4 dB&quot;,
+          &quot;90 dB&quot;
+        ],
+        [
+          &quot;encoder&quot;,
+          &quot;original 0&quot;,
+          &quot;F32 / gpu&quot;,
+          &quot;11&quot;,
+          &quot;56.4 dB&quot;,
+          &quot;25 dB&quot;
+        ],
+        [
+          &quot;frontend&quot;,
+          &quot;candidate 1&quot;,
+          &quot;F32 / cpu&quot;,
+          &quot;11&quot;,
+          &quot;103.3 dB&quot;,
+          &quot;90 dB&quot;
+        ]
+      ],
+      &quot;notes&quot;: [
+        &quot;88 encoder plus 11 frontend case executions pass. No separate official joint.enc, KDA/prediction or complete TDT result is claimed. Windows Vulkan execution remains unavailable.&quot;
+      ]
+    },
+    {
+      &quot;title&quot;: &quot;Separate graph-log diagnostic and retained failed capture&quot;,
+      &quot;method&quot;: &quot;The first capture uses the default sink and records zero node lines. The corrected log-only launcher uses the unchanged stage source, one warmup and one loop per side.&quot;,
+      &quot;headers&quot;: [
+        &quot;Capture&quot;,
+        &quot;OFF / ON node lines&quot;,
+        &quot;OFF / ON fused UNARY + MUL&quot;,
+        &quot;Encoder executions per side&quot;,
+        &quot;Used for timing&quot;
+      ],
+      &quot;rows&quot;: [
+        [
+          &quot;Initial failed capture&quot;,
+          &quot;0 / not run&quot;,
+          &quot;No usable trace&quot;,
+          &quot;2 / not run&quot;,
+          &quot;No&quot;
+        ],
+        [
+          &quot;Corrected diagnostic&quot;,
+          &quot;1964 / 1916&quot;,
+          &quot;0 / 48&quot;,
+          &quot;2&quot;,
+          &quot;No&quot;
+        ]
+      ],
+      &quot;notes&quot;: [
+        &quot;The 48 observed fusions span two normal encoder executions, not 48 per graph. No fusion counter, FUSION_DEBUG or retained intermediates are used in this separate capture.&quot;
+      ]
+    }
+  ],
+  &quot;input_hash&quot;: &quot;7196750a6d97b470abbcc6fc45bd3d82572473a5e778200a145fe82dbda03267&quot;,
+  &quot;assets_sha256&quot;: &quot;e82d03c053c861f4943907d67f28e191431f84706429b324e80368adf6808581&quot;,
+  &quot;evidence&quot;: {
+    &quot;directory&quot;: &quot;011a&quot;,
+    &quot;run_manifest_sha256&quot;: &quot;892284e2cf534c670d93bcda01c898bb26609c63d6afc1ae7f31d0228e69b554&quot;,
+    &quot;paths_relative_to&quot;: &quot;External campaign artifact directory.&quot;,
+    &quot;evaluation_sha256&quot;: &quot;c462ad5e9909861d5695eda084c9866fe5d0811f5ec94bbdbcdc101ce208ce6b&quot;,
+    &quot;checks_sha256&quot;: &quot;f818cf764a897d2bd913a9532c4a3ed46bb4f8361a01bcf78387db51d95d4856&quot;,
+    &quot;evidence_manifest_sha256&quot;: &quot;df3852bfd1ad47bab278d6544bf172f7479aa74db497bf2a4c1dd3052eb6911d&quot;,
+    &quot;owner_manifest_files&quot;: 877,
+    &quot;owner_manifest_bytes&quot;: 1721974312,
+    &quot;independent_manifest_path&quot;: &quot;report-imports/011a/independent-evidence-sha256.json&quot;,
+    &quot;independent_manifest_sha256&quot;: &quot;fabb0e9d1eab0af856c42e6541ad7da90bcf890d74d2c6ac2b2aaf07e4ce9e03&quot;,
+    &quot;independently_verified_files&quot;: 878,
+    &quot;independently_verified_external_files&quot;: 6,
+    &quot;request_audit_path&quot;: &quot;report-imports/011a/request-audit.json&quot;,
+    &quot;request_audit_sha256&quot;: &quot;81c84a59171e61e5b7ce88faddbf3df44c75ee2a5ae4cb2ec63b0f725a21e1f8&quot;,
+    &quot;check_audit_path&quot;: &quot;report-imports/011a/check-audit.json&quot;,
+    &quot;check_audit_sha256&quot;: &quot;e23dc1068bbfa845555ddc22da83378c3853ea455c6f3ebfc43b2024493da6f6&quot;,
+    &quot;request_audit_source_sha256&quot;: &quot;700718d8560402d339f455f127fdb4502e18789d6fee8e4e0926735536e4f24c&quot;,
+    &quot;check_audit_source_sha256&quot;: &quot;cf3e859f8176baf123a3c2258077c52bd6201c3ef1ce0977592747953ff9da5c&quot;,
+    &quot;import_source_sha256&quot;: &quot;5509ffdce1e54de48640d7f2e6f86ab6f035d73da9fd96911d215357db54de97&quot;
+  }
+}</pre></details><footer>Local experiment report · JSON is the source of truth · No external assets or telemetry</footer></main></body></html>

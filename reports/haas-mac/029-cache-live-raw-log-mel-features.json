@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "measure_id": "029",
+  "title": "Cache live raw log-mel features",
+  "status": "pending",
+  "reason": "Not evaluated.",
+  "checks": []
+}

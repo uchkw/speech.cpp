@@ -1,0 +1,506 @@
+{
+  "schema_version": 1,
+  "measure_id": "013",
+  "title": "Fuse depthwise convolution, bias and SiLU",
+  "status": "rejected",
+  "reason": "Reject the current depthwise convolution + bias + SiLU prototype for the tested normal allocation path. Direct numerical checks pass, but no depthwise fusion activates in the ordinary encoder graphs. Reviewed Q4 storage ranges satisfy a required alias rejection condition. Primary latency, full corpus, short-audio and public ASR quality are not measured; this is not a measured 0% speed result.",
+  "checks": [
+    {
+      "name": "Matched clean original/candidate builds",
+      "status": "passed",
+      "required": true,
+      "scope": "mac",
+      "reason": "74 speech and 28 standalone ggml flags.make files match after source/build path normalization.",
+      "evidence": "013/source-checkpoints.json; 013/matched-build-flags.json"
+    },
+    {
+      "name": "Direct Metal synthetic arithmetic and alias controls",
+      "status": "passed",
+      "required": true,
+      "scope": "mac",
+      "reason": "61 actual cases plus two poison guards in original/off/on; 24 eligible and 37 rejection controls; ON 24 actual fusions, original/off 0; complete outputs compare byte-exact; no allocation dependencies.",
+      "evidence": "013/ggml-checks/direct-comparison.json"
+    },
+    {
+      "name": "CPU-reference comparisons",
+      "status": "passed",
+      "required": true,
+      "scope": "mac",
+      "reason": "49 actual cases in each original/off/on Metal run against the CPU reference; no unsupported cases in this set.",
+      "evidence": "013/ggml-checks/backend-summary.json"
+    },
+    {
+      "name": "Related existing depthwise, SiLU and ADD regressions",
+      "status": "passed",
+      "required": true,
+      "scope": "mac",
+      "reason": "Per configuration: depthwise16, SiLU8 and ADD84 actual passes. The 76 unsupported cases are identical across all configurations and are not passes.",
+      "evidence": "013/ggml-checks/backend-summary.json"
+    },
+    {
+      "name": "Normal allocator projection output correctness",
+      "status": "passed",
+      "required": true,
+      "scope": "mac",
+      "reason": "81 graph executions: Q4_K/Q8_0/F16 x original/OFF/ON x nine executions of seven unique subsampled lengths. All six whole-output-file comparisons are byte-exact; each process repeats lengths 33 and 1 exactly with one allocator. Synthetic features establish arithmetic/allocation behavior, not ASR recognition quality.",
+      "evidence": "013/normal-checks/external-comparisons.json"
+    },
+    {
+      "name": "Normal graph optimization activation",
+      "status": "failed",
+      "required": true,
+      "scope": "mac",
+      "reason": "ON has zero observed depthwise fusions in every tested normal graph. The Q4 range trace has 120 output/input overlaps and 96 output/packed-kernel overlaps across 216 Conformer patterns; all satisfy a local FULL alias rejection condition. The first rejecting branch was not instrumented. This is an applicability failure, not an output mismatch.",
+      "evidence": "013/graph-debug/corrected-analysis.json; 013/graph-debug-ranges/candidate-1-q4_k/range-analysis.json; 013/independent-review.json"
+    },
+    {
+      "name": "Official frontend and encoder reference",
+      "status": "passed",
+      "required": true,
+      "scope": "mac",
+      "reason": "11 unique official inputs across nine stage/configuration invocations give 99 check executions: frontend 11, CPU F32 encoder 22, Metal F32 encoder 33 and Metal F16 encoder 33. Displayed minimum SNR 103.3/104.4/56.4 dB; unchanged executable thresholds 90/90/25 dB pass. No official joint.enc or complete KDA/TDT execution is implied.",
+      "evidence": "013/official-checks/summary.json; 013/verified-inputs.json"
+    },
+    {
+      "name": "Public ASR latency, quality and fixed-anchor screen",
+      "status": "skipped",
+      "required": false,
+      "scope": "mac",
+      "reason": "Normal optimization activation failed; no primary screen, full corpus, short-audio evaluation, CER, public text/token/timestamp/segment comparison, latency or memory gain was measured.",
+      "evidence": "013/checks.json"
+    },
+    {
+      "name": "Complete official KDA/TDT reference",
+      "status": "unavailable",
+      "required": true,
+      "scope": "reference",
+      "reason": "Official frontend/encoder/joint.enc dumps exist; a complete official KDA/TDT reference is unavailable. joint.enc was not independently executed in this evaluation.",
+      "evidence": "013/checks.json"
+    },
+    {
+      "name": "Windows/Vulkan runtime validation",
+      "status": "unavailable",
+      "required": true,
+      "scope": "windows",
+      "reason": "No Windows/Vulkan device execution was available; no equivalence or performance claim is made there.",
+      "evidence": "013/checks.json"
+    }
+  ],
+  "updated_utc": "2026-11-07T00:31:13.648848+00:00",
+  "scope": "applicability_only",
+  "evaluation_completed": true,
+  "adopted": false,
+  "primary_screen_executed": false,
+  "full_quality_executed": false,
+  "short_prefix_executed": false,
+  "public_asr_quality_executed": false,
+  "performance_gain_measured": false,
+  "memory_gain_measured": false,
+  "variant_scope": "Current depthwise+bias+SiLU prototype under the observed ordinary allocation and command-buffer policy. Other allocation or fusion designs would be separate experiments.",
+  "conditions": {
+    "hardware": {
+      "chip": "Apple M2 Ultra",
+      "source": "Recorded MTL0 device description in executed check logs."
+    },
+    "latency_definition": "No primary request latency is measured. Diagnostic process wall times and check execution times are not request-latency evidence.",
+    "aggregation": "No latency quantiles, paired reductions, cumulative gain or CER estimates are computed. The index deliberately leaves the gain field empty.",
+    "normal_device": "MTL0, registry MTL",
+    "normal_helper_cpu_threads": 4,
+    "normal_input_kind": "Synthetic features; only the final encoder-to-joint projection is retained as a graph output.",
+    "normal_subsampled_lengths": [
+      1,
+      31,
+      32,
+      33,
+      171,
+      172,
+      375,
+      33,
+      1
+    ],
+    "normal_unique_subsampled_lengths": 7,
+    "normal_executions_per_process": 9,
+    "primary_settings_applied": false,
+    "runner_snapshot_executed": false,
+    "limitations": [
+      "This is an applicability-only rejection. No primary screen, fixed-anchor timing, full 30-input latency/650-input quality, short-prefix screen, CER, public ASR text/token/time/segment comparison, load-time gain or memory gain is measured.",
+      "Direct synthetic arithmetic and ordinary-graph byte equality are not ASR corpus recognition-quality evidence. The campaign CER definitions below are unused scoring definitions, not results for this variant.",
+      "Seven unique subsampled lengths are executed nine times per process, including repeats at 33 and 1. Three model types and three original/OFF/ON configurations give 81 ordinary graph executions, not 81 unique lengths or utterances.",
+      "The normal allocator keeps only the final encoder-to-joint projection as graph output. Separate GRAPH_DEBUG=1 logs cover another 81 graph executions, and one Q4 ON GRAPH_DEBUG=3 run covers nine more; all debug outputs match normal outputs.",
+      "The initial diagnostic aggregation searched for five raw operations. The backend removes empty PERMUTE/RESHAPE nodes, so the corrected nonempty fusion has three operations. Both analyses and original raw logs are preserved; zero depthwise fusions remains the result.",
+      "The reviewed Q4 ranges contain 216 Conformer patterns: 120 output/input overlaps and 96 output/packed-kernel overlaps, union 216, with no bias overlap. They are sufficient local FULL alias-rejection conditions. The first rejecting branch is not instrumented, so its order is not established.",
+      "Ordinary unfused execution may reuse input or packed-kernel storage after convolution consumes it. No safety guard, allocator, retained intermediate or runtime is changed to force fusion in this evaluation.",
+      "Official coverage uses 11 unique dump inputs across nine stage/configuration invocations: 99 executions. Frontend and encoder are run; available joint.enc dumps are not independently executed here, and complete official KDA/TDT reference remains unavailable.",
+      "Official SNR values are displayed to one decimal place. Existing executables decide pass/fail with unrounded values and unchanged strict thresholds.",
+      "Windows/Vulkan device execution is unavailable. No numerical or performance equivalence is claimed there.",
+      "The direct set has 61 cases, including 11 mapped-buffer controls and one padded-input case outside the 49-case CPU-reference set. Two poison guards do not dispatch the GPU. Related regressions have 76 unsupported cases per configuration, excluded from passes.",
+      "Original/candidate builds use native Release Metal, explicit arm64 and the same Xcode SDK. Their 74 speech and 28 ggml flags.make files match after source/build path normalization. No full link-command equivalence claim is added.",
+      "The fixed anchor is identified and its files verified but not timed. Its implicit architecture/SDK settings differ from the explicit matched builds; no performance equivalence or cumulative campaign gain is inferred.",
+      "Normal helper checks use four CPU threads; direct/official check thread policies are recorded in their commands and are not a tuned worker request comparison. The runtime automatic default remains 16 performance cores on this host.",
+      "Frozen runner source is retained for the planned screen but was not executed. Proposed 013 Python execution tools and coding-session development artifacts remain outside the measured evidence and are not adopted.",
+      "Model and official-array hashes come from pre-execution verification. The independent report audit rehashes frozen raw/build artifacts, not model or reference-array contents.",
+      "This result concerns the current prototype and observed allocation path. The default remains OFF; no production variant, baseline or cumulative gain is adopted."
+    ]
+  },
+  "builds": {
+    "original": {
+      "source_commit": "c1299723c958cd7f50d6273b3cdce769e215ffb2",
+      "source_tree": "cabe3377815fa190eab09be65a886c82eca878b2",
+      "ggml_commit": "6e18078cfe8257378826cf16b07b378e6d530a57",
+      "ggml_tree": "d9b39dff9a5d490f98d39411aef4a4ed032b3add",
+      "source_verified": true,
+      "build_flags": {
+        "configure": [
+          "-DCMAKE_BUILD_TYPE=Release",
+          "-DGGML_NATIVE=ON",
+          "-DGGML_METAL=ON",
+          "-DCMAKE_OSX_ARCHITECTURES=arm64",
+          "-DCMAKE_OSX_SYSROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk",
+          "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+        ],
+        "build": [
+          "--target",
+          "speech-cli",
+          "fastconformer-timing",
+          "fastconformer-encoder-check",
+          "fastconformer-frontend-check",
+          "-j4"
+        ]
+      },
+      "cmake_cache_sha256": "b1b95cab933e98c80cca2868050b4319ae05a393b86cd21422534f26c68d6f3e",
+      "build_log_sha256": "f2cd92dd37c06b4e18e360ea64e8e6cccd834dc11e1c8e6b70597f7e119114d8",
+      "speech": {
+        "artifact_path": "013/builds/original-speech/speech",
+        "sha256": "fdc80031683e2ca1c049475574d8e69ccd135134246f9c92f03d841cd448773d"
+      },
+      "stage_tool": {
+        "artifact_path": "013/builds/original-speech/fastconformer-timing",
+        "sha256": "9384ea4d9405b1bc678a12db5ecd6a7d84f7a95911f62f2ba336ee87002838ed"
+      },
+      "encoder_check": {
+        "artifact_path": "013/builds/original-speech/fastconformer-encoder-check",
+        "sha256": "c4957923c4425b71e38c67733051e0edcd57c66f8467da575c137da5569837d5"
+      },
+      "frontend_check": {
+        "artifact_path": "013/builds/original-speech/fastconformer-frontend-check",
+        "sha256": "669ba1ad53c7ab33f3a07705cd6ba88f0d4dbb8a6ac674780bd948a3240ab644"
+      }
+    },
+    "candidate_off": {
+      "source_commit": "1ab1d9c3eca96daa5f8d3ade37bae9b06cd01ea1",
+      "source_tree": "2ac96db742225de929116640f2be66503b071825",
+      "ggml_commit": "2b5ce8e9215177354519b42e84b0853de9196ed0",
+      "ggml_tree": "b183f0f5503768337b361dd18ebcd092602af89e",
+      "source_verified": true,
+      "build_flags": {
+        "configure": [
+          "-DCMAKE_BUILD_TYPE=Release",
+          "-DGGML_NATIVE=ON",
+          "-DGGML_METAL=ON",
+          "-DCMAKE_OSX_ARCHITECTURES=arm64",
+          "-DCMAKE_OSX_SYSROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk",
+          "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+        ],
+        "build": [
+          "--target",
+          "speech-cli",
+          "fastconformer-timing",
+          "fastconformer-encoder-check",
+          "fastconformer-frontend-check",
+          "-j4"
+        ]
+      },
+      "cmake_cache_sha256": "016cadbe4d0d684fdb7973057818d4da44a9e884679be3bfc6344dc8b3f640c7",
+      "build_log_sha256": "f4744da4e73a33a4020d018c2c2b98fe69f6931e2e6cc24e9b68c02f39b7def0",
+      "speech": {
+        "artifact_path": "013/builds/candidate-speech/speech",
+        "sha256": "4ef27579233120a8d82c02fc8c5d52253f7dbf0163c313f46cadbffa8b2895e2"
+      },
+      "stage_tool": {
+        "artifact_path": "013/builds/candidate-speech/fastconformer-timing",
+        "sha256": "81f60935737109469b1f3d4849c16dbdb28e7dee92814425f50f0488f48168cf"
+      },
+      "encoder_check": {
+        "artifact_path": "013/builds/candidate-speech/fastconformer-encoder-check",
+        "sha256": "0597efba6fb1ec21c4e4df50c2e91fc4b6f916c7e57e7b65694f84f0b9b30023"
+      },
+      "frontend_check": {
+        "artifact_path": "013/builds/candidate-speech/fastconformer-frontend-check",
+        "sha256": "e98a60076e6b8a7dbe9ac6e4b668e1301eb0b06ff97fd8052651a1a44a6451f4"
+      }
+    },
+    "candidate_on": {
+      "source_commit": "1ab1d9c3eca96daa5f8d3ade37bae9b06cd01ea1",
+      "source_tree": "2ac96db742225de929116640f2be66503b071825",
+      "ggml_commit": "2b5ce8e9215177354519b42e84b0853de9196ed0",
+      "ggml_tree": "b183f0f5503768337b361dd18ebcd092602af89e",
+      "source_verified": true,
+      "build_flags": {
+        "configure": [
+          "-DCMAKE_BUILD_TYPE=Release",
+          "-DGGML_NATIVE=ON",
+          "-DGGML_METAL=ON",
+          "-DCMAKE_OSX_ARCHITECTURES=arm64",
+          "-DCMAKE_OSX_SYSROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk",
+          "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+        ],
+        "build": [
+          "--target",
+          "speech-cli",
+          "fastconformer-timing",
+          "fastconformer-encoder-check",
+          "fastconformer-frontend-check",
+          "-j4"
+        ]
+      },
+      "cmake_cache_sha256": "016cadbe4d0d684fdb7973057818d4da44a9e884679be3bfc6344dc8b3f640c7",
+      "build_log_sha256": "f4744da4e73a33a4020d018c2c2b98fe69f6931e2e6cc24e9b68c02f39b7def0",
+      "speech": {
+        "artifact_path": "013/builds/candidate-speech/speech",
+        "sha256": "4ef27579233120a8d82c02fc8c5d52253f7dbf0163c313f46cadbffa8b2895e2"
+      },
+      "stage_tool": {
+        "artifact_path": "013/builds/candidate-speech/fastconformer-timing",
+        "sha256": "81f60935737109469b1f3d4849c16dbdb28e7dee92814425f50f0488f48168cf"
+      },
+      "encoder_check": {
+        "artifact_path": "013/builds/candidate-speech/fastconformer-encoder-check",
+        "sha256": "0597efba6fb1ec21c4e4df50c2e91fc4b6f916c7e57e7b65694f84f0b9b30023"
+      },
+      "frontend_check": {
+        "artifact_path": "013/builds/candidate-speech/fastconformer-frontend-check",
+        "sha256": "e98a60076e6b8a7dbe9ac6e4b668e1301eb0b06ff97fd8052651a1a44a6451f4"
+      }
+    }
+  },
+  "execution_environments": {
+    "original": {
+      "GGML_METAL_DW_SILU": "0"
+    },
+    "candidate_off": {
+      "GGML_METAL_DW_SILU": "0"
+    },
+    "candidate_on": {
+      "GGML_METAL_DW_SILU": "1"
+    }
+  },
+  "models": {
+    "q4_k": {
+      "file": "Haas-616M-ja-v1.0-Q4_K.gguf",
+      "sha256": "d24d53f29b75214a933ff482b0de1217e0a800f4118cca39ad6cf03609a89d6f",
+      "scope": "Normal synthetic graph checks; no ASR corpus run."
+    },
+    "q8_0": {
+      "file": "Haas-616M-ja-v1.0-Q8_0.gguf",
+      "sha256": "cd5f60b2f1c411404b83fca4a65e3ce30a26d9e951b6a346529e65f22758afeb",
+      "scope": "Normal synthetic graph checks; no ASR corpus run."
+    },
+    "f16": {
+      "file": "Haas-616M-ja-v1.0-F16.gguf",
+      "sha256": "f752e02f68c1dfff795900e40aa82e5302976fb5360080fcbd330d8b3c992cd8",
+      "scope": "Normal synthetic graph and official Metal encoder checks; no ASR corpus run."
+    },
+    "f32": {
+      "file": "Haas-616M-ja-v1.0-F32.gguf",
+      "sha256": "119c2471afc2a98ccbc349f1b8952c9ddd9366f7b0226688ce909c754d043ce8",
+      "scope": "Official frontend/encoder checks only."
+    }
+  },
+  "input_hash": {
+    "verified_inputs_manifest_sha256": "086db670f1479e97d0f4fe5fa579f1cabf59f4ed20193c6422efce19eba8c5aa",
+    "official_input_identity_path": "013/verified-inputs.json",
+    "normal_synthetic_source_path": "013/normal-checks/candidate/013-encoder-check.cpp",
+    "normal_synthetic_source_sha256": "ba7cddf304969bf5c6b347e26f2864174654c161090f86db746e169d9ade5146",
+    "scope": "Official model/array pre-execution identities and the exact synthetic-input helper source; no latency corpus run."
+  },
+  "implementation_checkpoint": {
+    "measured_source_commit": "1ab1d9c3eca96daa5f8d3ade37bae9b06cd01ea1",
+    "evaluation_commit": "39d3d1da3e3ae28c4482a1f77065fa6c6980ceca",
+    "ggml_commit": "2b5ce8e9215177354519b42e84b0853de9196ed0",
+    "original_source_commit": "c1299723c958cd7f50d6273b3cdce769e215ffb2",
+    "original_ggml_commit": "6e18078cfe8257378826cf16b07b378e6d530a57",
+    "runner_snapshot_commit": "54eed08312c70151ecf3cd872e83f09579be6605",
+    "runner_snapshot_executed": false,
+    "runtime_unchanged_by_evaluation_notes": true,
+    "guard_or_allocator_changed_during_evaluation": false,
+    "integrated": false,
+    "switch": "GGML_METAL_DW_SILU=0/1; default OFF",
+    "source_checkpoints": "013/source-checkpoints.json",
+    "evaluation_note": "https://github.com/uchkw/speech.cpp/blob/39d3d1da3e3ae28c4482a1f77065fa6c6980ceca/experiments/haas-mac/013-results.md",
+    "evaluation_kind": "Correctness and ordinary-path applicability only; no performance measurement."
+  },
+  "evidence": {
+    "directory": "013",
+    "paths_relative_to": "External campaign artifact directory.",
+    "evaluation_path": "013/evaluation.json",
+    "evaluation_sha256": "1f857fd87c8d2b9b2e2ee9f238e08554f37b71cbcfb30805eb058499d466c429",
+    "checks_path": "013/checks.json",
+    "checks_sha256": "b74e4574ec855e96fa2c483c1fdc4435f0ee5c0ecb8853f95b5191771a8ce259",
+    "check_summary_path": "013/check-summary.json",
+    "check_summary_sha256": "b865347fde3d32647a5c7ba4bb1e4329c02b4c626a1ba289781c5c351f131bbc",
+    "evidence_manifest_path": "013/evidence-manifest.json",
+    "evidence_manifest_sha256": "9405b479f93900c36ce19bb2ec3e64ca06f0296af3068f87e31f91d22e34d9f5",
+    "independent_source_review_path": "013/independent-review.json",
+    "independent_source_review_sha256": "d85460646002cfabd91facc105d48fe34c39b834bde9ee34f7b50b93a536225a",
+    "freeze_scope_path": "013/freeze-scope.json",
+    "owner_manifest_local_files": 746,
+    "owner_manifest_external_files": 6,
+    "total_independently_verified_bytes": 273370400,
+    "models_or_audio_rehashed_during_import": false,
+    "unused_execution_tools_adopted": false,
+    "data_import_method": "Existing compare.record and render.py with local structured-data import. No new renderer/helper code and no measured data sent to an external coding service.",
+    "independent_manifest_path": "report-imports/013/independent-evidence-sha256.json",
+    "independent_manifest_sha256": "961d594ece817124140327874f08001a59d1f2e3a426f821b3b1c4c788e32f85",
+    "check_audit_path": "report-imports/013/check-audit.json",
+    "check_audit_sha256": "d100a1fd3d7b37f7a627205b307fc365f97f71423d9f894785e862e476c304db",
+    "build_audit_path": "report-imports/013/build-audit.json",
+    "build_audit_sha256": "a2777ebdab95cfb7a81df196a79bc9c89675a15837a596462f31e6eadebb946d"
+  },
+  "diagnostics": [
+    {
+      "title": "Applicability decides this result; performance is not measured",
+      "method": "Direct correctness is separate from activation in the ordinary allocation path. Original, candidate OFF and candidate ON are check configurations, not latency sides.",
+      "headers": [
+        "Check scope",
+        "Observed result",
+        "Interpretation"
+      ],
+      "rows": [
+        [
+          "Direct synthetic kernel",
+          "61 cases + 2 poison guards per configuration; 24 eligible ON fusions",
+          "Arithmetic and safety controls pass"
+        ],
+        [
+          "Ordinary encoder graph",
+          "Zero depthwise fusions in all tested ON graphs",
+          "Current prototype is inapplicable under this allocation"
+        ],
+        [
+          "Q4 storage ranges",
+          "216 patterns; 120 input and 96 packed-kernel overlaps",
+          "Every pattern satisfies a local FULL alias rejection condition"
+        ],
+        [
+          "Primary/full/short/CER/public ASR",
+          "Not executed",
+          "No latency or gain value is assigned"
+        ]
+      ],
+      "notes": [
+        "The first rejecting branch was not traced. Sufficient rejection conditions are established, not guard evaluation order.",
+        "No safety guard or allocator was changed. This result does not rule out a different separately evaluated fusion or allocation design."
+      ]
+    },
+    {
+      "title": "Direct arithmetic and regression coverage",
+      "method": "Original, OFF and ON use the same synthetic inputs. Poisoned output and mapped-buffer controls verify actual dispatch and output writes.",
+      "headers": [
+        "Set",
+        "Cases per configuration",
+        "Result / scope"
+      ],
+      "rows": [
+        [
+          "Direct Metal",
+          "61 plus 2 poison guards",
+          "24 eligible; 37 rejection controls; ON fuses 24, original/OFF zero; finite byte-exact outputs"
+        ],
+        [
+          "CPU-reference Metal cases",
+          "49",
+          "Pass; excludes 11 mapped-buffer cases and one padded-input case"
+        ],
+        [
+          "Existing depthwise / SiLU / ADD",
+          "16 / 8 / 84",
+          "Pass in each configuration"
+        ],
+        [
+          "Unsupported regressions",
+          "SiLU 4 + ADD 72",
+          "Identical unsupported sets; excluded from passes"
+        ]
+      ],
+      "notes": [
+        "Two poison guards do not dispatch the GPU. Separately allocated direct inputs do not establish normal-allocator eligibility.",
+        "The two complete original-versus-candidate direct output files and same-binary comparisons are byte-exact."
+      ]
+    },
+    {
+      "title": "Ordinary graph and separate debug executions",
+      "method": "Only the final encoder-to-joint projection is marked as output. One ordinary allocator is reused per process with default command-buffer partitioning. Inputs are synthetic features.",
+      "headers": [
+        "Execution set",
+        "Shape coverage",
+        "Output / activation"
+      ],
+      "rows": [
+        [
+          "Ordinary helper",
+          "Q4_K/Q8_0/F16 x original/OFF/ON x 9 = 81 executions",
+          "Six complete file comparisons byte-exact; finite nonzero output and repeat equality"
+        ],
+        [
+          "Unique subsampled lengths",
+          "1, 31, 32, 33, 171, 172, 375",
+          "Seven unique lengths; sequence repeats 33 and 1 for nine executions per process"
+        ],
+        [
+          "Separate GRAPH_DEBUG=1",
+          "81 graph executions in nine processes",
+          "All nine debug output files equal normal output; zero depthwise fusions"
+        ],
+        [
+          "Separate Q4 ON GRAPH_DEBUG=3",
+          "Nine graph executions",
+          "Output equals normal Q4 ON; 216 Conformer ranges reviewed"
+        ]
+      ],
+      "notes": [
+        "Normal tensor byte equality is not recognition-quality evidence. No ASR text, tokens, timestamps or segments are compared.",
+        "The original fuse5 parser result is preserved. Corrected analysis counts three nonempty operations after empty views are removed and still finds zero depthwise fusions. Other three-operation fusion messages are NORM."
+      ]
+    },
+    {
+      "title": "Official reference checks: 11 unique inputs, 99 stage executions",
+      "method": "Existing stage checks compare the verified official dumps with unchanged unrounded thresholds. The displayed minimum SNR is rounded to one decimal place.",
+      "headers": [
+        "Stage / device / configurations",
+        "Executions",
+        "Displayed minimum SNR",
+        "Executable threshold"
+      ],
+      "rows": [
+        [
+          "Frontend CPU F32; candidate ON",
+          "11",
+          "103.3 dB",
+          "90 dB"
+        ],
+        [
+          "Encoder CPU F32; original and ON",
+          "22",
+          "104.4 dB",
+          "90 dB"
+        ],
+        [
+          "Encoder Metal F32; original/OFF/ON",
+          "33",
+          "56.4 dB",
+          "25 dB"
+        ],
+        [
+          "Encoder Metal F16; original/OFF/ON",
+          "33",
+          "56.4 dB",
+          "25 dB"
+        ]
+      ],
+      "notes": [
+        "These are repeated checks of 11 unique dump inputs, not 99 unique recordings.",
+        "Official frontend/encoder checks pass. Available joint.enc dumps are not independently executed here; complete official KDA/TDT and Windows/Vulkan execution remain unverified."
+      ]
+    }
+  ]
+}

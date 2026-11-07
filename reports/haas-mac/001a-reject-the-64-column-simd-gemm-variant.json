@@ -1,0 +1,782 @@
+{
+  "schema_version": 1,
+  "measure_id": "001a",
+  "parent_measure_id": "001",
+  "title": "Reject the 64-column SIMD GEMM variant",
+  "status": "rejected",
+  "reason": "The 64-column variant increased paired warm request latency by 8.6% for Q8_0 and 13.7% for F16 on nine inputs over three rounds. Q4_K was an unchanged-path control. No implementation is adopted; other GEMM variants remain open.",
+  "scope": "exploratory_rejected_variant",
+  "conditions": {
+    "name": "Haas on Apple Silicon",
+    "repository": "https://github.com/uchkw/speech.cpp",
+    "tracking_issue": "https://github.com/uchkw/speech.cpp/issues/1",
+    "purpose": "Reduce warm latency for one Japanese voice input of a few seconds to 30 seconds while preserving recognition quality.",
+    "threads": 4,
+    "rounds": 3,
+    "decode_on_cpu": true,
+    "quality_policy": "exact",
+    "latency_count": 9,
+    "quality_count": 9,
+    "latency_definition": "Before encoding/sending first PCM16 chunk through terminal worker end event; file reading, model load and warmup excluded.",
+    "aggregation": "Linear-interpolated percentiles across nine per-input median latencies; exploratory tail estimates, not production p99 guarantees.",
+    "literal_cer": "Total Unicode code-point Levenshtein edits divided by total reference code points, including punctuation, symbols and whitespace.",
+    "repository_cer": "NFKC followed by removing Unicode punctuation, symbols, separators and whitespace; no case folding or alternate-spelling substitutions. Edits and reference lengths are summed before division.",
+    "quality_comparison": "Nine files per type with timestamps; text and public token/segment fields are compared exactly.",
+    "latency_timestamps": false,
+    "quality_timestamps": true,
+    "unobserved_fields": "The worker does not expose raw TDT token IDs, frame indices or duration decisions. These are not claimed to match by this harness.",
+    "limitations": [
+      "No measurements below 6.36 seconds.",
+      "No full-corpus or official-reference accuracy conclusion.",
+      "No Windows Vulkan or other-Mac validation.",
+      "No independent original-shader versus experimental-32 bitwise comparison.",
+      "The fixed-64 variant is experimental and is not integrated into the accepted branch.",
+      "The 132 direct checks comprise 126 F16/Q8_0 target cases and six Q4_K controls using 32 columns in both settings.",
+      "The source was committed after measuring; tested source hashes match the checkpoint, but the binary was not rebuilt from that clean checkpoint."
+    ],
+    "hardware": {
+      "chip": "Apple M2 Ultra",
+      "cpu_cores": 24,
+      "performance_cores": 16,
+      "efficiency_cores": 8,
+      "gpu_cores": 76,
+      "memory_gb": 192,
+      "source": "system_profiler SPHardwareDataType SPDisplaysDataType"
+    },
+    "created_utc": "2026-11-06T17:21:20.770269+00:00",
+    "minimum_audio_seconds": 6.36,
+    "maximum_audio_seconds": 28.2,
+    "comparison_reference": "Experimental 64 versus experimental 32 in the same binary; cumulative gain against the fixed anchor is not measured.",
+    "selection": {
+      "environment": "GGML_METAL_MM_TILE_N",
+      "baseline": "32",
+      "candidate": "64",
+      "default": "32",
+      "scope": "Non-tensor-API contiguous unbatched F16/Q8_0 weights by F32 activations, N > 16, (M,K) in (4096,1024), (1024,4096), (1024,1024). Q4_K and explicit F32 operands retain 32 columns.",
+      "arithmetic": "K step 32; half operands; float accumulation; four simdgroups; no relaxed precision."
+    }
+  },
+  "types": {
+    "q4_k": {
+      "sides": {
+        "baseline": {
+          "latency": {
+            "p50_ms": 80.9547909993853,
+            "p90_ms": 128.7346249995608,
+            "p99_ms": 149.27082499874814,
+            "count": 9,
+            "rtfx": 170.63643681533816
+          },
+          "strata": {
+            "10-20s": {
+              "p50_ms": 80.9547909993853,
+              "p90_ms": 105.48482539961697,
+              "p99_ms": 111.00408313966909,
+              "count": 3,
+              "rtfx": 167.71571006086555
+            },
+            "20-30s": {
+              "p50_ms": 123.0301249997865,
+              "p90_ms": 145.84812499888358,
+              "p99_ms": 150.98217499868045,
+              "count": 3,
+              "rtfx": 181.32723163475154
+            },
+            "6-10s": {
+              "p50_ms": 57.375291999051115,
+              "p90_ms": 61.97022479973385,
+              "p99_ms": 63.004084679887455,
+              "count": 3,
+              "rtfx": 150.24389202635837
+            }
+          },
+          "quality": {
+            "literal_edits": 40,
+            "literal_characters": 532,
+            "repository_edits": 22,
+            "repository_characters": 493,
+            "literal_cer": 0.07518796992481203,
+            "repository_cer": 0.04462474645030426
+          },
+          "rounds": [
+            {
+              "p50_ms": 82.6186249996681,
+              "p90_ms": 129.6934915997554,
+              "p99_ms": 153.68161135964328,
+              "count": 9,
+              "rtfx": 170.1658123674626
+            },
+            {
+              "p50_ms": 80.9547909993853,
+              "p90_ms": 129.61632500046107,
+              "p99_ms": 149.35899499883817,
+              "count": 9,
+              "rtfx": 168.7171677088263
+            },
+            {
+              "p50_ms": 80.11045799867134,
+              "p90_ms": 128.2324415999028,
+              "p99_ms": 148.33328136002822,
+              "count": 9,
+              "rtfx": 171.43679720095474
+            }
+          ],
+          "peak_memory_bytes": 466633808,
+          "load_ms": 147.0990409998194,
+          "first_request_ms": 173.2719999999972,
+          "stage_status": "unavailable",
+          "stages": {}
+        },
+        "candidate": {
+          "latency": {
+            "p50_ms": 80.17583299988473,
+            "p90_ms": 128.3426750003855,
+            "p99_ms": 150.15570499897876,
+            "count": 9,
+            "rtfx": 171.38368550931895
+          },
+          "strata": {
+            "10-20s": {
+              "p50_ms": 80.17583299988473,
+              "p90_ms": 104.0296330003912,
+              "p99_ms": 109.39673800050512,
+              "count": 3,
+              "rtfx": 169.28898550599806
+            },
+            "20-30s": {
+              "p50_ms": 122.28350000077626,
+              "p90_ms": 146.5201999992132,
+              "p99_ms": 151.97345749886153,
+              "count": 3,
+              "rtfx": 182.69369918981747
+            },
+            "6-10s": {
+              "p50_ms": 57.709749999048654,
+              "p90_ms": 62.108550000994,
+              "p99_ms": 63.09828000143171,
+              "count": 3,
+              "rtfx": 148.6983707671274
+            }
+          },
+          "quality": {
+            "literal_edits": 40,
+            "literal_characters": 532,
+            "repository_edits": 22,
+            "repository_characters": 493,
+            "literal_cer": 0.07518796992481203,
+            "repository_cer": 0.04462474645030426
+          },
+          "rounds": [
+            {
+              "p50_ms": 82.09449999958451,
+              "p90_ms": 127.06667479942551,
+              "p99_ms": 148.09640527935696,
+              "count": 9,
+              "rtfx": 171.26296418538894
+            },
+            {
+              "p50_ms": 80.17583299988473,
+              "p90_ms": 128.41950859910867,
+              "p99_ms": 150.16338835885108,
+              "count": 9,
+              "rtfx": 171.41902434793286
+            },
+            {
+              "p50_ms": 80.12329200028034,
+              "p90_ms": 128.80444180082122,
+              "p99_ms": 152.2798322809831,
+              "count": 9,
+              "rtfx": 169.76437129632885
+            }
+          ],
+          "peak_memory_bytes": 449070040,
+          "load_ms": 148.1497919994581,
+          "first_request_ms": 168.67400000046473,
+          "stage_status": "unavailable",
+          "stages": {}
+        }
+      },
+      "comparisons": {
+        "relative": {
+          "text_changed": 0,
+          "public_tokens_changed": 0,
+          "segments_changed": 0,
+          "literal_better": 0,
+          "literal_worse": 0,
+          "literal_equal": 9,
+          "repository_better": 0,
+          "repository_worse": 0,
+          "repository_equal": 9,
+          "count": 9,
+          "median_latency_ratio": 1.0006945565151641,
+          "latency_rounds": [
+            {
+              "round": 0,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 1,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 2,
+              "count": 9,
+              "text_changed": 0
+            }
+          ],
+          "latency_text_changed": 0,
+          "latency_text_comparisons": 27,
+          "latency_reduction_percent": -0.06945565151641464
+        }
+      }
+    },
+    "q8_0": {
+      "sides": {
+        "baseline": {
+          "latency": {
+            "p50_ms": 77.21458299965889,
+            "p90_ms": 126.94695860081995,
+            "p99_ms": 146.677358359957,
+            "count": 9,
+            "rtfx": 175.13596972845943
+          },
+          "strata": {
+            "10-20s": {
+              "p50_ms": 77.21458299965889,
+              "p90_ms": 104.72711660004279,
+              "p99_ms": 110.91743666012917,
+              "count": 3,
+              "rtfx": 171.25324118908446
+            },
+            "20-30s": {
+              "p50_ms": 121.46629200105963,
+              "p90_ms": 143.38895840010082,
+              "p99_ms": 148.3215583398851,
+              "count": 3,
+              "rtfx": 185.25751176105484
+            },
+            "6-10s": {
+              "p50_ms": 54.1626250014815,
+              "p90_ms": 59.83235860112473,
+              "p99_ms": 61.10804866104445,
+              "count": 3,
+              "rtfx": 157.11820454590398
+            }
+          },
+          "quality": {
+            "literal_edits": 39,
+            "literal_characters": 532,
+            "repository_edits": 21,
+            "repository_characters": 493,
+            "literal_cer": 0.07330827067669173,
+            "repository_cer": 0.04259634888438134
+          },
+          "rounds": [
+            {
+              "p50_ms": 75.85383299920068,
+              "p90_ms": 123.52422480034875,
+              "p99_ms": 143.80353528031264,
+              "count": 9,
+              "rtfx": 179.61231096584018
+            },
+            {
+              "p50_ms": 78.9838749988121,
+              "p90_ms": 127.2558336007933,
+              "p99_ms": 148.09818335983434,
+              "count": 9,
+              "rtfx": 173.351362779258
+            },
+            {
+              "p50_ms": 77.21458299965889,
+              "p90_ms": 129.45842500012077,
+              "p99_ms": 146.92850499988708,
+              "count": 9,
+              "rtfx": 173.52294487244166
+            }
+          ],
+          "peak_memory_bytes": 753255624,
+          "load_ms": 189.00029199903656,
+          "first_request_ms": 162.93420800138847,
+          "stage_status": "unavailable",
+          "stages": {}
+        },
+        "candidate": {
+          "latency": {
+            "p50_ms": 82.16470800107345,
+            "p90_ms": 136.46210879960563,
+            "p99_ms": 152.79944808062282,
+            "count": 9,
+            "rtfx": 163.26308485588004
+          },
+          "strata": {
+            "10-20s": {
+              "p50_ms": 82.16470800107345,
+              "p90_ms": 105.67460800084518,
+              "p99_ms": 110.96433550079382,
+              "count": 3,
+              "rtfx": 163.01566240224426
+            },
+            "20-30s": {
+              "p50_ms": 131.92395899932308,
+              "p90_ms": 150.0765582004533,
+              "p99_ms": 154.1608930207076,
+              "count": 3,
+              "rtfx": 177.0472982164693
+            },
+            "6-10s": {
+              "p50_ms": 63.37720800001989,
+              "p90_ms": 68.86917520096176,
+              "p99_ms": 70.10486782117368,
+              "count": 3,
+              "rtfx": 134.29365289472233
+            }
+          },
+          "quality": {
+            "literal_edits": 39,
+            "literal_characters": 532,
+            "repository_edits": 21,
+            "repository_characters": 493,
+            "literal_cer": 0.07330827067669173,
+            "repository_cer": 0.04259634888438134
+          },
+          "rounds": [
+            {
+              "p50_ms": 80.70008300092013,
+              "p90_ms": 137.12336680036972,
+              "p99_ms": 152.65538608116913,
+              "count": 9,
+              "rtfx": 165.96875801639322
+            },
+            {
+              "p50_ms": 82.75395899909199,
+              "p90_ms": 136.19820800086018,
+              "p99_ms": 152.77305800074828,
+              "count": 9,
+              "rtfx": 163.18033747896075
+            },
+            {
+              "p50_ms": 82.16470800107345,
+              "p90_ms": 136.64554219940328,
+              "p99_ms": 153.643241719692,
+              "count": 9,
+              "rtfx": 161.48129837378943
+            }
+          ],
+          "peak_memory_bytes": 754238736,
+          "load_ms": 189.6552910002356,
+          "first_request_ms": 171.88320899913379,
+          "stage_status": "unavailable",
+          "stages": {}
+        }
+      },
+      "comparisons": {
+        "relative": {
+          "text_changed": 0,
+          "public_tokens_changed": 0,
+          "segments_changed": 0,
+          "literal_better": 0,
+          "literal_worse": 0,
+          "literal_equal": 9,
+          "repository_better": 0,
+          "repository_worse": 0,
+          "repository_equal": 9,
+          "count": 9,
+          "median_latency_ratio": 1.0860952188955617,
+          "latency_rounds": [
+            {
+              "round": 0,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 1,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 2,
+              "count": 9,
+              "text_changed": 0
+            }
+          ],
+          "latency_text_changed": 0,
+          "latency_text_comparisons": 27,
+          "latency_reduction_percent": -8.60952188955617
+        }
+      }
+    },
+    "f16": {
+      "sides": {
+        "baseline": {
+          "latency": {
+            "p50_ms": 74.96091599932697,
+            "p90_ms": 122.3884997991263,
+            "p99_ms": 143.1620002807176,
+            "count": 9,
+            "rtfx": 180.5412511320131
+          },
+          "strata": {
+            "10-20s": {
+              "p50_ms": 74.96091599932697,
+              "p90_ms": 99.07965040074487,
+              "p99_ms": 104.50636564106388,
+              "count": 3,
+              "rtfx": 179.08621887370225
+            },
+            "20-30s": {
+              "p50_ms": 116.61808299868426,
+              "p90_ms": 139.6997502004524,
+              "p99_ms": 144.89312532085026,
+              "count": 3,
+              "rtfx": 190.75835659164989
+            },
+            "6-10s": {
+              "p50_ms": 53.95499999940512,
+              "p90_ms": 58.65343359982944,
+              "p99_ms": 59.71058115992492,
+              "count": 3,
+              "rtfx": 158.8748689561164
+            }
+          },
+          "quality": {
+            "literal_edits": 39,
+            "literal_characters": 532,
+            "repository_edits": 21,
+            "repository_characters": 493,
+            "literal_cer": 0.07330827067669173,
+            "repository_cer": 0.04259634888438134
+          },
+          "rounds": [
+            {
+              "p50_ms": 74.96091599932697,
+              "p90_ms": 123.15215839953454,
+              "p99_ms": 145.6185286402615,
+              "count": 9,
+              "rtfx": 180.56136930026182
+            },
+            {
+              "p50_ms": 74.91583299997728,
+              "p90_ms": 122.3884997991263,
+              "p99_ms": 143.1620002807176,
+              "count": 9,
+              "rtfx": 181.1359783801529
+            },
+            {
+              "p50_ms": 75.14541700038535,
+              "p90_ms": 121.80210879960215,
+              "p99_ms": 141.53424807998817,
+              "count": 9,
+              "rtfx": 180.54863281619853
+            }
+          ],
+          "peak_memory_bytes": 1340212928,
+          "load_ms": 282.35850000055507,
+          "first_request_ms": 165.81883300023037,
+          "stage_status": "unavailable",
+          "stages": {}
+        },
+        "candidate": {
+          "latency": {
+            "p50_ms": 84.48649999991176,
+            "p90_ms": 137.46367520107015,
+            "p99_ms": 154.92640472097264,
+            "count": 9,
+            "rtfx": 161.76974544718396
+          },
+          "strata": {
+            "10-20s": {
+              "p50_ms": 84.48649999991176,
+              "p90_ms": 106.97220000074594,
+              "p99_ms": 112.03148250093363,
+              "count": 3,
+              "rtfx": 160.35624683543543
+            },
+            "20-30s": {
+              "p50_ms": 132.61291700109723,
+              "p90_ms": 152.01594980098886,
+              "p99_ms": 156.38163218096452,
+              "count": 3,
+              "rtfx": 175.09669479540932
+            },
+            "6-10s": {
+              "p50_ms": 63.51549999999406,
+              "p90_ms": 68.7635327998578,
+              "p99_ms": 69.94434017982712,
+              "count": 3,
+              "rtfx": 134.9844595104922
+            }
+          },
+          "quality": {
+            "literal_edits": 39,
+            "literal_characters": 532,
+            "repository_edits": 21,
+            "repository_characters": 493,
+            "literal_cer": 0.07330827067669173,
+            "repository_cer": 0.04259634888438134
+          },
+          "rounds": [
+            {
+              "p50_ms": 80.76108299974294,
+              "p90_ms": 136.42596680074348,
+              "p99_ms": 152.58519608105416,
+              "count": 9,
+              "rtfx": 164.4974805078099
+            },
+            {
+              "p50_ms": 84.48649999991176,
+              "p90_ms": 139.11797520013351,
+              "p99_ms": 155.09183472087898,
+              "count": 9,
+              "rtfx": 158.84975117897474
+            },
+            {
+              "p50_ms": 85.79858299890475,
+              "p90_ms": 137.8466918009508,
+              "p99_ms": 156.68828108042362,
+              "count": 9,
+              "rtfx": 161.6596591635082
+            }
+          ],
+          "peak_memory_bytes": 1338181240,
+          "load_ms": 283.57150000010733,
+          "first_request_ms": 179.3976670014672,
+          "stage_status": "unavailable",
+          "stages": {}
+        }
+      },
+      "comparisons": {
+        "relative": {
+          "text_changed": 0,
+          "public_tokens_changed": 0,
+          "segments_changed": 0,
+          "literal_better": 0,
+          "literal_worse": 0,
+          "literal_equal": 9,
+          "repository_better": 0,
+          "repository_worse": 0,
+          "repository_equal": 9,
+          "count": 9,
+          "median_latency_ratio": 1.1371556931063036,
+          "latency_rounds": [
+            {
+              "round": 0,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 1,
+              "count": 9,
+              "text_changed": 0
+            },
+            {
+              "round": 2,
+              "count": 9,
+              "text_changed": 0
+            }
+          ],
+          "latency_text_changed": 0,
+          "latency_text_comparisons": 27,
+          "latency_reduction_percent": -13.715569310630361
+        }
+      }
+    }
+  },
+  "builds": {
+    "baseline": {
+      "speech": {
+        "sha256": "02e9ae5fb14be604f207f4b97997c86add84424cc0930e93ed19be52686080ce",
+        "artifact_path": "001/binaries/speech"
+      },
+      "source_commit": "c6ab1f9b8401822dafd83aa1a69ada62206eb3a1",
+      "ggml_base_commit": "e1a9ac12edbb57402618fd6936598603f5ee6266",
+      "ggml_diff_sha256": "f5d9b7dfc369674e498dd1c6f3e1a97046772b7da77cdac4252c36436258b0de",
+      "source_verified": false,
+      "provenance": "Built locally from the recorded base plus the preserved experimental diff before committing; binary identity is verified for each worker. The tracked diff omits untracked files; all five changed source files including the test tool are preserved in tested-source/ with SHA-256 in this report.",
+      "ggml_commit": "ba747f41f8e865dd6c4f524ceea88584c9cd6648",
+      "stage_tool": {
+        "sha256": "fa6206e306aba0c0d091bf3f78a492c525c0a68cbd3d302665766ac0537cc556",
+        "artifact_path": "001/binaries/fastconformer-timing"
+      },
+      "build_flags": [
+        "CMAKE_BUILD_TYPE:STRING=Release",
+        "GGML_METAL:BOOL=ON",
+        "GGML_NATIVE:BOOL=ON"
+      ]
+    },
+    "candidate": {
+      "speech": {
+        "sha256": "02e9ae5fb14be604f207f4b97997c86add84424cc0930e93ed19be52686080ce",
+        "artifact_path": "001/binaries/speech"
+      },
+      "source_commit": "c6ab1f9b8401822dafd83aa1a69ada62206eb3a1",
+      "ggml_base_commit": "e1a9ac12edbb57402618fd6936598603f5ee6266",
+      "ggml_diff_sha256": "f5d9b7dfc369674e498dd1c6f3e1a97046772b7da77cdac4252c36436258b0de",
+      "source_verified": false,
+      "provenance": "Built locally from the recorded base plus the preserved experimental diff before committing; binary identity is verified for each worker. The tracked diff omits untracked files; all five changed source files including the test tool are preserved in tested-source/ with SHA-256 in this report.",
+      "ggml_commit": "ba747f41f8e865dd6c4f524ceea88584c9cd6648",
+      "stage_tool": {
+        "sha256": "fa6206e306aba0c0d091bf3f78a492c525c0a68cbd3d302665766ac0537cc556",
+        "artifact_path": "001/binaries/fastconformer-timing"
+      },
+      "build_flags": [
+        "CMAKE_BUILD_TYPE:STRING=Release",
+        "GGML_METAL:BOOL=ON",
+        "GGML_NATIVE:BOOL=ON"
+      ]
+    }
+  },
+  "execution_environments": {
+    "baseline": {
+      "GGML_METAL_MM_TILE_N": "32"
+    },
+    "candidate": {
+      "GGML_METAL_MM_TILE_N": "64"
+    }
+  },
+  "models": {
+    "q4_k": {
+      "type": "q4_k",
+      "size": 351901216,
+      "sha256": "d24d53f29b75214a933ff482b0de1217e0a800f4118cca39ad6cf03609a89d6f",
+      "revision": "6b965d5007ba780585de51549d57a8c1c0d67c7e"
+    },
+    "q8_0": {
+      "type": "q8_0",
+      "size": 656381472,
+      "sha256": "cd5f60b2f1c411404b83fca4a65e3ce30a26d9e951b6a346529e65f22758afeb",
+      "revision": "6b965d5007ba780585de51549d57a8c1c0d67c7e"
+    },
+    "f16": {
+      "type": "f16",
+      "size": 1233128832,
+      "sha256": "f752e02f68c1dfff795900e40aa82e5302976fb5360080fcbd330d8b3c992cd8",
+      "revision": "6b965d5007ba780585de51549d57a8c1c0d67c7e"
+    }
+  },
+  "input_hash": "aed313bef7c4390bef71aa262dc2f6be3bd578bb8fb4fe9363549be2e2a1c70a",
+  "assets_sha256": "e82d03c053c861f4943907d67f28e191431f84706429b324e80368adf6808581",
+  "implementation_checkpoint": {
+    "speech_cpp": "b130c22619024f47425a8ae13e56d22a784e7d34",
+    "ggml": "ba747f41f8e865dd6c4f524ceea88584c9cd6648",
+    "tested_source_matches_checkpoint": true,
+    "tested_source_sha256": {
+      "ggml/src/ggml-metal/ggml-metal-device.cpp": "cf52c7bc262db7747c27c8534f77da2461339e5eeb186a2f26701854b459adae",
+      "ggml/src/ggml-metal/kernels/mul_mm.metal": "1fa277208679a5a3a249ba83b3e65db234a6587c64c00ab3997f8aaa4216ba0d",
+      "ggml/tests/test-backend-ops.cpp": "0ed38e021e23dcdf072e9d4e59ffd28c17780cbd8aeefab8a6790f35005cb8db",
+      "ggml/tests/test-metal-mm-tile.cpp": "5b9685bfa454f5238acccf3bdfcfdd0e0a1f829bfa1bf45d90a8b7817fecc14a",
+      "ggml/tests/CMakeLists.txt": "6b04e10689b4a617dfffca4c2b84e59967490f99851b3d1549d1e4b983b705fe"
+    },
+    "integrated": false
+  },
+  "product_summary": {
+    "method": "Five alternating rounds in one process; the same MUL_MAT product is repeated 64 times into the same output buffer, with write-after-write dependencies; same input buffers; wall time includes encoding/submission/synchronization; compilation and warmup excluded.",
+    "target_shapes": 42,
+    "rounds": 5,
+    "median_shape_latency_ratio": {
+      "f16": 1.3142510272693313,
+      "q8_0": 1.27177089421391,
+      "q4_K": 1.000798641342572
+    }
+  },
+  "evidence": {
+    "directory": "001",
+    "run_manifest_sha256": "128388870f5312d1535b370b9b6304533583e5a730a5f4ef5ed81440222df43d",
+    "source_trial_sha256": "a382d9b5c401cfb40e48dac174eacfe0fa4f7b9fee9320b560a07d2683cfbf21",
+    "evidence_manifest_sha256": "1f495f7abafdb96fcd86b7339eb78b8f1472cc16b509052e1d8e0be0960f8c90",
+    "preparation_script_sha256": "e524797633f135ac0c078e20f753f4bd40d56440f56164ac37a15d4ac849072d",
+    "source_paths": [
+      "product-timing.jsonl",
+      "product-summary.json",
+      "direct-comparison.jsonl",
+      "asr-subset/summary.json",
+      "runner-snapshot.json",
+      "checks.json"
+    ],
+    "paths_relative_to": "External campaign artifact directory supplied to compare.py record."
+  },
+  "checks": [
+    {
+      "name": "Original 32-column shader against CPU reference",
+      "status": "passed",
+      "cases": 126,
+      "evidence": "001/backend-before-metal.log",
+      "scope": "mac",
+      "required": true
+    },
+    {
+      "name": "Experimental 64-column shader against CPU reference",
+      "status": "passed",
+      "cases": 126,
+      "evidence": "001/backend-after64.log",
+      "scope": "mac",
+      "required": true
+    },
+    {
+      "name": "Experimental 32 vs experimental 64 on identical tensor buffers",
+      "status": "passed",
+      "target_cases": 126,
+      "unchanged_q4_controls": 6,
+      "maximum_absolute_difference": 0,
+      "evidence": "001/direct-comparison.jsonl",
+      "scope": "mac",
+      "reason": "126 F16/Q8_0 target cases plus six Q4_K controls; Q4_K uses the 32-column kernel in both settings. This does not compare the original shader with experimental 32.",
+      "required": true
+    },
+    {
+      "name": "Unchanged-path regressions: batched, strided, partial K/M/N and explicit F32 operands",
+      "status": "passed",
+      "cases": 58,
+      "evidence": "001/backend-regressions.log",
+      "scope": "mac",
+      "required": true
+    },
+    {
+      "name": "Nine-utterance public text, token and segment equality",
+      "status": "passed",
+      "comparisons": 27,
+      "evidence": "001/asr-subset/summary.json",
+      "scope": "mac",
+      "required": true
+    },
+    {
+      "name": "Initial sandbox invocation",
+      "status": "skipped",
+      "cases": 0,
+      "required": false,
+      "evidence": "001/backend-before.log",
+      "reason": "Metal device name was empty; all backends were skipped. This is not a correctness pass.",
+      "scope": "mac"
+    },
+    {
+      "name": "Original shader vs experimental 32 bitwise comparison",
+      "status": "unavailable",
+      "reason": "Not measured; rejected variant does not claim original-shader bitwise fidelity.",
+      "scope": "mac",
+      "required": true
+    },
+    {
+      "name": "Official FastConformer reference stage checks",
+      "status": "unavailable",
+      "reason": "Official reference tensors were not available for this bounded experiment.",
+      "scope": "mac",
+      "required": true
+    },
+    {
+      "name": "Windows Vulkan cases, stage checks and timings",
+      "status": "unavailable",
+      "reason": "No Windows machine or reference dumps were available for this bounded experiment.",
+      "scope": "windows",
+      "required": true
+    },
+    {
+      "name": "Full 650-utterance accuracy evaluation",
+      "status": "skipped",
+      "required": false,
+      "reason": "Stopped after clear product and nine-utterance latency regression; no adoption is proposed.",
+      "scope": "mac"
+    }
+  ],
+  "updated_utc": "2026-11-06T17:52:39.305753+00:00"
+}

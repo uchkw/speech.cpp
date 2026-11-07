@@ -1,4 +1,4 @@
 [submodule "ggml"]
 	path = ggml
-	url = https://github.com/nyosegawa/ggml.git
+	url = https://github.com/uchkw/ggml.git
 	branch = speech.cpp

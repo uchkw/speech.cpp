@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "measure_id": "011",
+  "title": "Combine pointwise projection and GLU",
+  "status": "in_progress",
+  "reason": "The GLU-only sigmoid/product variant 011a is rejected after its bounded screen: no stable request latency benefit beyond round variation. No runtime is adopted. The separate pointwise matrix-projection plus GLU candidate remains unfinished; this result does not reject the whole measure.",
+  "checks": [],
+  "updated_utc": "2026-11-06T22:52:14.242753+00:00"
+}

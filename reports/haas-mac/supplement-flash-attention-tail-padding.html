@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>FA-PAD · Validate Metal flash-attention tail padding</title><style>
+:root{color-scheme:light;font:16px/1.55 system-ui,sans-serif;color:#172738;background:#f3f6f9}
+*{box-sizing:border-box}body{margin:0}main{max-width:1180px;margin:auto;padding:34px 22px 64px}
+a{color:#075ca8;text-underline-offset:3px}a:focus-visible,summary:focus-visible{outline:3px solid #c36b00;outline-offset:4px}
+h1{font-size:clamp(1.8rem,4vw,2.7rem);line-height:1.18;margin:12px 0 18px}h2{font-size:1.35rem;margin:30px 0 12px}
+h3{font-size:1.05rem;margin:22px 0 10px}p{max-width:90ch}small,.muted{color:#506174}.eyebrow{font-size:.8rem;letter-spacing:.12em;text-transform:uppercase;color:#506174}
+.panel{background:white;border:1px solid #d5dfe8;border-radius:10px;padding:20px;margin:18px 0}.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}th,td{text-align:left;vertical-align:top;padding:11px 10px;border-bottom:1px solid #dce4eb}th{font-size:.85rem;background:#f2f6fa}td.num,th.num{text-align:right;white-space:nowrap}
+caption{text-align:left;font-weight:600;padding:8px 0}code{font: .87em ui-monospace,monospace;overflow-wrap:anywhere}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.83rem}
+.status{display:inline-block;border:1px solid;border-radius:5px;padding:2px 8px;font-size:.8rem;font-weight:650;text-transform:uppercase}
+.pending,.not_applicable{color:#405269;background:#edf1f5}.in_progress{color:#174c7b;background:#e8f2ff}.accepted,.validated_mac{color:#16572f;background:#e7f5eb}.rejected{color:#8a2631;background:#fff0f0}.conditional,.pending_official_reference{color:#754700;background:#fff4d8}.blocked{color:#663c83;background:#f4eafa}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}.metric strong{display:block;font-size:1.55rem;line-height:1.2}.metric span{font-size:.85rem;color:#506174}
+details{margin:14px 0}summary{cursor:pointer;font-weight:600}.warning{border-left:4px solid #bc7600;padding-left:15px}svg{max-width:100%;height:auto;display:block}footer{margin-top:36px;font-size:.85rem;color:#506174}
+@media(max-width:600px){main{padding:22px 12px}.panel{padding:14px}th,td{padding:9px 7px}h1{overflow-wrap:anywhere}}
+</style></head><body><main><nav><a href="index.html">← All measures</a></nav><p class="eyebrow">Haas on Apple Silicon</p><h1>FA-PAD · Validate Metal flash-attention tail padding</h1><span class="status conditional">conditional</span><p>Correctness-only Metal validation is complete: the old padding oracle has 8 passing controls and 12 byte mismatches; the fix passes all 20 cases. Both builds separately pass all 24 normal FA cases against the CPU reference. Performance, ASR and Vulkan remain unmeasured.</p><p class="warning">Supplement outside the 34-measure speed ledger. No latency, CER or gain is assigned, and no campaign baseline is changed.</p><p><a href="supplements/flash-attention-tail-padding.json">Machine-readable report JSON</a> · <a href="https://github.com/uchkw/speech.cpp/issues/1">Tracking issue</a></p><section class="panel"><h2>Evidence</h2><p>No new measurement is recorded. Pending work is not a measured failure or a speed-up.</p></section><h2>Padding-byte oracle: 20 cases on each build</h2><p>Two types (F32/F16) x two query counts (1/20) x five shape/layout groups. Valid deterministic arrays include spare source storage; no fault-provoking input is used.</p><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Shape/layout group</th><th scope="col">Cases per build</th><th scope="col">Old result</th><th scope="col">Fixed result</th></tr></thead><tbody><tr><td>Interleaved, keys 64, no tail</td><td>4</td><td>4 OK</td><td>4 OK</td></tr><tr><td>Contiguous, keys 65, tail</td><td>4</td><td>4 OK</td><td>4 OK</td></tr><tr><td>Interleaved, keys 65</td><td>4</td><td>4 K/V byte mismatches</td><td>4 OK</td></tr><tr><td>Interleaved, dk128/dv96, keys 33</td><td>4</td><td>4 K/V byte mismatches</td><td>4 OK</td></tr><tr><td>Strided, keys 65</td><td>4</td><td>4 K/V byte mismatches</td><td>4 OK</td></tr><tr><td>Total</td><td>20</td><td>8 OK; 12 failed; exit 1</td><td>20 OK; exit 0</td></tr></tbody></table></div><ul><li>All 20 case identities agree between old and fixed runs. All mask mismatch counts are zero on both builds.</li><li>The old build fails the padding/scratch-byte contract in the 12 named cases. Attention numerical outputs and recognition quality are not inferred from those failures.</li></ul><h2>Independent normal FA CPU-reference regressions</h2><p>Each process runs the same 24 selected test definitions against its own CPU reference, with independently randomized inputs. Error thresholds are unchanged.</p><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">K/V type</th><th scope="col">Old pass / selected</th><th scope="col">Fixed pass / selected</th></tr></thead><tbody><tr><td>F32</td><td>8 / 8</td><td>8 / 8</td></tr><tr><td>F16</td><td>8 / 8</td><td>8 / 8</td></tr><tr><td>Q4_0</td><td>4 / 4</td><td>4 / 4</td></tr><tr><td>Q8_0</td><td>4 / 4</td><td>4 / 4</td></tr><tr><td>All selected</td><td>24 / 24</td><td>24 / 24</td></tr></tbody></table></div><ul><li>There are zero unsupported or skipped selected cases. BLAS/CPU backend selection messages do not mean the Metal cases skipped their CPU reference.</li><li>LLAMA_TEST_FA_VEC_DISABLE=1 suppresses an unrelated extra slice that ignores the parameter filter; it is recorded on both sides.</li><li>Both vector and non-vector pre-M5 paths are covered by the fixture query counts. These results do not establish cross-binary bitwise equality.</li></ul><h2>Build and executable identity</h2><p>Both standalone ggml builds use the same recorded Release/Metal/native configuration and -j4. These are test executables, not a speech worker or a production latency pair.</p><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Build</th><th scope="col">Executable</th><th scope="col">SHA-256</th></tr></thead><tbody><tr><td>old</td><td>test-metal-flash-attn-pad</td><td>bcc4da29ccb9f8219f3b38b96ecdccedbe54636a26a9cb7ca1805f05eb1f0c97</td></tr><tr><td>new</td><td>test-metal-flash-attn-pad</td><td>a340edb1c18aea04f0b57c76f7ba68f002ccd3399afe333d2e2902d07eb9bbe9</td></tr><tr><td>old</td><td>test-backend-ops</td><td>551309d9bd70820bfd7c78b6780a0f9c88840cc2a06979bc9c4774921eb20511</td></tr><tr><td>new</td><td>test-backend-ops</td><td>6bb4308cb8e6c0969adb4aeff138fe60a82bbf522c3de1b0099b1274ea237706</td></tr></tbody></table></div><ul><li>Old ggml: 082fda79273680640bc74803f0c4561bb3dfc1fa. Fixed ggml: d27e2a6bb32cf7e7e188375e2f58e7f6e1a5e524.</li><li>Configure flags: -DCMAKE_BUILD_TYPE=Release -DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON -DGGML_BUILD_TESTS=ON -DGGML_BACKEND_DL=OFF -DBUILD_SHARED_LIBS=OFF -DGGML_NATIVE=ON -DGGML_OPENMP=OFF.</li><li>A read-only import audit verified all 4 saved executables and 27 listed log files (30,434,155 bytes) against their original SHA-256 records. No model or audio file was read.</li></ul><h2>Checks</h2><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Check</th><th scope="col">Required</th><th scope="col">Status</th><th scope="col">Evidence</th></tr></thead><tbody><tr><td>Configure and build old/new standalone ggml checks</td><td>yes</td><td>passed</td><td>All four commands exit 0; eight recorded CMake settings agree. tests/ has no source difference between the two commits.</td></tr><tr><td>Old padding-byte defect reproduction</td><td>no</td><td>failed</td><td>20 cases: 8 OK controls and 12 expected K/V byte-mismatch failures; exit 1. Every mask mismatch count is zero. This is the recorded old result, not a failing new build.</td></tr><tr><td>Fixed padding-byte oracle</td><td>yes</td><td>passed</td><td>20/20 OK; every K/V/mask mismatch count is zero; exit 0.</td></tr><tr><td>Old normal FA versus its CPU reference</td><td>yes</td><td>passed</td><td>24/24 selected cases; F32 8, F16 8, Q4_0 4, Q8_0 4; unsupported 0; skipped 0; exit 0.</td></tr><tr><td>Fixed normal FA versus its CPU reference</td><td>yes</td><td>passed</td><td>24/24 selected cases; F32 8, F16 8, Q4_0 4, Q8_0 4; unsupported 0; skipped 0; exit 0.</td></tr><tr><td>Initial sandbox old-padding attempt</td><td>no</td><td>unavailable</td><td>Exit 1 before any case; Metal backend unavailable. Excluded from defect reproduction.</td></tr><tr><td>ASR corpus, model stages, recognition accuracy and performance</td><td>no</td><td>not_run</td><td>No models, audio, transcript comparison, CER or performance measurements are included.</td></tr><tr><td>Windows/Vulkan and other Apple GPUs</td><td>no</td><td>not_run</td><td>Unverified; no pass is inferred from Metal checks.</td></tr><tr><td>Parent-change CI</td><td>no</td><td>unverified</td><td>CI success for this parent source is not established by the saved evidence.</td></tr></tbody></table></div><h2>Conditions and limitations</h2><p>Latency is not measured. The four authorized hardware test executions are correctness checks, each run once, not timed worker requests.</p><p>Report case counts and actual exit codes separately for old/new padding bytes and old/new CPU-reference attention checks. Do not combine these with request-latency or recognition-quality measurements.</p><p><strong>Literal CER:</strong> Total Unicode code-point Levenshtein edits divided by total reference code points, including punctuation, symbols and whitespace.</p><p><strong>Repository CER:</strong> NFKC followed by removing Unicode punctuation, symbols, separators and whitespace; no case folding or alternate-spelling substitutions. Edits and reference lengths are summed before division.</p><ul><li>This correctness supplement is outside the 34 optimization measures and contributes no speed-up or cumulative gain to the ledger.</li><li>Synthetic padding bytes and normal attention outputs are separate oracles. Old padding mismatches do not establish a runtime fault, wrong attention output, or an ASR recognition error.</li><li>Normal FA regression inputs randomize independently in each process. Passing the CPU reference on both builds does not establish cross-binary bitwise numerical equality.</li><li>No model weights, real speech, official model-stage dumps, ASR text, CER, latency, throughput, load time or memory were evaluated. The generic CER definitions below are not used for this supplement.</li><li>Windows/Vulkan and other Apple GPUs remain unverified. This is correctness-only M2 Ultra evidence, not whole-model validation or release acceptance.</li><li>The initial sandbox attempt ended before any cases because Metal was unavailable. It is retained separately and excluded from the old-build defect evidence.</li><li>The initial start timestamp and configure-old start/end timestamps are missing because the original date executable path did not exist. Empty captures remain unchanged; configure-old exit 0 and logs are intact.</li><li>CI for the parent change is not verified in this report. Hardware checks recorded here do not substitute for CI or Vulkan execution.</li></ul><details><summary>Reproduction metadata and local evidence paths</summary><p>Large logs, models and audio are not included in the versioned report.</p><pre>{
+  &quot;scope&quot;: &quot;correctness_only&quot;,
+  &quot;conditions&quot;: {
+    &quot;date&quot;: &quot;2026-11-07&quot;,
+    &quot;completed_utc&quot;: &quot;2026-11-07T00:30:20Z&quot;,
+    &quot;device&quot;: &quot;MTL0 / Apple M2 Ultra&quot;,
+    &quot;os&quot;: &quot;macOS 26.7.2 (25G332)&quot;,
+    &quot;compiler&quot;: &quot;Apple clang 21.0.0 (clang-2100.3.34.2), arm64-apple-darwin25.6.0&quot;,
+    &quot;cmake&quot;: &quot;4.4.4&quot;,
+    &quot;hardware_scope&quot;: &quot;Pre-M5 Metal; tensor API unavailable/disabled and shared Metal buffers enabled.&quot;,
+    &quot;latency_definition&quot;: &quot;Latency is not measured. The four authorized hardware test executions are correctness checks, each run once, not timed worker requests.&quot;,
+    &quot;aggregation&quot;: &quot;Report case counts and actual exit codes separately for old/new padding bytes and old/new CPU-reference attention checks. Do not combine these with request-latency or recognition-quality measurements.&quot;,
+    &quot;limitations&quot;: [
+      &quot;This correctness supplement is outside the 34 optimization measures and contributes no speed-up or cumulative gain to the ledger.&quot;,
+      &quot;Synthetic padding bytes and normal attention outputs are separate oracles. Old padding mismatches do not establish a runtime fault, wrong attention output, or an ASR recognition error.&quot;,
+      &quot;Normal FA regression inputs randomize independently in each process. Passing the CPU reference on both builds does not establish cross-binary bitwise numerical equality.&quot;,
+      &quot;No model weights, real speech, official model-stage dumps, ASR text, CER, latency, throughput, load time or memory were evaluated. The generic CER definitions below are not used for this supplement.&quot;,
+      &quot;Windows/Vulkan and other Apple GPUs remain unverified. This is correctness-only M2 Ultra evidence, not whole-model validation or release acceptance.&quot;,
+      &quot;The initial sandbox attempt ended before any cases because Metal was unavailable. It is retained separately and excluded from the old-build defect evidence.&quot;,
+      &quot;The initial start timestamp and configure-old start/end timestamps are missing because the original date executable path did not exist. Empty captures remain unchanged; configure-old exit 0 and logs are intact.&quot;,
+      &quot;CI for the parent change is not verified in this report. Hardware checks recorded here do not substitute for CI or Vulkan execution.&quot;
+    ],
+    &quot;execution_environment&quot;: {
+      &quot;inherited_GGML_SPEECH_LLAMA&quot;: {},
+      &quot;pad_override&quot;: {},
+      &quot;normal_fa_override&quot;: {
+        &quot;LLAMA_TEST_FA_VEC_DISABLE&quot;: &quot;1&quot;
+      }
+    },
+    &quot;normal_fa_filter&quot;: [
+      &quot;test&quot;,
+      &quot;-o&quot;,
+      &quot;FLASH_ATTN_EXT&quot;,
+      &quot;-p&quot;,
+      &quot;tail_pad=1&quot;,
+      &quot;-b&quot;,
+      &quot;MTL0&quot;,
+      &quot;-j&quot;,
+      &quot;1&quot;
+    ],
+    &quot;build_flags&quot;: {
+      &quot;configure&quot;: [
+        &quot;-DCMAKE_BUILD_TYPE=Release&quot;,
+        &quot;-DGGML_METAL=ON&quot;,
+        &quot;-DGGML_METAL_EMBED_LIBRARY=ON&quot;,
+        &quot;-DGGML_BUILD_TESTS=ON&quot;,
+        &quot;-DGGML_BACKEND_DL=OFF&quot;,
+        &quot;-DBUILD_SHARED_LIBS=OFF&quot;,
+        &quot;-DGGML_NATIVE=ON&quot;,
+        &quot;-DGGML_OPENMP=OFF&quot;
+      ],
+      &quot;build&quot;: [
+        &quot;-j4&quot;,
+        &quot;--target&quot;,
+        &quot;test-metal-flash-attn-pad&quot;,
+        &quot;test-backend-ops&quot;
+      ]
+    },
+    &quot;test_input_identity&quot;: &quot;Deterministic synthetic padding arrays with spare valid source storage; independently randomized normal FA arrays per process. Test-source hashes identify definitions, not recorded tensor bytes.&quot;
+  },
+  &quot;implementation_checkpoint&quot;: {
+    &quot;speech_parent_commit&quot;: &quot;6afe21a2fc87bea75ead59b492eb6ab9f69517b8&quot;,
+    &quot;speech_parent_base&quot;: &quot;114c514430c8aa1455c077819f8e72e674a48b75&quot;,
+    &quot;public_runtime_base&quot;: &quot;e1a9ac12edbb57402618fd6936598603f5ee6266&quot;,
+    &quot;old_cases_only_ggml_commit&quot;: &quot;082fda79273680640bc74803f0c4561bb3dfc1fa&quot;,
+    &quot;fixed_ggml_commit&quot;: &quot;d27e2a6bb32cf7e7e188375e2f58e7f6e1a5e524&quot;,
+    &quot;old_and_new_recorded_clean&quot;: true,
+    &quot;same_test_definitions&quot;: {
+      &quot;tests/CMakeLists.txt&quot;: {
+        &quot;sha256&quot;: &quot;0ec30c141633a2e0feda0eb1ec0a5b522b135b6f658aef3bcd7703deef18616c&quot;,
+        &quot;bytes&quot;: 14150,
+        &quot;same_old_and_new&quot;: true
+      },
+      &quot;tests/test-metal-flash-attn-pad.cpp&quot;: {
+        &quot;sha256&quot;: &quot;9195b4c07338c4b221d4bd534f1158676ba76fe006eef2e0c3dacd1aee9dc607&quot;,
+        &quot;bytes&quot;: 11361,
+        &quot;same_old_and_new&quot;: true
+      },
+      &quot;tests/test-backend-ops.cpp&quot;: {
+        &quot;sha256&quot;: &quot;83022b44c849616cd47bf4f659152ac5cde011d915e2cb78c33205a02904433e&quot;,
+        &quot;bytes&quot;: 604631,
+        &quot;same_old_and_new&quot;: true
+      }
+    },
+    &quot;change&quot;: &quot;Copy logical K/V row bytes and zero the remaining destination pitch. Source strides, destination pitches, masks, attention arithmetic and quantized conversion are unchanged.&quot;,
+    &quot;speech_pull_request&quot;: &quot;https://github.com/uchkw/speech.cpp/pull/6&quot;,
+    &quot;ggml_pull_request&quot;: &quot;https://github.com/uchkw/ggml/pull/1&quot;,
+    &quot;public_evaluation_note&quot;: &quot;https://github.com/uchkw/speech.cpp/blob/6afe21a2fc87bea75ead59b492eb6ab9f69517b8/experiments/haas-mac/ggml-flash-attention-tail-padding.md&quot;,
+    &quot;binaries&quot;: [
+      {
+        &quot;artifact_path&quot;: &quot;builds/old/bin/test-metal-flash-attn-pad&quot;,
+        &quot;sha256&quot;: &quot;bcc4da29ccb9f8219f3b38b96ecdccedbe54636a26a9cb7ca1805f05eb1f0c97&quot;,
+        &quot;bytes&quot;: 7040728
+      },
+      {
+        &quot;artifact_path&quot;: &quot;builds/new/bin/test-metal-flash-attn-pad&quot;,
+        &quot;sha256&quot;: &quot;a340edb1c18aea04f0b57c76f7ba68f002ccd3399afe333d2e2902d07eb9bbe9&quot;,
+        &quot;bytes&quot;: 7040728
+      },
+      {
+        &quot;artifact_path&quot;: &quot;builds/old/bin/test-backend-ops&quot;,
+        &quot;sha256&quot;: &quot;551309d9bd70820bfd7c78b6780a0f9c88840cc2a06979bc9c4774921eb20511&quot;,
+        &quot;bytes&quot;: 8124816
+      },
+      {
+        &quot;artifact_path&quot;: &quot;builds/new/bin/test-backend-ops&quot;,
+        &quot;sha256&quot;: &quot;6bb4308cb8e6c0969adb4aeff138fe60a82bbf522c3de1b0099b1274ea237706&quot;,
+        &quot;bytes&quot;: 8124816
+      }
+    ],
+    &quot;binary_paths_relative_to&quot;: &quot;outputs/haas-mac-flash-tail-pad-20261107 in the repository holding the local artifacts.&quot;
+  },
+  &quot;diagnostics&quot;: [
+    {
+      &quot;title&quot;: &quot;Padding-byte oracle: 20 cases on each build&quot;,
+      &quot;method&quot;: &quot;Two types (F32/F16) x two query counts (1/20) x five shape/layout groups. Valid deterministic arrays include spare source storage; no fault-provoking input is used.&quot;,
+      &quot;headers&quot;: [
+        &quot;Shape/layout group&quot;,
+        &quot;Cases per build&quot;,
+        &quot;Old result&quot;,
+        &quot;Fixed result&quot;
+      ],
+      &quot;rows&quot;: [
+        [
+          &quot;Interleaved, keys 64, no tail&quot;,
+          4,
+          &quot;4 OK&quot;,
+          &quot;4 OK&quot;
+        ],
+        [
+          &quot;Contiguous, keys 65, tail&quot;,
+          4,
+          &quot;4 OK&quot;,
+          &quot;4 OK&quot;
+        ],
+        [
+          &quot;Interleaved, keys 65&quot;,
+          4,
+          &quot;4 K/V byte mismatches&quot;,
+          &quot;4 OK&quot;
+        ],
+        [
+          &quot;Interleaved, dk128/dv96, keys 33&quot;,
+          4,
+          &quot;4 K/V byte mismatches&quot;,
+          &quot;4 OK&quot;
+        ],
+        [
+          &quot;Strided, keys 65&quot;,
+          4,
+          &quot;4 K/V byte mismatches&quot;,
+          &quot;4 OK&quot;
+        ],
+        [
+          &quot;Total&quot;,
+          20,
+          &quot;8 OK; 12 failed; exit 1&quot;,
+          &quot;20 OK; exit 0&quot;
+        ]
+      ],
+      &quot;notes&quot;: [
+        &quot;All 20 case identities agree between old and fixed runs. All mask mismatch counts are zero on both builds.&quot;,
+        &quot;The old build fails the padding/scratch-byte contract in the 12 named cases. Attention numerical outputs and recognition quality are not inferred from those failures.&quot;
+      ]
+    },
+    {
+      &quot;title&quot;: &quot;Independent normal FA CPU-reference regressions&quot;,
+      &quot;method&quot;: &quot;Each process runs the same 24 selected test definitions against its own CPU reference, with independently randomized inputs. Error thresholds are unchanged.&quot;,
+      &quot;headers&quot;: [
+        &quot;K/V type&quot;,
+        &quot;Old pass / selected&quot;,
+        &quot;Fixed pass / selected&quot;
+      ],
+      &quot;rows&quot;: [
+        [
+          &quot;F32&quot;,
+          &quot;8 / 8&quot;,
+          &quot;8 / 8&quot;
+        ],
+        [
+          &quot;F16&quot;,
+          &quot;8 / 8&quot;,
+          &quot;8 / 8&quot;
+        ],
+        [
+          &quot;Q4_0&quot;,
+          &quot;4 / 4&quot;,
+          &quot;4 / 4&quot;
+        ],
+        [
+          &quot;Q8_0&quot;,
+          &quot;4 / 4&quot;,
+          &quot;4 / 4&quot;
+        ],
+        [
+          &quot;All selected&quot;,
+          &quot;24 / 24&quot;,
+          &quot;24 / 24&quot;
+        ]
+      ],
+      &quot;notes&quot;: [
+        &quot;There are zero unsupported or skipped selected cases. BLAS/CPU backend selection messages do not mean the Metal cases skipped their CPU reference.&quot;,
+        &quot;LLAMA_TEST_FA_VEC_DISABLE=1 suppresses an unrelated extra slice that ignores the parameter filter; it is recorded on both sides.&quot;,
+        &quot;Both vector and non-vector pre-M5 paths are covered by the fixture query counts. These results do not establish cross-binary bitwise equality.&quot;
+      ]
+    },
+    {
+      &quot;title&quot;: &quot;Build and executable identity&quot;,
+      &quot;method&quot;: &quot;Both standalone ggml builds use the same recorded Release/Metal/native configuration and -j4. These are test executables, not a speech worker or a production latency pair.&quot;,
+      &quot;headers&quot;: [
+        &quot;Build&quot;,
+        &quot;Executable&quot;,
+        &quot;SHA-256&quot;
+      ],
+      &quot;rows&quot;: [
+        [
+          &quot;old&quot;,
+          &quot;test-metal-flash-attn-pad&quot;,
+          &quot;bcc4da29ccb9f8219f3b38b96ecdccedbe54636a26a9cb7ca1805f05eb1f0c97&quot;
+        ],
+        [
+          &quot;new&quot;,
+          &quot;test-metal-flash-attn-pad&quot;,
+          &quot;a340edb1c18aea04f0b57c76f7ba68f002ccd3399afe333d2e2902d07eb9bbe9&quot;
+        ],
+        [
+          &quot;old&quot;,
+          &quot;test-backend-ops&quot;,
+          &quot;551309d9bd70820bfd7c78b6780a0f9c88840cc2a06979bc9c4774921eb20511&quot;
+        ],
+        [
+          &quot;new&quot;,
+          &quot;test-backend-ops&quot;,
+          &quot;6bb4308cb8e6c0969adb4aeff138fe60a82bbf522c3de1b0099b1274ea237706&quot;
+        ]
+      ],
+      &quot;notes&quot;: [
+        &quot;Old ggml: 082fda79273680640bc74803f0c4561bb3dfc1fa. Fixed ggml: d27e2a6bb32cf7e7e188375e2f58e7f6e1a5e524.&quot;,
+        &quot;Configure flags: -DCMAKE_BUILD_TYPE=Release -DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON -DGGML_BUILD_TESTS=ON -DGGML_BACKEND_DL=OFF -DBUILD_SHARED_LIBS=OFF -DGGML_NATIVE=ON -DGGML_OPENMP=OFF.&quot;,
+        &quot;A read-only import audit verified all 4 saved executables and 27 listed log files (30,434,155 bytes) against their original SHA-256 records. No model or audio file was read.&quot;
+      ]
+    }
+  ],
+  &quot;evidence&quot;: {
+    &quot;paths_relative_to&quot;: &quot;The repository outputs/ directory, except the public URLs above.&quot;,
+    &quot;raw_directory&quot;: &quot;haas-mac-flash-tail-pad-20261107&quot;,
+    &quot;binaries_manifest_path&quot;: &quot;haas-mac-flash-tail-pad-20261107/binaries.sha256&quot;,
+    &quot;binaries_manifest_sha256&quot;: &quot;e5c42ea9f0a490f0dc27faac20abc9df7c469ef2b62a04f9702c544e15f9e0b9&quot;,
+    &quot;logs_manifest_path&quot;: &quot;haas-mac-flash-tail-pad-20261107/logs.sha256&quot;,
+    &quot;logs_manifest_sha256&quot;: &quot;216fbea2319373ff56ec98b81ab68303f9a979aa7f186bea1efd8c300067de4e&quot;,
+    &quot;independent_hash_audit_path&quot;: &quot;haas-mac-campaign/report-imports/fa-padding/independent-evidence-sha256.json&quot;,
+    &quot;independent_hash_audit_sha256&quot;: &quot;fcbec10e5ad2b0f15c9788ea2eccf15730b1c1970c52b7fdc4500963927cde32&quot;,
+    &quot;independent_check_audit_path&quot;: &quot;haas-mac-campaign/report-imports/fa-padding/check-audit.json&quot;,
+    &quot;independent_check_audit_sha256&quot;: &quot;2a3e9a5ef317ec8c034f52b52f09b37032ae40f2faaa8c743a6cb87e3287819a&quot;,
+    &quot;hardware_log_prefixes&quot;: [
+      &quot;haas-mac-flash-tail-pad-20261107/logs/old-pad-bytes.hardware&quot;,
+      &quot;haas-mac-flash-tail-pad-20261107/logs/new-pad-bytes.hardware&quot;,
+      &quot;haas-mac-flash-tail-pad-20261107/logs/old-fa-reference.hardware&quot;,
+      &quot;haas-mac-flash-tail-pad-20261107/logs/new-fa-reference.hardware&quot;
+    ],
+    &quot;preserved_sandbox_log_prefix&quot;: &quot;haas-mac-flash-tail-pad-20261107/logs/old-pad-bytes.sandbox&quot;,
+    &quot;timestamp_warning_path&quot;: &quot;haas-mac-flash-tail-pad-20261107/timestamp-capture-warning.txt&quot;,
+    &quot;renderer_source_commit&quot;: &quot;95a179313e32c057f667c773f889969028dd0c8d&quot;,
+    &quot;renderer_sha256&quot;: &quot;dbef999ad74ab72e654b71d1d713d253f37c1e5332f8e7a07ca6c65a98402c5f&quot;,
+    &quot;render_method&quot;: &quot;Call existing render.report_html(entry, \&quot;supplements/flash-attention-tail-padding.json\&quot;, campaign) and save supplement-flash-attention-tail-padding.html. Nested JSON is outside the renderer main ledger glob.&quot;,
+    &quot;data_import_method&quot;: &quot;Local structured-data import and existing renderer only. No new helper or renderer code; no measured data sent to an external coding service.&quot;
+  }
+}</pre></details><footer>Local experiment report · JSON is the source of truth · No external assets or telemetry</footer></main></body></html>

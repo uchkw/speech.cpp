@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "measure_id": "002",
+  "title": "Prepack or selectively dequantize weights at load time",
+  "status": "conditional",
+  "reason": "CPU decoder repacking was rejected. Selective FFN expansion improves encoder/core timing, but its primary worker request gain is within the unchanged F16 control difference while retaining 768 MiB of extra weights. Neither trial is adopted; the outside-worker residual remains unresolved.",
+  "checks": [],
+  "updated_utc": "2026-11-06T18:56:55.478072+00:00"
+}

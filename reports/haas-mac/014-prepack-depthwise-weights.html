@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>014 · Prepack depthwise weights</title><style>
+:root{color-scheme:light;font:16px/1.55 system-ui,sans-serif;color:#172738;background:#f3f6f9}
+*{box-sizing:border-box}body{margin:0}main{max-width:1180px;margin:auto;padding:34px 22px 64px}
+a{color:#075ca8;text-underline-offset:3px}a:focus-visible,summary:focus-visible{outline:3px solid #c36b00;outline-offset:4px}
+h1{font-size:clamp(1.8rem,4vw,2.7rem);line-height:1.18;margin:12px 0 18px}h2{font-size:1.35rem;margin:30px 0 12px}
+h3{font-size:1.05rem;margin:22px 0 10px}p{max-width:90ch}small,.muted{color:#506174}.eyebrow{font-size:.8rem;letter-spacing:.12em;text-transform:uppercase;color:#506174}
+.panel{background:white;border:1px solid #d5dfe8;border-radius:10px;padding:20px;margin:18px 0}.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}th,td{text-align:left;vertical-align:top;padding:11px 10px;border-bottom:1px solid #dce4eb}th{font-size:.85rem;background:#f2f6fa}td.num,th.num{text-align:right;white-space:nowrap}
+caption{text-align:left;font-weight:600;padding:8px 0}code{font: .87em ui-monospace,monospace;overflow-wrap:anywhere}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.83rem}
+.status{display:inline-block;border:1px solid;border-radius:5px;padding:2px 8px;font-size:.8rem;font-weight:650;text-transform:uppercase}
+.pending,.not_applicable{color:#405269;background:#edf1f5}.in_progress{color:#174c7b;background:#e8f2ff}.accepted,.validated_mac{color:#16572f;background:#e7f5eb}.rejected{color:#8a2631;background:#fff0f0}.conditional,.pending_official_reference{color:#754700;background:#fff4d8}.blocked{color:#663c83;background:#f4eafa}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}.metric strong{display:block;font-size:1.55rem;line-height:1.2}.metric span{font-size:.85rem;color:#506174}
+details{margin:14px 0}summary{cursor:pointer;font-weight:600}.warning{border-left:4px solid #bc7600;padding-left:15px}svg{max-width:100%;height:auto;display:block}footer{margin-top:36px;font-size:.85rem;color:#506174}
+@media(max-width:600px){main{padding:22px 12px}.panel{padding:14px}th,td{padding:9px 7px}h1{overflow-wrap:anywhere}}
+</style></head><body><main><nav><a href="index.html">← All measures</a></nav><p class="eyebrow">Haas on Apple Silicon</p><h1>014 · Prepack depthwise weights</h1><span class="status rejected">rejected</span><p>Reject the current depthwise-weight prepack checkpoint: ordinary Q4_K Metal final encoder-to-joint output fails strict equality in eight comparisons. CPU and prepared weight/layout controls pass. Fusion-disabled and log-only diagnostics narrow the observation without proving its numerical cause. No performance or CER measurement is performed.</p><p><a href="014-prepack-depthwise-weights.json">Machine-readable report JSON</a> · <a href="https://github.com/uchkw/speech.cpp/issues/1">Tracking issue</a></p><section class="panel"><h2>Evidence</h2><p>No new measurement is recorded. Pending work is not a measured failure or a speed-up.</p></section><h2>Ordinary Metal equality fails; performance is not measured</h2><p>Each check constructs OFF and ON Encoders within the same candidate executable. Final F32 encoder-to-joint values are compared byte for byte. Two self-consistency comparisons are separate from the paired OFF/ON inputs.</p><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Execution</th><th scope="col">Expectations / failed</th><th scope="col">OFF/ON exact</th><th scope="col">Self-consistency exact</th><th scope="col">Verdict scope</th></tr></thead><tbody><tr><td>Q4_K CPU4</td><td>426 / 0</td><td>8 / 8</td><td>2 / 2</td><td>Differential controls pass</td></tr><tr><td>Q4_K MTL0, ordinary fusion</td><td>426 / 8</td><td>0 / 8</td><td>2 / 2</td><td>Required strict gate fails</td></tr><tr><td>Q4_K MTL0, fusion disabled</td><td>426 / 0</td><td>8 / 8</td><td>2 / 2</td><td>Separate diagnostic only</td></tr><tr><td>Q4_K MTL0, log-only synthetic</td><td>339 / 5</td><td>0 / 5</td><td>2 / 2</td><td>Separate diagnostic reproduces five synthetic failures</td></tr></tbody></table></div><ul><li>The five synthetic comparisons use encoder lengths 17,171,172,375,17; the repeated 17-frame case checks return to the short shape. The three audio inputs are 7.98,14.52,24.72 seconds.</li><li>No screen/full/short/public ASR/CER/performance result follows from these tensor checks.</li></ul><h2>Prepared-weight contracts pass, without passing the output gate</h2><p>Actual CONT products, view layouts, stable ownership and source preservation are checked independently from final numerical equality.</p><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Contract</th><th scope="col">Observed result</th></tr></thead><tbody><tr><td>Selected depthwise weights</td><td>26 F32 tensors; raw products exact</td></tr><tr><td>Ordinary / prepared CONT nodes</td><td>75 / 49; 26 removed</td></tr><tr><td>Additional payload</td><td>903,168 bytes</td></tr><tr><td>Retained backend allocation</td><td>903,168 bytes on CPU and Metal</td></tr><tr><td>Owner lifetime / short revisit / original bytes</td><td>Pass</td></tr><tr><td>Retained-versus-normal diagnostic, each side</td><td>Exact</td></tr></tbody></table></div><ul><li>The final normal graph retains only the joint projection output. The weight-retention run is a separate diagnostic.</li><li>Payload and allocation figures do not measure whole-process memory or request speed.</li></ul><h2>Eight ordinary Metal final-output differences</h2><p>Values are read from unchanged failing logs. The first internal numerical divergence is not observed.</p><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Input</th><th scope="col">Encoder frames</th><th scope="col">Largest absolute difference</th><th scope="col">SNR dB</th></tr></thead><tbody><tr><td>synthetic-first</td><td>17</td><td>0.00489997864</td><td>67.8287624</td></tr><tr><td>synthetic</td><td>171</td><td>0.0240705013</td><td>60.0137298</td></tr><tr><td>synthetic</td><td>172</td><td>0.0260584354</td><td>60.079425</td></tr><tr><td>synthetic</td><td>375</td><td>0.0456334352</td><td>57.6434284</td></tr><tr><td>synthetic-return</td><td>17</td><td>0.00489997864</td><td>67.8287624</td></tr><tr><td>1321491767934942997</td><td>100</td><td>0.0160903931</td><td>65.5662015</td></tr><tr><td>2330237947966115273</td><td>182</td><td>0.0193753242</td><td>66.7786338</td></tr><tr><td>8675814957598723431</td><td>309</td><td>0.0350699425</td><td>66.2605462</td></tr></tbody></table></div><ul><li>The strict criterion is exact output equality; no threshold is relaxed after seeing these differences.</li><li>The input identifiers for audio are artifact keys, not evidence of transcript quality.</li></ul><h2>Fusion diagnostic localizes a candidate, not complete causation</h2><p>One log-only synthetic process preserves the five observed failures. Source order maps the first differing fusion candidate to blk.1.out_norm; no intermediate tensor values are captured.</p><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Observation</th><th scope="col">Ordinary</th><th scope="col">Prepared</th></tr></thead><tbody><tr><td>NORM/MUL/ADD triple fusions in first normal pair</td><td>120</td><td>119</td></tr><tr><td>Candidate sequence</td><td>250/251: node_178 NORM + fuse3</td><td>1372/1375/1378: node_168 NORM, MUL, ADD</td></tr><tr><td>Local partition positions</td><td>NORM2, triple fused</td><td>NORM111; following MUL0/ADD1</td></tr></tbody></table></div><ul><li>The final Q4 outputs become exact when all fusion is disabled, but the ordinary failure remains unresolved.</li><li>FMA rounding, downstream amplification, alias/concurrency exclusion and measured n_cb are not established. No speed claim is derived from this trace.</li></ul><h2>Build identity</h2><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Build</th><th scope="col">Source commit</th><th scope="col">ggml commit</th><th scope="col">Binary SHA-256</th><th scope="col">Explicit environment</th><th scope="col">Build flags</th></tr></thead><tbody><tr><td>original_not_executed</td><td><a href="https://github.com/uchkw/speech.cpp/commit/114c514430c8aa1455c077819f8e72e674a48b75"><code>114c514430c8</code></a></td><td><code>e1a9ac12edbb57402618fd6936598603f5ee6266</code></td><td><code>4fccde1a19f26d91bd92d0296c19eb5ae75895c73684dc61017b81b90f9b0e61</code></td><td><code>{}</code></td><td><code>{&quot;configure&quot;: [&quot;-DCMAKE_BUILD_TYPE=Release&quot;, &quot;-DGGML_NATIVE=ON&quot;, &quot;-DGGML_METAL=ON&quot;], &quot;build&quot;: [&quot;--target&quot;, &quot;speech-cli&quot;, &quot;fastconformer-timing&quot;, &quot;-j4&quot;]}</code></td></tr><tr><td>candidate_check_build</td><td><a href="https://github.com/uchkw/speech.cpp/commit/dd0a27e412842bde002dc76cb02aaea82c94799f"><code>dd0a27e41284</code></a></td><td><code>e1a9ac12edbb57402618fd6936598603f5ee6266</code></td><td><code>90cfa64da8eb6b465be74d54e80217347ea778be691ffdf308bb1fe8d202341c</code></td><td><code>{}</code></td><td><code>{&quot;configure&quot;: [&quot;-DCMAKE_BUILD_TYPE=Release&quot;, &quot;-DGGML_NATIVE=ON&quot;, &quot;-DGGML_METAL=ON&quot;], &quot;build&quot;: [&quot;--target&quot;, &quot;speech-cli&quot;, &quot;fastconformer-timing&quot;, &quot;-j4&quot;]}</code></td></tr></tbody></table></div><h2>Checks</h2><div class="scroll" tabindex="0" role="region" aria-label="Results table"><table><thead><tr><th scope="col">Check</th><th scope="col">Required</th><th scope="col">Status</th><th scope="col">Evidence</th></tr></thead><tbody><tr><td>Matched clean original and candidate builds</td><td>yes</td><td>passed</td><td>014/execution/compile-link-comparison.txt; 014/diagnostic-manifest.json<br>74 common flags.make and 74 common link.txt files match after source/build path normalization. The original control was built but not run for numerical continuity or timing.</td></tr><tr><td>Pinned input identities</td><td>yes</td><td>passed</td><td>014/execution/input-hash-check.log; 014/execution/expected-models.sha256; 014/execution/expected-stage-audio.sha256; 014/execution/expected-official-arrays.sha256<br>Four models, three stage audio arrays and 66 official arrays match their recorded hashes. This is input verification, not official-reference inference.</td></tr><tr><td>Q4_K CPU differential check</td><td>yes</td><td>passed</td><td>014/checks/q4_k-cpu.log<br>CPU4: 426 expectations, zero failures; all ten final joint-output comparisons exact. The selected depthwise weights are F32, other weights retain actual model quantization; this is not the official F32 check.</td></tr><tr><td>Prepared bytes, layout and ownership on CPU and Metal</td><td>yes</td><td>passed</td><td>014/checks/q4_k-cpu.log; 014/checks/q4_k-gpu.log<br>All 26 actual CONT products match prepared bytes; kernel shape/strides, source byte preservation, owner lifetime and stable addresses pass. CONT nodes fall 75 to 49. Q4 payload and retained allocation are 903168 bytes on both backends. These passing controls do not override the normal Metal output failure.</td></tr><tr><td>Q4_K ordinary Metal final joint equivalence</td><td>yes</td><td>failed</td><td>014/checks/q4_k-gpu.log; 014/strict-checkpoint.json<br>MTL0 GPU4: 426 expectations, eight failures in five synthetic and three real-audio OFF/ON comparisons. First observed final F32 difference is at feature length129 / encoder length17: max_abs0.00489997864, SNR67.8287624dB. Both self-consistency comparisons remain exact. The original failure is unchanged.</td></tr><tr><td>Fusion-disabled diagnostic</td><td>no</td><td>passed</td><td>014/fusion-disabled-diagnostic.json; 014/checks/q4_k-gpu-fusion-disabled.log<br>One same-binary Q4_K MTL0 run with GGML_METAL_FUSION_DISABLE=1: 426 expectations, zero failures, all ten final joint comparisons exact. Diagnostic only; it neither fixes nor passes the ordinary Metal gate and is excluded from performance.</td></tr><tr><td>Log-only normal fusion diagnostic</td><td>no</td><td>failed</td><td>014/graph-debug/invocation.json; 014/graph-debug/stdout.log; 014/graph-debug/stderr.log; 014/graph-debug/first-fusion-candidate.json<br>One Q4_K GPU4 synthetic-only process with GRAPH_DEBUG=1 and unchanged check main: 339 expectations, five failures reproducing the ordinary synthetic differences. The first normal pair has120 versus119 three-op NORM fusions. The inferred blk.1.out_norm spans a prepared local partition. First internal numerical divergence and arithmetic causation remain unmeasured.</td></tr><tr><td>Q8_0/F16 and original-binary continuity</td><td>yes</td><td>skipped</td><td>014/checks.json<br>Stopped after ordinary Q4_K Metal strict failure. Model hash verification and clean original compilation are not numerical check results.</td></tr><tr><td>Official F32 CPU/Metal encoder reference</td><td>yes</td><td>skipped</td><td>014/checks.json<br>Original F32 model and 11-case corpus were verified and the check was built, but no official inference check ran. No official frontend, encoder or joint.enc comparison is claimed.</td></tr><tr><td>Public ASR quality and performance</td><td>yes</td><td>skipped</td><td>014/checks.json<br>No primary screen, anchor comparison, full corpus, short prefixes, CER, public text/tokens/times, load-time or process-memory gain was measured. Diagnostic wall times are not latency evidence.</td></tr><tr><td>Complete official KDA/TDT reference</td><td>yes</td><td>unavailable</td><td>014/checks.json<br>The available official arrays cover frontend/encoder/joint.enc, not a complete KDA/TDT reference.</td></tr><tr><td>Windows/Vulkan runtime validation</td><td>yes</td><td>unavailable</td><td>014/checks.json<br>No Windows/Vulkan device validation was available. No CI success is claimed.</td></tr><tr><td>API cancellation</td><td>yes</td><td>skipped</td><td>014/checks.json<br>Not executed after ordinary Metal strict failure; no cancellation or public C API regression result is claimed.</td></tr></tbody></table></div><h2>Conditions and limitations</h2><p>No primary request latency is measured. Check runtimes and diagnostic wall times are not latency results.</p><p>No p50/p90/p99, RTFx, paired reduction, cumulative gain or CER is calculated. The index leaves the gain field empty.</p><p><strong>Literal CER:</strong> Total Unicode code-point Levenshtein edits divided by total reference code points, including punctuation, symbols and whitespace.</p><p><strong>Repository CER:</strong> NFKC followed by removing Unicode punctuation, symbols, separators and whitespace; no case folding or alternate-spelling substitutions. Edits and reference lengths are summed before division.</p><ul><li>The normal Q4_K Metal gate remains failed. A passing diagnostic with fusion disabled is a different execution condition and does not override that failure.</li><li>There are eight OFF/ON final-output comparisons (five synthetic executions, including a repeated short shape, and three audio inputs) plus two self-consistency checks. Expectation totals include ownership/layout/finite-value contracts, not independent utterances.</li><li>The first observed difference is the final F32 joint.enc tensor at 129 feature frames / 17 encoder frames. It is not the first internal divergent tensor.</li><li>The log-only trace identifies 120 versus 119 NORM/MUL/ADD fusions in the first normal pair. The inferred blk.1.out_norm spans a prepared local partition. Full numerical causation, FMA/reduction rounding and downstream amplification are not established; alias/concurrency defects are not excluded.</li><li>The source configures n_cb=1, but this value is not measured by the trace. No further tensor capture or threshold relaxation was performed.</li><li>All 26 selected depthwise weights are F32 even in this Q4_K model. This differential CPU run preserves other Q4 weights and is not an official F32 reference run.</li><li>The 903,168-byte payload and retained backend allocation are a separate eager weight buffer measured by the check. They are not process RSS, peak-memory change, load-time overhead or a memory gain.</li><li>A clean original binary was built for provenance but was not run for original/OFF/ON continuity or timing. The strict differential evidence uses the candidate check with its own OFF/ON Encoders.</li><li>Four model hashes, three stage-audio hashes and 66 official-array hashes were verified before execution. Only Q4_K was evaluated; hash verification is not Q8/F16/F32 numerical inference or an official reference pass.</li><li>No official frontend/encoder/joint.enc inference, public ASR text/token/time comparison, CER, primary screen, anchor comparison, full corpus, short-prefix test or cancellation check was executed. Generic CER definitions below are unused for this result.</li><li>Available official dumps cover frontend/encoder/joint.enc, not a complete KDA/TDT reference. Windows/Vulkan and current CI are unverified.</li><li>Four CPU threads are a check setting. The runtime automatic default remains 16 performance cores on this host; no default or campaign baseline was changed.</li><li>The original raw line span for the ordinary fusion candidate begins at a log-end wrapper. Import audit uses stable sequence IDs 250/251 and records the actual NORM/fusion lines 749/752 without editing the frozen source evidence.</li><li>The owner froze 360 raw/build-metadata files and cited 13 previously recorded executable/library hashes. The independent report import freshly verifies all 13 retained files; model/audio/reference-array contents are not rehashed.</li></ul><details><summary>Reproduction metadata and local evidence paths</summary><p>Large logs, models and audio are not included in the versioned report.</p><pre>{
+  &quot;scope&quot;: &quot;checks_only&quot;,
+  &quot;conditions&quot;: {
+    &quot;hardware&quot;: {
+      &quot;chip&quot;: &quot;Apple M2 Ultra&quot;,
+      &quot;device&quot;: &quot;MTL0&quot;
+    },
+    &quot;check_devices&quot;: [
+      &quot;CPU&quot;,
+      &quot;MTL0&quot;
+    ],
+    &quot;check_threads&quot;: 4,
+    &quot;latency_definition&quot;: &quot;No primary request latency is measured. Check runtimes and diagnostic wall times are not latency results.&quot;,
+    &quot;aggregation&quot;: &quot;No p50/p90/p99, RTFx, paired reduction, cumulative gain or CER is calculated. The index leaves the gain field empty.&quot;,
+    &quot;normal_check_environment&quot;: &quot;The same check executable constructs an ordinary Encoder with SPEECH_HAAS_DEPTHWISE_PREPACK=0 and a prepared Encoder with 1; no measured worker is launched.&quot;,
+    &quot;diagnostic_environments&quot;: {
+      &quot;fusion_disabled&quot;: {
+        &quot;GGML_METAL_FUSION_DISABLE&quot;: &quot;1&quot;
+      },
+      &quot;log_only&quot;: {
+        &quot;GGML_METAL_GRAPH_DEBUG&quot;: &quot;1&quot;
+      }
+    },
+    &quot;runner_snapshot_executed&quot;: false,
+    &quot;primary_settings_applied&quot;: false,
+    &quot;limitations&quot;: [
+      &quot;The normal Q4_K Metal gate remains failed. A passing diagnostic with fusion disabled is a different execution condition and does not override that failure.&quot;,
+      &quot;There are eight OFF/ON final-output comparisons (five synthetic executions, including a repeated short shape, and three audio inputs) plus two self-consistency checks. Expectation totals include ownership/layout/finite-value contracts, not independent utterances.&quot;,
+      &quot;The first observed difference is the final F32 joint.enc tensor at 129 feature frames / 17 encoder frames. It is not the first internal divergent tensor.&quot;,
+      &quot;The log-only trace identifies 120 versus 119 NORM/MUL/ADD fusions in the first normal pair. The inferred blk.1.out_norm spans a prepared local partition. Full numerical causation, FMA/reduction rounding and downstream amplification are not established; alias/concurrency defects are not excluded.&quot;,
+      &quot;The source configures n_cb=1, but this value is not measured by the trace. No further tensor capture or threshold relaxation was performed.&quot;,
+      &quot;All 26 selected depthwise weights are F32 even in this Q4_K model. This differential CPU run preserves other Q4 weights and is not an official F32 reference run.&quot;,
+      &quot;The 903,168-byte payload and retained backend allocation are a separate eager weight buffer measured by the check. They are not process RSS, peak-memory change, load-time overhead or a memory gain.&quot;,
+      &quot;A clean original binary was built for provenance but was not run for original/OFF/ON continuity or timing. The strict differential evidence uses the candidate check with its own OFF/ON Encoders.&quot;,
+      &quot;Four model hashes, three stage-audio hashes and 66 official-array hashes were verified before execution. Only Q4_K was evaluated; hash verification is not Q8/F16/F32 numerical inference or an official reference pass.&quot;,
+      &quot;No official frontend/encoder/joint.enc inference, public ASR text/token/time comparison, CER, primary screen, anchor comparison, full corpus, short-prefix test or cancellation check was executed. Generic CER definitions below are unused for this result.&quot;,
+      &quot;Available official dumps cover frontend/encoder/joint.enc, not a complete KDA/TDT reference. Windows/Vulkan and current CI are unverified.&quot;,
+      &quot;Four CPU threads are a check setting. The runtime automatic default remains 16 performance cores on this host; no default or campaign baseline was changed.&quot;,
+      &quot;The original raw line span for the ordinary fusion candidate begins at a log-end wrapper. Import audit uses stable sequence IDs 250/251 and records the actual NORM/fusion lines 749/752 without editing the frozen source evidence.&quot;,
+      &quot;The owner froze 360 raw/build-metadata files and cited 13 previously recorded executable/library hashes. The independent report import freshly verifies all 13 retained files; model/audio/reference-array contents are not rehashed.&quot;
+    ]
+  },
+  &quot;models&quot;: {
+    &quot;Haas-616M-ja-v1.0-Q4_K.gguf&quot;: {
+      &quot;file&quot;: &quot;Haas-616M-ja-v1.0-Q4_K.gguf&quot;,
+      &quot;sha256&quot;: &quot;d24d53f29b75214a933ff482b0de1217e0a800f4118cca39ad6cf03609a89d6f&quot;,
+      &quot;executed&quot;: true
+    },
+    &quot;Haas-616M-ja-v1.0-Q8_0.gguf&quot;: {
+      &quot;file&quot;: &quot;Haas-616M-ja-v1.0-Q8_0.gguf&quot;,
+      &quot;sha256&quot;: &quot;cd5f60b2f1c411404b83fca4a65e3ce30a26d9e951b6a346529e65f22758afeb&quot;,
+      &quot;executed&quot;: false
+    },
+    &quot;Haas-616M-ja-v1.0-F16.gguf&quot;: {
+      &quot;file&quot;: &quot;Haas-616M-ja-v1.0-F16.gguf&quot;,
+      &quot;sha256&quot;: &quot;f752e02f68c1dfff795900e40aa82e5302976fb5360080fcbd330d8b3c992cd8&quot;,
+      &quot;executed&quot;: false
+    },
+    &quot;Haas-616M-ja-v1.0-F32.gguf&quot;: {
+      &quot;file&quot;: &quot;Haas-616M-ja-v1.0-F32.gguf&quot;,
+      &quot;sha256&quot;: &quot;119c2471afc2a98ccbc349f1b8952c9ddd9366f7b0226688ce909c754d043ce8&quot;,
+      &quot;executed&quot;: false
+    }
+  },
+  &quot;builds&quot;: {
+    &quot;original_not_executed&quot;: {
+      &quot;source_commit&quot;: &quot;114c514430c8aa1455c077819f8e72e674a48b75&quot;,
+      &quot;source_tree&quot;: &quot;c431379c55311f35f7d7d2faff92526b48cb3cac&quot;,
+      &quot;source_verified&quot;: true,
+      &quot;ggml_commit&quot;: &quot;e1a9ac12edbb57402618fd6936598603f5ee6266&quot;,
+      &quot;created_utc&quot;: &quot;2026-11-07T00:35:05.690522+00:00&quot;,
+      &quot;build_flags&quot;: {
+        &quot;configure&quot;: [
+          &quot;-DCMAKE_BUILD_TYPE=Release&quot;,
+          &quot;-DGGML_NATIVE=ON&quot;,
+          &quot;-DGGML_METAL=ON&quot;
+        ],
+        &quot;build&quot;: [
+          &quot;--target&quot;,
+          &quot;speech-cli&quot;,
+          &quot;fastconformer-timing&quot;,
+          &quot;-j4&quot;
+        ]
+      },
+      &quot;cmake_cache_sha256&quot;: &quot;a64a6fad18e9d004aa51ae48cbe6c52118b60a9516ca3131d05772979b1217d6&quot;,
+      &quot;build_log_sha256&quot;: &quot;8ff17af2a3fcf66be9a32644393bfeb9a15eec1cef68908b652efa9c20e85dab&quot;,
+      &quot;stage_threads_argument&quot;: true,
+      &quot;speech&quot;: {
+        &quot;sha256&quot;: &quot;4fccde1a19f26d91bd92d0296c19eb5ae75895c73684dc61017b81b90f9b0e61&quot;,
+        &quot;artifact_path&quot;: &quot;builds/014-original/speech&quot;
+      },
+      &quot;stage_tool&quot;: {
+        &quot;sha256&quot;: &quot;497a79e9dd25c064df089507c34a0089e5956a2e94e6c84e3b60646fe912e4c5&quot;,
+        &quot;artifact_path&quot;: &quot;builds/014-original/fastconformer-timing&quot;
+      }
+    },
+    &quot;candidate_check_build&quot;: {
+      &quot;source_commit&quot;: &quot;dd0a27e412842bde002dc76cb02aaea82c94799f&quot;,
+      &quot;source_tree&quot;: &quot;806bbec4d5f7013d41affe8c3175592f80bfa977&quot;,
+      &quot;source_verified&quot;: true,
+      &quot;ggml_commit&quot;: &quot;e1a9ac12edbb57402618fd6936598603f5ee6266&quot;,
+      &quot;created_utc&quot;: &quot;2026-11-07T00:36:11.323672+00:00&quot;,
+      &quot;build_flags&quot;: {
+        &quot;configure&quot;: [
+          &quot;-DCMAKE_BUILD_TYPE=Release&quot;,
+          &quot;-DGGML_NATIVE=ON&quot;,
+          &quot;-DGGML_METAL=ON&quot;
+        ],
+        &quot;build&quot;: [
+          &quot;--target&quot;,
+          &quot;speech-cli&quot;,
+          &quot;fastconformer-timing&quot;,
+          &quot;-j4&quot;
+        ]
+      },
+      &quot;cmake_cache_sha256&quot;: &quot;983eeee9a14d6021cb449056891322c639f8f9432a8f3e274789a077a3670fe7&quot;,
+      &quot;build_log_sha256&quot;: &quot;47b4401b6b2ad9bba623445afc0a4008115337a4d8fcf610f77185dc7a63ab8f&quot;,
+      &quot;stage_threads_argument&quot;: true,
+      &quot;speech&quot;: {
+        &quot;sha256&quot;: &quot;90cfa64da8eb6b465be74d54e80217347ea778be691ffdf308bb1fe8d202341c&quot;,
+        &quot;artifact_path&quot;: &quot;builds/014-depthwise-prepack/speech&quot;
+      },
+      &quot;stage_tool&quot;: {
+        &quot;sha256&quot;: &quot;dd683d84f9f3dabf8d7003783db608353d8875773f6d47d8fed8a1cee80103d2&quot;,
+        &quot;artifact_path&quot;: &quot;builds/014-depthwise-prepack/fastconformer-timing&quot;
+      }
+    }
+  },
+  &quot;implementation_checkpoint&quot;: {
+    &quot;measured_source_commit&quot;: &quot;dd0a27e412842bde002dc76cb02aaea82c94799f&quot;,
+    &quot;ggml_commit&quot;: &quot;e1a9ac12edbb57402618fd6936598603f5ee6266&quot;,
+    &quot;original_build_source_commit&quot;: &quot;114c514430c8aa1455c077819f8e72e674a48b75&quot;,
+    &quot;evaluation_commit&quot;: &quot;1b152341e613fa0f6dce8668a40935554db7593f&quot;,
+    &quot;runtime_unchanged_by_evaluation_notes&quot;: true,
+    &quot;integrated&quot;: false,
+    &quot;runner_snapshot_commit&quot;: &quot;a7e227c2b9067ee0b73a4582acf2e453cff5f179&quot;,
+    &quot;runner_snapshot_executed&quot;: false,
+    &quot;switch&quot;: &quot;SPEECH_HAAS_DEPTHWISE_PREPACK=0|1; default OFF; fixed at Encoder construction.&quot;,
+    &quot;check_executable&quot;: {
+      &quot;artifact_path&quot;: &quot;builds/014-depthwise-prepack/fastconformer-depthwise-prepack-check&quot;,
+      &quot;sha256&quot;: &quot;ac2a6d80d99215e635ceda963fc1a8627dbda435bcfb5c42b10107dd4352b518&quot;
+    },
+    &quot;diagnostic_executable&quot;: {
+      &quot;artifact_path&quot;: &quot;014/graph-debug/graph-debug-check&quot;,
+      &quot;sha256&quot;: &quot;3e759f26ec89f94c88d967b427e04a9b3b9440539766a711bbe1f5663aebc6a1&quot;
+    },
+    &quot;evaluation_note&quot;: &quot;https://github.com/uchkw/speech.cpp/blob/1b152341e613fa0f6dce8668a40935554db7593f/experiments/haas-mac/014-depthwise-prepack-evaluation.md&quot;
+  },
+  &quot;diagnostics&quot;: [
+    {
+      &quot;title&quot;: &quot;Ordinary Metal equality fails; performance is not measured&quot;,
+      &quot;method&quot;: &quot;Each check constructs OFF and ON Encoders within the same candidate executable. Final F32 encoder-to-joint values are compared byte for byte. Two self-consistency comparisons are separate from the paired OFF/ON inputs.&quot;,
+      &quot;headers&quot;: [
+        &quot;Execution&quot;,
+        &quot;Expectations / failed&quot;,
+        &quot;OFF/ON exact&quot;,
+        &quot;Self-consistency exact&quot;,
+        &quot;Verdict scope&quot;
+      ],
+      &quot;rows&quot;: [
+        [
+          &quot;Q4_K CPU4&quot;,
+          &quot;426 / 0&quot;,
+          &quot;8 / 8&quot;,
+          &quot;2 / 2&quot;,
+          &quot;Differential controls pass&quot;
+        ],
+        [
+          &quot;Q4_K MTL0, ordinary fusion&quot;,
+          &quot;426 / 8&quot;,
+          &quot;0 / 8&quot;,
+          &quot;2 / 2&quot;,
+          &quot;Required strict gate fails&quot;
+        ],
+        [
+          &quot;Q4_K MTL0, fusion disabled&quot;,
+          &quot;426 / 0&quot;,
+          &quot;8 / 8&quot;,
+          &quot;2 / 2&quot;,
+          &quot;Separate diagnostic only&quot;
+        ],
+        [
+          &quot;Q4_K MTL0, log-only synthetic&quot;,
+          &quot;339 / 5&quot;,
+          &quot;0 / 5&quot;,
+          &quot;2 / 2&quot;,
+          &quot;Separate diagnostic reproduces five synthetic failures&quot;
+        ]
+      ],
+      &quot;notes&quot;: [
+        &quot;The five synthetic comparisons use encoder lengths 17,171,172,375,17; the repeated 17-frame case checks return to the short shape. The three audio inputs are 7.98,14.52,24.72 seconds.&quot;,
+        &quot;No screen/full/short/public ASR/CER/performance result follows from these tensor checks.&quot;
+      ]
+    },
+    {
+      &quot;title&quot;: &quot;Prepared-weight contracts pass, without passing the output gate&quot;,
+      &quot;method&quot;: &quot;Actual CONT products, view layouts, stable ownership and source preservation are checked independently from final numerical equality.&quot;,
+      &quot;headers&quot;: [
+        &quot;Contract&quot;,
+        &quot;Observed result&quot;
+      ],
+      &quot;rows&quot;: [
+        [
+          &quot;Selected depthwise weights&quot;,
+          &quot;26 F32 tensors; raw products exact&quot;
+        ],
+        [
+          &quot;Ordinary / prepared CONT nodes&quot;,
+          &quot;75 / 49; 26 removed&quot;
+        ],
+        [
+          &quot;Additional payload&quot;,
+          &quot;903,168 bytes&quot;
+        ],
+        [
+          &quot;Retained backend allocation&quot;,
+          &quot;903,168 bytes on CPU and Metal&quot;
+        ],
+        [
+          &quot;Owner lifetime / short revisit / original bytes&quot;,
+          &quot;Pass&quot;
+        ],
+        [
+          &quot;Retained-versus-normal diagnostic, each side&quot;,
+          &quot;Exact&quot;
+        ]
+      ],
+      &quot;notes&quot;: [
+        &quot;The final normal graph retains only the joint projection output. The weight-retention run is a separate diagnostic.&quot;,
+        &quot;Payload and allocation figures do not measure whole-process memory or request speed.&quot;
+      ]
+    },
+    {
+      &quot;title&quot;: &quot;Eight ordinary Metal final-output differences&quot;,
+      &quot;method&quot;: &quot;Values are read from unchanged failing logs. The first internal numerical divergence is not observed.&quot;,
+      &quot;headers&quot;: [
+        &quot;Input&quot;,
+        &quot;Encoder frames&quot;,
+        &quot;Largest absolute difference&quot;,
+        &quot;SNR dB&quot;
+      ],
+      &quot;rows&quot;: [
+        [
+          &quot;synthetic-first&quot;,
+          17,
+          &quot;0.00489997864&quot;,
+          &quot;67.8287624&quot;
+        ],
+        [
+          &quot;synthetic&quot;,
+          171,
+          &quot;0.0240705013&quot;,
+          &quot;60.0137298&quot;
+        ],
+        [
+          &quot;synthetic&quot;,
+          172,
+          &quot;0.0260584354&quot;,
+          &quot;60.079425&quot;
+        ],
+        [
+          &quot;synthetic&quot;,
+          375,
+          &quot;0.0456334352&quot;,
+          &quot;57.6434284&quot;
+        ],
+        [
+          &quot;synthetic-return&quot;,
+          17,
+          &quot;0.00489997864&quot;,
+          &quot;67.8287624&quot;
+        ],
+        [
+          &quot;1321491767934942997&quot;,
+          100,
+          &quot;0.0160903931&quot;,
+          &quot;65.5662015&quot;
+        ],
+        [
+          &quot;2330237947966115273&quot;,
+          182,
+          &quot;0.0193753242&quot;,
+          &quot;66.7786338&quot;
+        ],
+        [
+          &quot;8675814957598723431&quot;,
+          309,
+          &quot;0.0350699425&quot;,
+          &quot;66.2605462&quot;
+        ]
+      ],
+      &quot;notes&quot;: [
+        &quot;The strict criterion is exact output equality; no threshold is relaxed after seeing these differences.&quot;,
+        &quot;The input identifiers for audio are artifact keys, not evidence of transcript quality.&quot;
+      ]
+    },
+    {
+      &quot;title&quot;: &quot;Fusion diagnostic localizes a candidate, not complete causation&quot;,
+      &quot;method&quot;: &quot;One log-only synthetic process preserves the five observed failures. Source order maps the first differing fusion candidate to blk.1.out_norm; no intermediate tensor values are captured.&quot;,
+      &quot;headers&quot;: [
+        &quot;Observation&quot;,
+        &quot;Ordinary&quot;,
+        &quot;Prepared&quot;
+      ],
+      &quot;rows&quot;: [
+        [
+          &quot;NORM/MUL/ADD triple fusions in first normal pair&quot;,
+          &quot;120&quot;,
+          &quot;119&quot;
+        ],
+        [
+          &quot;Candidate sequence&quot;,
+          &quot;250/251: node_178 NORM + fuse3&quot;,
+          &quot;1372/1375/1378: node_168 NORM, MUL, ADD&quot;
+        ],
+        [
+          &quot;Local partition positions&quot;,
+          &quot;NORM2, triple fused&quot;,
+          &quot;NORM111; following MUL0/ADD1&quot;
+        ]
+      ],
+      &quot;notes&quot;: [
+        &quot;The final Q4 outputs become exact when all fusion is disabled, but the ordinary failure remains unresolved.&quot;,
+        &quot;FMA rounding, downstream amplification, alias/concurrency exclusion and measured n_cb are not established. No speed claim is derived from this trace.&quot;
+      ]
+    }
+  ],
+  &quot;input_hash&quot;: {
+    &quot;stage_audio&quot;: [
+      {
+        &quot;artifact_path&quot;: &quot;assets/stage-audio/1321491767934942997/audio.npy&quot;,
+        &quot;sha256&quot;: &quot;e9fa0f17592d554eb21e1dc44e8cc2fbf20dff7078f600d784dda293d721745a&quot;
+      },
+      {
+        &quot;artifact_path&quot;: &quot;assets/stage-audio/2330237947966115273/audio.npy&quot;,
+        &quot;sha256&quot;: &quot;3fb722b7acebce40c435252ac34f77ff6d935bb8494478b5dbb895ae730035e1&quot;
+      },
+      {
+        &quot;artifact_path&quot;: &quot;assets/stage-audio/8675814957598723431/audio.npy&quot;,
+        &quot;sha256&quot;: &quot;9ea7d7dd0a3979b4098bf55442c097efb8b6a1e9164fcf97502b19e4af24ca05&quot;
+      }
+    ],
+    &quot;recorded_model_manifest_sha256&quot;: &quot;f7e61545e25d493ccc3e000661aaab52265de9f0ee007470e506d50a228a285a&quot;,
+    &quot;recorded_stage_manifest_sha256&quot;: &quot;b49002da21b071c92f332478e71a3c718e0d07452ecd217d28dab4666c0d4dda&quot;,
+    &quot;recorded_official_manifest_sha256&quot;: &quot;814e5f207ea60f32800ab03154102831a5ab91d9238ae52ea9c07c03f1c90802&quot;,
+    &quot;scope&quot;: &quot;Recorded pre-execution identities; no official inference or full ASR corpus execution.&quot;
+  },
+  &quot;evidence&quot;: {
+    &quot;directory&quot;: &quot;014&quot;,
+    &quot;paths_relative_to&quot;: &quot;External campaign artifact directory.&quot;,
+    &quot;evaluation_path&quot;: &quot;014/evaluation.json&quot;,
+    &quot;checks_path&quot;: &quot;014/checks.json&quot;,
+    &quot;check_summary_path&quot;: &quot;014/check-summary.json&quot;,
+    &quot;evidence_manifest_path&quot;: &quot;014/evidence-manifest.json&quot;,
+    &quot;freeze_scope_path&quot;: &quot;014/freeze-scope.json&quot;,
+    &quot;independent_source_review_path&quot;: &quot;014/independent-review.json&quot;,
+    &quot;evaluation_commit_record_path&quot;: &quot;014/evaluation-commit.json&quot;,
+    &quot;evaluation_sha256&quot;: &quot;9a98c885cdf0dab8b9f037a42ba1da3dc1b2ebe58b240f7b6566fa508294a3d7&quot;,
+    &quot;checks_sha256&quot;: &quot;e8b3ba38b415d7c5700e3f3a99d791d76c080945cfee96a8cbad6b7d59cfe66f&quot;,
+    &quot;check_summary_sha256&quot;: &quot;821adff87be85a899b36e53673ef09912601af334cd883d661f97a1d6cec8303&quot;,
+    &quot;evidence_manifest_sha256&quot;: &quot;67c3bb10bb2e8c1872aa370199eecdd69475ddcaf611393243b0cbc44ec56812&quot;,
+    &quot;freeze_scope_sha256&quot;: &quot;ab7aa0e045dc00540cfd2158ea7ad8fd56f00d0cef5a5303d8f75c3619b71881&quot;,
+    &quot;independent_source_review_sha256&quot;: &quot;9e072d50374b92ebb666ff189e784139ca7227a1ff5f656ff7653bb15dee6c8e&quot;,
+    &quot;evaluation_commit_record_sha256&quot;: &quot;6064aac749bb0f1d73920f41ee73142ef68d02bda845aec7a6ec9862cdad10f7&quot;,
+    &quot;independent_hash_audit_path&quot;: &quot;report-imports/014/independent-evidence-sha256.json&quot;,
+    &quot;independent_hash_audit_sha256&quot;: &quot;631cfff3572137af7bbcd244a5c8d0c504dfd225df48aad649d861a6cd16e6d7&quot;,
+    &quot;independent_check_audit_path&quot;: &quot;report-imports/014/check-audit.json&quot;,
+    &quot;independent_check_audit_sha256&quot;: &quot;6765cb7c5d3097d6876812a9b2a36b6f78a9166d0e0db2cb9d730dd22b685e24&quot;,
+    &quot;owner_freshly_hashed_raw_files&quot;: 360,
+    &quot;owner_freshly_hashed_raw_bytes&quot;: 10660046,
+    &quot;retained_files_freshly_verified_by_import&quot;: 13,
+    &quot;retained_bytes_freshly_verified_by_import&quot;: 63450928,
+    &quot;model_or_audio_rehashed&quot;: false,
+    &quot;data_import_method&quot;: &quot;Existing compare.record and render.py with local structured-data import. No new helper or renderer code; no measured data sent to an external coding service.&quot;
+  }
+}</pre></details><footer>Local experiment report · JSON is the source of truth · No external assets or telemetry</footer></main></body></html>

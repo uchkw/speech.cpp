@@ -1,0 +1,316 @@
+{
+  "schema_version": 1,
+  "measure_id": "000",
+  "kind": "preliminary",
+  "title": "Preliminary precision and thread comparison",
+  "status": "conditional",
+  "scope": "preliminary",
+  "reason": "Model formats and settings were compared, but the existing binary source commit was not established. No unqualified quality-and-latency winner was found.",
+  "prior_evidence_note": "These results are preliminary evidence, not a new code speed-up. Q8_0 reduced 26 repository-normalized edits and added 15 literal edits versus Q4_K on 650 utterances.",
+  "types": {
+    "q4_k": {
+      "sides": {
+        "preliminary": {
+          "latency": {
+            "count": 30,
+            "p50_ms": 85.51600000009785,
+            "p90_ms": 133.28797919984936,
+            "p99_ms": 155.7098589294128,
+            "audio_seconds": 454.32,
+            "request_seconds": 2.8032705380010157,
+            "rtfx": 162.06783963276376
+          },
+          "strata": {
+            "10-20s": {
+              "count": 10,
+              "p50_ms": 85.51600000009785,
+              "p90_ms": 106.9857750004303,
+              "p99_ms": 117.69417749961576,
+              "audio_seconds": 138.12,
+              "request_seconds": 0.8731530810009644,
+              "rtfx": 158.18532054157345
+            },
+            "20-30s": {
+              "count": 10,
+              "p50_ms": 129.61937499994747,
+              "p90_ms": 152.0315082993875,
+              "p99_ms": 156.9158755294211,
+              "audio_seconds": 229.56,
+              "request_seconds": 1.3264964999980293,
+              "rtfx": 173.05737331409546
+            },
+            "6-10s": {
+              "count": 10,
+              "p50_ms": 60.724999999820284,
+              "p90_ms": 66.17509100015013,
+              "p99_ms": 67.99900850026461,
+              "audio_seconds": 86.64,
+              "request_seconds": 0.6036209570020219,
+              "rtfx": 143.53378390026606
+            }
+          },
+          "quality": {
+            "literal_edits": 2608,
+            "literal_characters": 34928,
+            "literal_cer": 0.07466788822721027,
+            "repository_edits": 1520,
+            "repository_characters": 32648,
+            "repository_cer": 0.04655721636853712
+          },
+          "peak_memory_bytes": 481395720,
+          "load_ms": 171.64950000005774,
+          "first_request_ms": 178.95520799993392,
+          "stage_status": "unavailable",
+          "stages": {}
+        }
+      }
+    },
+    "q8_0": {
+      "sides": {
+        "preliminary": {
+          "latency": {
+            "count": 30,
+            "p50_ms": 80.84122950049277,
+            "p90_ms": 128.15873749987077,
+            "p99_ms": 149.6233258900793,
+            "audio_seconds": 454.32,
+            "request_seconds": 2.672235666002962,
+            "rtfx": 170.01494508138057
+          },
+          "strata": {
+            "10-20s": {
+              "count": 10,
+              "p50_ms": 80.84122950049277,
+              "p90_ms": 102.91767499957132,
+              "p99_ms": 111.316767500075,
+              "audio_seconds": 138.12,
+              "request_seconds": 0.8315117080019263,
+              "rtfx": 166.10710188542532
+            },
+            "20-30s": {
+              "count": 10,
+              "p50_ms": 124.65760399982173,
+              "p90_ms": 145.31492090063693,
+              "p99_ms": 151.03591768989645,
+              "audio_seconds": 229.56,
+              "request_seconds": 1.2720955010008765,
+              "rtfx": 180.45814942304543
+            },
+            "6-10s": {
+              "count": 10,
+              "p50_ms": 57.752728500418016,
+              "p90_ms": 62.76462109999556,
+              "p99_ms": 62.981936809901526,
+              "audio_seconds": 86.64,
+              "request_seconds": 0.568628457000159,
+              "rtfx": 152.36662698359427
+            }
+          },
+          "quality": {
+            "literal_edits": 2623,
+            "literal_characters": 34928,
+            "literal_cer": 0.07509734310581768,
+            "repository_edits": 1494,
+            "repository_characters": 32648,
+            "repository_cer": 0.04576084293065425
+          },
+          "peak_memory_bytes": 792790288,
+          "load_ms": 210.90691599965794,
+          "first_request_ms": 170.31362499983516,
+          "stage_status": "unavailable",
+          "stages": {}
+        }
+      }
+    },
+    "f16": {
+      "sides": {
+        "preliminary": {
+          "latency": {
+            "count": 30,
+            "p50_ms": 82.15479199998299,
+            "p90_ms": 130.87379139942644,
+            "p99_ms": 153.5857273201418,
+            "audio_seconds": 454.32,
+            "request_seconds": 2.679690834002031,
+            "rtfx": 169.5419464944349
+          },
+          "strata": {
+            "10-20s": {
+              "count": 10,
+              "p50_ms": 82.15479199998299,
+              "p90_ms": 100.90183750071445,
+              "p99_ms": 109.63232124995558,
+              "audio_seconds": 138.12,
+              "request_seconds": 0.8213676660006968,
+              "rtfx": 168.15855519674528
+            },
+            "20-30s": {
+              "count": 10,
+              "p50_ms": 124.332437999783,
+              "p90_ms": 148.9651041995785,
+              "p99_ms": 155.1006857203265,
+              "audio_seconds": 229.56,
+              "request_seconds": 1.2818444169997747,
+              "rtfx": 179.08569632599986
+            },
+            "6-10s": {
+              "count": 10,
+              "p50_ms": 58.109812500333646,
+              "p90_ms": 63.80444590013212,
+              "p99_ms": 64.44593269070538,
+              "audio_seconds": 86.64,
+              "request_seconds": 0.5764787510015594,
+              "rtfx": 150.29174943477776
+            }
+          },
+          "quality": {
+            "literal_edits": 2621,
+            "literal_characters": 34928,
+            "literal_cer": 0.07504008245533669,
+            "repository_edits": 1498,
+            "repository_characters": 32648,
+            "repository_cer": 0.04588336192109777
+          },
+          "peak_memory_bytes": 1371604648,
+          "load_ms": 308.77287500061357,
+          "first_request_ms": 171.29837500033318,
+          "stage_status": "unavailable",
+          "stages": {}
+        }
+      }
+    },
+    "q6_k": {
+      "sides": {
+        "preliminary": {
+          "latency": {
+            "count": 30,
+            "p50_ms": 86.82581250013754,
+            "p90_ms": 133.72391729981248,
+            "p99_ms": 157.59239681998224,
+            "audio_seconds": 454.32,
+            "request_seconds": 2.806420712000545,
+            "rtfx": 161.88592040291064
+          },
+          "strata": {
+            "10-20s": {
+              "count": 10,
+              "p50_ms": 86.82581250013754,
+              "p90_ms": 105.9213711004304,
+              "p99_ms": 115.9417118102192,
+              "audio_seconds": 138.12,
+              "request_seconds": 0.8762570009994306,
+              "rtfx": 157.6249888359976
+            },
+            "20-30s": {
+              "count": 10,
+              "p50_ms": 130.0019164996229,
+              "p90_ms": 152.88317119993732,
+              "p99_ms": 159.136405219997,
+              "audio_seconds": 229.56,
+              "request_seconds": 1.330981253000573,
+              "rtfx": 172.47425497727968
+            },
+            "6-10s": {
+              "count": 10,
+              "p50_ms": 61.85447900043073,
+              "p90_ms": 64.94155439950191,
+              "p99_ms": 66.1576673397667,
+              "audio_seconds": 86.64,
+              "request_seconds": 0.5991824580005414,
+              "rtfx": 144.59702356627022
+            }
+          },
+          "quality": {
+            "literal_edits": 2611,
+            "literal_characters": 34928,
+            "literal_cer": 0.07475377920293175,
+            "repository_edits": 1509,
+            "repository_characters": 32648,
+            "repository_cer": 0.04622028914481745
+          },
+          "peak_memory_bytes": 635536512,
+          "load_ms": 184.84287499995844,
+          "first_request_ms": 178.87120799969125,
+          "stage_status": "unavailable",
+          "stages": {}
+        }
+      }
+    }
+  },
+  "builds": {
+    "preliminary": {
+      "source_commit": null,
+      "source_verified": false,
+      "observed_source_head": "03555100287c118b41d1b475044e5ab1e07baa8c",
+      "ggml_commit": "e1a9ac12edbb57402618fd6936598603f5ee6266",
+      "speech": {
+        "sha256": "c400031dc96465154223123448176a5d551f38c7b330bdd70dfdb5596bdef421"
+      }
+    }
+  },
+  "conditions": {
+    "hardware": {
+      "chip": "Apple M2 Ultra",
+      "cpu_cores": 24,
+      "performance_cores": 16,
+      "efficiency_cores": 8,
+      "gpu_cores": 76,
+      "memory_gb": 192,
+      "source": "system_profiler SPHardwareDataType SPDisplaysDataType"
+    },
+    "date": "2026-11-07 JST",
+    "threads": 4,
+    "decode_on_cpu": true,
+    "latency_count": 30,
+    "rounds": 3,
+    "quality_count": 650,
+    "quality_runs_per_type": 1,
+    "quality_timestamps": false,
+    "quality_output_fields": "Text only; public token and segment timing equality was not collected in this preliminary comparison.",
+    "thread_setting_note": "Four CPU threads are an explicit tuned campaign setting, not the runtime default. Unspecified threads (threads=0) use performance cores: 16 on this M2 Ultra. Code gains compare the tuned anchor and do not include the preliminary thread-tuning gain; measure 021 evaluates automatic versus four threads separately."
+  },
+  "checks": [
+    {
+      "name": "Pinned model SHA-256 verification",
+      "status": "passed",
+      "required": true
+    },
+    {
+      "name": "Binary source-commit provenance",
+      "status": "unavailable",
+      "required": true
+    }
+  ],
+  "evidence": {
+    "directory": "../haas-mac-precision-20261107",
+    "source_result_sha256": "5d9aec7ccb9e56e6a75325220b80d9e09c3f43fa9c10ee578d4e10de2435fd2d",
+    "paths_relative_to": "External haas-mac-campaign artifact directory."
+  },
+  "models": {
+    "q4_k": {
+      "type": "q4_k",
+      "sha256": "d24d53f29b75214a933ff482b0de1217e0a800f4118cca39ad6cf03609a89d6f",
+      "size": 351901216,
+      "revision": "6b965d5007ba780585de51549d57a8c1c0d67c7e"
+    },
+    "q8_0": {
+      "type": "q8_0",
+      "sha256": "cd5f60b2f1c411404b83fca4a65e3ce30a26d9e951b6a346529e65f22758afeb",
+      "size": 656381472,
+      "revision": "6b965d5007ba780585de51549d57a8c1c0d67c7e"
+    },
+    "f16": {
+      "type": "f16",
+      "sha256": "f752e02f68c1dfff795900e40aa82e5302976fb5360080fcbd330d8b3c992cd8",
+      "size": 1233128832,
+      "revision": "6b965d5007ba780585de51549d57a8c1c0d67c7e"
+    },
+    "q6_k": {
+      "type": "q6_k",
+      "sha256": "19b33195b691abda293648a02702086754e1392728871d0dafcd3d50682f5dc3",
+      "size": 508898848,
+      "revision": "6b965d5007ba780585de51549d57a8c1c0d67c7e"
+    }
+  },
+  "input_hash": "7196750a6d97b470abbcc6fc45bd3d82572473a5e778200a145fe82dbda03267"
+}

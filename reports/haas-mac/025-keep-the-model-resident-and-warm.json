@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "measure_id": "025",
+  "title": "Keep the model resident and warm",
+  "status": "pending",
+  "reason": "Not evaluated.",
+  "checks": [],
+  "prior_evidence_note": "A persistent worker and warmup already exist. Establish remaining work before claiming a new gain."
+}

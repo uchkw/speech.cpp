@@ -1,0 +1,486 @@
+{
+  "schema_version": 1,
+  "measure_id": "014",
+  "title": "Prepack depthwise weights",
+  "status": "rejected",
+  "reason": "Reject the current depthwise-weight prepack checkpoint: ordinary Q4_K Metal final encoder-to-joint output fails strict equality in eight comparisons. CPU and prepared weight/layout controls pass. Fusion-disabled and log-only diagnostics narrow the observation without proving its numerical cause. No performance or CER measurement is performed.",
+  "checks": [
+    {
+      "name": "Matched clean original and candidate builds",
+      "status": "passed",
+      "scope": "mac",
+      "evidence": "014/execution/compile-link-comparison.txt; 014/diagnostic-manifest.json",
+      "reason": "74 common flags.make and 74 common link.txt files match after source/build path normalization. The original control was built but not run for numerical continuity or timing."
+    },
+    {
+      "name": "Pinned input identities",
+      "status": "passed",
+      "scope": "provenance",
+      "evidence": "014/execution/input-hash-check.log; 014/execution/expected-models.sha256; 014/execution/expected-stage-audio.sha256; 014/execution/expected-official-arrays.sha256",
+      "reason": "Four models, three stage audio arrays and 66 official arrays match their recorded hashes. This is input verification, not official-reference inference."
+    },
+    {
+      "name": "Q4_K CPU differential check",
+      "status": "passed",
+      "scope": "mac",
+      "evidence": "014/checks/q4_k-cpu.log",
+      "reason": "CPU4: 426 expectations, zero failures; all ten final joint-output comparisons exact. The selected depthwise weights are F32, other weights retain actual model quantization; this is not the official F32 check."
+    },
+    {
+      "name": "Prepared bytes, layout and ownership on CPU and Metal",
+      "status": "passed",
+      "scope": "mac",
+      "evidence": "014/checks/q4_k-cpu.log; 014/checks/q4_k-gpu.log",
+      "reason": "All 26 actual CONT products match prepared bytes; kernel shape/strides, source byte preservation, owner lifetime and stable addresses pass. CONT nodes fall 75 to 49. Q4 payload and retained allocation are 903168 bytes on both backends. These passing controls do not override the normal Metal output failure."
+    },
+    {
+      "name": "Q4_K ordinary Metal final joint equivalence",
+      "status": "failed",
+      "scope": "mac",
+      "evidence": "014/checks/q4_k-gpu.log; 014/strict-checkpoint.json",
+      "reason": "MTL0 GPU4: 426 expectations, eight failures in five synthetic and three real-audio OFF/ON comparisons. First observed final F32 difference is at feature length129 / encoder length17: max_abs0.00489997864, SNR67.8287624dB. Both self-consistency comparisons remain exact. The original failure is unchanged."
+    },
+    {
+      "name": "Fusion-disabled diagnostic",
+      "status": "passed",
+      "scope": "diagnostic",
+      "required": false,
+      "evidence": "014/fusion-disabled-diagnostic.json; 014/checks/q4_k-gpu-fusion-disabled.log",
+      "reason": "One same-binary Q4_K MTL0 run with GGML_METAL_FUSION_DISABLE=1: 426 expectations, zero failures, all ten final joint comparisons exact. Diagnostic only; it neither fixes nor passes the ordinary Metal gate and is excluded from performance."
+    },
+    {
+      "name": "Log-only normal fusion diagnostic",
+      "status": "failed",
+      "scope": "diagnostic",
+      "required": false,
+      "evidence": "014/graph-debug/invocation.json; 014/graph-debug/stdout.log; 014/graph-debug/stderr.log; 014/graph-debug/first-fusion-candidate.json",
+      "reason": "One Q4_K GPU4 synthetic-only process with GRAPH_DEBUG=1 and unchanged check main: 339 expectations, five failures reproducing the ordinary synthetic differences. The first normal pair has120 versus119 three-op NORM fusions. The inferred blk.1.out_norm spans a prepared local partition. First internal numerical divergence and arithmetic causation remain unmeasured."
+    },
+    {
+      "name": "Q8_0/F16 and original-binary continuity",
+      "status": "skipped",
+      "scope": "mac",
+      "reason": "Stopped after ordinary Q4_K Metal strict failure. Model hash verification and clean original compilation are not numerical check results.",
+      "evidence": "014/checks.json"
+    },
+    {
+      "name": "Official F32 CPU/Metal encoder reference",
+      "status": "skipped",
+      "scope": "reference",
+      "reason": "Original F32 model and 11-case corpus were verified and the check was built, but no official inference check ran. No official frontend, encoder or joint.enc comparison is claimed.",
+      "evidence": "014/checks.json"
+    },
+    {
+      "name": "Public ASR quality and performance",
+      "status": "skipped",
+      "scope": "mac",
+      "reason": "No primary screen, anchor comparison, full corpus, short prefixes, CER, public text/tokens/times, load-time or process-memory gain was measured. Diagnostic wall times are not latency evidence.",
+      "evidence": "014/checks.json"
+    },
+    {
+      "name": "Complete official KDA/TDT reference",
+      "status": "unavailable",
+      "scope": "reference",
+      "reason": "The available official arrays cover frontend/encoder/joint.enc, not a complete KDA/TDT reference.",
+      "evidence": "014/checks.json"
+    },
+    {
+      "name": "Windows/Vulkan runtime validation",
+      "status": "unavailable",
+      "scope": "windows",
+      "reason": "No Windows/Vulkan device validation was available. No CI success is claimed.",
+      "evidence": "014/checks.json"
+    },
+    {
+      "name": "API cancellation",
+      "status": "skipped",
+      "scope": "mac",
+      "reason": "Not executed after ordinary Metal strict failure; no cancellation or public C API regression result is claimed.",
+      "evidence": "014/checks.json"
+    }
+  ],
+  "updated_utc": "2026-11-07T01:16:30.110033+00:00",
+  "scope": "checks_only",
+  "evaluation_completed": true,
+  "adopted": false,
+  "primary_screen_executed": false,
+  "full_quality_executed": false,
+  "short_prefix_executed": false,
+  "public_asr_quality_executed": false,
+  "performance_gain_measured": false,
+  "memory_gain_measured": false,
+  "variant_scope": "The current 26-weight depthwise prepack checkpoint. This rejection does not rule out a separately checked preparation or graph-partition design.",
+  "conditions": {
+    "hardware": {
+      "chip": "Apple M2 Ultra",
+      "device": "MTL0"
+    },
+    "check_devices": [
+      "CPU",
+      "MTL0"
+    ],
+    "check_threads": 4,
+    "latency_definition": "No primary request latency is measured. Check runtimes and diagnostic wall times are not latency results.",
+    "aggregation": "No p50/p90/p99, RTFx, paired reduction, cumulative gain or CER is calculated. The index leaves the gain field empty.",
+    "normal_check_environment": "The same check executable constructs an ordinary Encoder with SPEECH_HAAS_DEPTHWISE_PREPACK=0 and a prepared Encoder with 1; no measured worker is launched.",
+    "diagnostic_environments": {
+      "fusion_disabled": {
+        "GGML_METAL_FUSION_DISABLE": "1"
+      },
+      "log_only": {
+        "GGML_METAL_GRAPH_DEBUG": "1"
+      }
+    },
+    "runner_snapshot_executed": false,
+    "primary_settings_applied": false,
+    "limitations": [
+      "The normal Q4_K Metal gate remains failed. A passing diagnostic with fusion disabled is a different execution condition and does not override that failure.",
+      "There are eight OFF/ON final-output comparisons (five synthetic executions, including a repeated short shape, and three audio inputs) plus two self-consistency checks. Expectation totals include ownership/layout/finite-value contracts, not independent utterances.",
+      "The first observed difference is the final F32 joint.enc tensor at 129 feature frames / 17 encoder frames. It is not the first internal divergent tensor.",
+      "The log-only trace identifies 120 versus 119 NORM/MUL/ADD fusions in the first normal pair. The inferred blk.1.out_norm spans a prepared local partition. Full numerical causation, FMA/reduction rounding and downstream amplification are not established; alias/concurrency defects are not excluded.",
+      "The source configures n_cb=1, but this value is not measured by the trace. No further tensor capture or threshold relaxation was performed.",
+      "All 26 selected depthwise weights are F32 even in this Q4_K model. This differential CPU run preserves other Q4 weights and is not an official F32 reference run.",
+      "The 903,168-byte payload and retained backend allocation are a separate eager weight buffer measured by the check. They are not process RSS, peak-memory change, load-time overhead or a memory gain.",
+      "A clean original binary was built for provenance but was not run for original/OFF/ON continuity or timing. The strict differential evidence uses the candidate check with its own OFF/ON Encoders.",
+      "Four model hashes, three stage-audio hashes and 66 official-array hashes were verified before execution. Only Q4_K was evaluated; hash verification is not Q8/F16/F32 numerical inference or an official reference pass.",
+      "No official frontend/encoder/joint.enc inference, public ASR text/token/time comparison, CER, primary screen, anchor comparison, full corpus, short-prefix test or cancellation check was executed. Generic CER definitions below are unused for this result.",
+      "Available official dumps cover frontend/encoder/joint.enc, not a complete KDA/TDT reference. Windows/Vulkan and current CI are unverified.",
+      "Four CPU threads are a check setting. The runtime automatic default remains 16 performance cores on this host; no default or campaign baseline was changed.",
+      "The original raw line span for the ordinary fusion candidate begins at a log-end wrapper. Import audit uses stable sequence IDs 250/251 and records the actual NORM/fusion lines 749/752 without editing the frozen source evidence.",
+      "The owner froze 360 raw/build-metadata files and cited 13 previously recorded executable/library hashes. The independent report import freshly verifies all 13 retained files; model/audio/reference-array contents are not rehashed."
+    ]
+  },
+  "builds": {
+    "original_not_executed": {
+      "source_commit": "114c514430c8aa1455c077819f8e72e674a48b75",
+      "source_tree": "c431379c55311f35f7d7d2faff92526b48cb3cac",
+      "source_verified": true,
+      "ggml_commit": "e1a9ac12edbb57402618fd6936598603f5ee6266",
+      "created_utc": "2026-11-07T00:35:05.690522+00:00",
+      "build_flags": {
+        "configure": [
+          "-DCMAKE_BUILD_TYPE=Release",
+          "-DGGML_NATIVE=ON",
+          "-DGGML_METAL=ON"
+        ],
+        "build": [
+          "--target",
+          "speech-cli",
+          "fastconformer-timing",
+          "-j4"
+        ]
+      },
+      "cmake_cache_sha256": "a64a6fad18e9d004aa51ae48cbe6c52118b60a9516ca3131d05772979b1217d6",
+      "build_log_sha256": "8ff17af2a3fcf66be9a32644393bfeb9a15eec1cef68908b652efa9c20e85dab",
+      "stage_threads_argument": true,
+      "speech": {
+        "sha256": "4fccde1a19f26d91bd92d0296c19eb5ae75895c73684dc61017b81b90f9b0e61",
+        "artifact_path": "builds/014-original/speech"
+      },
+      "stage_tool": {
+        "sha256": "497a79e9dd25c064df089507c34a0089e5956a2e94e6c84e3b60646fe912e4c5",
+        "artifact_path": "builds/014-original/fastconformer-timing"
+      }
+    },
+    "candidate_check_build": {
+      "source_commit": "dd0a27e412842bde002dc76cb02aaea82c94799f",
+      "source_tree": "806bbec4d5f7013d41affe8c3175592f80bfa977",
+      "source_verified": true,
+      "ggml_commit": "e1a9ac12edbb57402618fd6936598603f5ee6266",
+      "created_utc": "2026-11-07T00:36:11.323672+00:00",
+      "build_flags": {
+        "configure": [
+          "-DCMAKE_BUILD_TYPE=Release",
+          "-DGGML_NATIVE=ON",
+          "-DGGML_METAL=ON"
+        ],
+        "build": [
+          "--target",
+          "speech-cli",
+          "fastconformer-timing",
+          "-j4"
+        ]
+      },
+      "cmake_cache_sha256": "983eeee9a14d6021cb449056891322c639f8f9432a8f3e274789a077a3670fe7",
+      "build_log_sha256": "47b4401b6b2ad9bba623445afc0a4008115337a4d8fcf610f77185dc7a63ab8f",
+      "stage_threads_argument": true,
+      "speech": {
+        "sha256": "90cfa64da8eb6b465be74d54e80217347ea778be691ffdf308bb1fe8d202341c",
+        "artifact_path": "builds/014-depthwise-prepack/speech"
+      },
+      "stage_tool": {
+        "sha256": "dd683d84f9f3dabf8d7003783db608353d8875773f6d47d8fed8a1cee80103d2",
+        "artifact_path": "builds/014-depthwise-prepack/fastconformer-timing"
+      }
+    }
+  },
+  "models": {
+    "Haas-616M-ja-v1.0-Q4_K.gguf": {
+      "file": "Haas-616M-ja-v1.0-Q4_K.gguf",
+      "sha256": "d24d53f29b75214a933ff482b0de1217e0a800f4118cca39ad6cf03609a89d6f",
+      "executed": true
+    },
+    "Haas-616M-ja-v1.0-Q8_0.gguf": {
+      "file": "Haas-616M-ja-v1.0-Q8_0.gguf",
+      "sha256": "cd5f60b2f1c411404b83fca4a65e3ce30a26d9e951b6a346529e65f22758afeb",
+      "executed": false
+    },
+    "Haas-616M-ja-v1.0-F16.gguf": {
+      "file": "Haas-616M-ja-v1.0-F16.gguf",
+      "sha256": "f752e02f68c1dfff795900e40aa82e5302976fb5360080fcbd330d8b3c992cd8",
+      "executed": false
+    },
+    "Haas-616M-ja-v1.0-F32.gguf": {
+      "file": "Haas-616M-ja-v1.0-F32.gguf",
+      "sha256": "119c2471afc2a98ccbc349f1b8952c9ddd9366f7b0226688ce909c754d043ce8",
+      "executed": false
+    }
+  },
+  "input_hash": {
+    "stage_audio": [
+      {
+        "artifact_path": "assets/stage-audio/1321491767934942997/audio.npy",
+        "sha256": "e9fa0f17592d554eb21e1dc44e8cc2fbf20dff7078f600d784dda293d721745a"
+      },
+      {
+        "artifact_path": "assets/stage-audio/2330237947966115273/audio.npy",
+        "sha256": "3fb722b7acebce40c435252ac34f77ff6d935bb8494478b5dbb895ae730035e1"
+      },
+      {
+        "artifact_path": "assets/stage-audio/8675814957598723431/audio.npy",
+        "sha256": "9ea7d7dd0a3979b4098bf55442c097efb8b6a1e9164fcf97502b19e4af24ca05"
+      }
+    ],
+    "recorded_model_manifest_sha256": "f7e61545e25d493ccc3e000661aaab52265de9f0ee007470e506d50a228a285a",
+    "recorded_stage_manifest_sha256": "b49002da21b071c92f332478e71a3c718e0d07452ecd217d28dab4666c0d4dda",
+    "recorded_official_manifest_sha256": "814e5f207ea60f32800ab03154102831a5ab91d9238ae52ea9c07c03f1c90802",
+    "scope": "Recorded pre-execution identities; no official inference or full ASR corpus execution."
+  },
+  "implementation_checkpoint": {
+    "measured_source_commit": "dd0a27e412842bde002dc76cb02aaea82c94799f",
+    "ggml_commit": "e1a9ac12edbb57402618fd6936598603f5ee6266",
+    "original_build_source_commit": "114c514430c8aa1455c077819f8e72e674a48b75",
+    "evaluation_commit": "1b152341e613fa0f6dce8668a40935554db7593f",
+    "runtime_unchanged_by_evaluation_notes": true,
+    "integrated": false,
+    "runner_snapshot_commit": "a7e227c2b9067ee0b73a4582acf2e453cff5f179",
+    "runner_snapshot_executed": false,
+    "switch": "SPEECH_HAAS_DEPTHWISE_PREPACK=0|1; default OFF; fixed at Encoder construction.",
+    "check_executable": {
+      "artifact_path": "builds/014-depthwise-prepack/fastconformer-depthwise-prepack-check",
+      "sha256": "ac2a6d80d99215e635ceda963fc1a8627dbda435bcfb5c42b10107dd4352b518"
+    },
+    "diagnostic_executable": {
+      "artifact_path": "014/graph-debug/graph-debug-check",
+      "sha256": "3e759f26ec89f94c88d967b427e04a9b3b9440539766a711bbe1f5663aebc6a1"
+    },
+    "evaluation_note": "https://github.com/uchkw/speech.cpp/blob/1b152341e613fa0f6dce8668a40935554db7593f/experiments/haas-mac/014-depthwise-prepack-evaluation.md"
+  },
+  "evidence": {
+    "directory": "014",
+    "paths_relative_to": "External campaign artifact directory.",
+    "evaluation_path": "014/evaluation.json",
+    "checks_path": "014/checks.json",
+    "check_summary_path": "014/check-summary.json",
+    "evidence_manifest_path": "014/evidence-manifest.json",
+    "freeze_scope_path": "014/freeze-scope.json",
+    "independent_source_review_path": "014/independent-review.json",
+    "evaluation_commit_record_path": "014/evaluation-commit.json",
+    "evaluation_sha256": "9a98c885cdf0dab8b9f037a42ba1da3dc1b2ebe58b240f7b6566fa508294a3d7",
+    "checks_sha256": "e8b3ba38b415d7c5700e3f3a99d791d76c080945cfee96a8cbad6b7d59cfe66f",
+    "check_summary_sha256": "821adff87be85a899b36e53673ef09912601af334cd883d661f97a1d6cec8303",
+    "evidence_manifest_sha256": "67c3bb10bb2e8c1872aa370199eecdd69475ddcaf611393243b0cbc44ec56812",
+    "freeze_scope_sha256": "ab7aa0e045dc00540cfd2158ea7ad8fd56f00d0cef5a5303d8f75c3619b71881",
+    "independent_source_review_sha256": "9e072d50374b92ebb666ff189e784139ca7227a1ff5f656ff7653bb15dee6c8e",
+    "evaluation_commit_record_sha256": "6064aac749bb0f1d73920f41ee73142ef68d02bda845aec7a6ec9862cdad10f7",
+    "independent_hash_audit_path": "report-imports/014/independent-evidence-sha256.json",
+    "independent_hash_audit_sha256": "631cfff3572137af7bbcd244a5c8d0c504dfd225df48aad649d861a6cd16e6d7",
+    "independent_check_audit_path": "report-imports/014/check-audit.json",
+    "independent_check_audit_sha256": "6765cb7c5d3097d6876812a9b2a36b6f78a9166d0e0db2cb9d730dd22b685e24",
+    "owner_freshly_hashed_raw_files": 360,
+    "owner_freshly_hashed_raw_bytes": 10660046,
+    "retained_files_freshly_verified_by_import": 13,
+    "retained_bytes_freshly_verified_by_import": 63450928,
+    "model_or_audio_rehashed": false,
+    "data_import_method": "Existing compare.record and render.py with local structured-data import. No new helper or renderer code; no measured data sent to an external coding service."
+  },
+  "diagnostics": [
+    {
+      "title": "Ordinary Metal equality fails; performance is not measured",
+      "method": "Each check constructs OFF and ON Encoders within the same candidate executable. Final F32 encoder-to-joint values are compared byte for byte. Two self-consistency comparisons are separate from the paired OFF/ON inputs.",
+      "headers": [
+        "Execution",
+        "Expectations / failed",
+        "OFF/ON exact",
+        "Self-consistency exact",
+        "Verdict scope"
+      ],
+      "rows": [
+        [
+          "Q4_K CPU4",
+          "426 / 0",
+          "8 / 8",
+          "2 / 2",
+          "Differential controls pass"
+        ],
+        [
+          "Q4_K MTL0, ordinary fusion",
+          "426 / 8",
+          "0 / 8",
+          "2 / 2",
+          "Required strict gate fails"
+        ],
+        [
+          "Q4_K MTL0, fusion disabled",
+          "426 / 0",
+          "8 / 8",
+          "2 / 2",
+          "Separate diagnostic only"
+        ],
+        [
+          "Q4_K MTL0, log-only synthetic",
+          "339 / 5",
+          "0 / 5",
+          "2 / 2",
+          "Separate diagnostic reproduces five synthetic failures"
+        ]
+      ],
+      "notes": [
+        "The five synthetic comparisons use encoder lengths 17,171,172,375,17; the repeated 17-frame case checks return to the short shape. The three audio inputs are 7.98,14.52,24.72 seconds.",
+        "No screen/full/short/public ASR/CER/performance result follows from these tensor checks."
+      ]
+    },
+    {
+      "title": "Prepared-weight contracts pass, without passing the output gate",
+      "method": "Actual CONT products, view layouts, stable ownership and source preservation are checked independently from final numerical equality.",
+      "headers": [
+        "Contract",
+        "Observed result"
+      ],
+      "rows": [
+        [
+          "Selected depthwise weights",
+          "26 F32 tensors; raw products exact"
+        ],
+        [
+          "Ordinary / prepared CONT nodes",
+          "75 / 49; 26 removed"
+        ],
+        [
+          "Additional payload",
+          "903,168 bytes"
+        ],
+        [
+          "Retained backend allocation",
+          "903,168 bytes on CPU and Metal"
+        ],
+        [
+          "Owner lifetime / short revisit / original bytes",
+          "Pass"
+        ],
+        [
+          "Retained-versus-normal diagnostic, each side",
+          "Exact"
+        ]
+      ],
+      "notes": [
+        "The final normal graph retains only the joint projection output. The weight-retention run is a separate diagnostic.",
+        "Payload and allocation figures do not measure whole-process memory or request speed."
+      ]
+    },
+    {
+      "title": "Eight ordinary Metal final-output differences",
+      "method": "Values are read from unchanged failing logs. The first internal numerical divergence is not observed.",
+      "headers": [
+        "Input",
+        "Encoder frames",
+        "Largest absolute difference",
+        "SNR dB"
+      ],
+      "rows": [
+        [
+          "synthetic-first",
+          17,
+          "0.00489997864",
+          "67.8287624"
+        ],
+        [
+          "synthetic",
+          171,
+          "0.0240705013",
+          "60.0137298"
+        ],
+        [
+          "synthetic",
+          172,
+          "0.0260584354",
+          "60.079425"
+        ],
+        [
+          "synthetic",
+          375,
+          "0.0456334352",
+          "57.6434284"
+        ],
+        [
+          "synthetic-return",
+          17,
+          "0.00489997864",
+          "67.8287624"
+        ],
+        [
+          "1321491767934942997",
+          100,
+          "0.0160903931",
+          "65.5662015"
+        ],
+        [
+          "2330237947966115273",
+          182,
+          "0.0193753242",
+          "66.7786338"
+        ],
+        [
+          "8675814957598723431",
+          309,
+          "0.0350699425",
+          "66.2605462"
+        ]
+      ],
+      "notes": [
+        "The strict criterion is exact output equality; no threshold is relaxed after seeing these differences.",
+        "The input identifiers for audio are artifact keys, not evidence of transcript quality."
+      ]
+    },
+    {
+      "title": "Fusion diagnostic localizes a candidate, not complete causation",
+      "method": "One log-only synthetic process preserves the five observed failures. Source order maps the first differing fusion candidate to blk.1.out_norm; no intermediate tensor values are captured.",
+      "headers": [
+        "Observation",
+        "Ordinary",
+        "Prepared"
+      ],
+      "rows": [
+        [
+          "NORM/MUL/ADD triple fusions in first normal pair",
+          "120",
+          "119"
+        ],
+        [
+          "Candidate sequence",
+          "250/251: node_178 NORM + fuse3",
+          "1372/1375/1378: node_168 NORM, MUL, ADD"
+        ],
+        [
+          "Local partition positions",
+          "NORM2, triple fused",
+          "NORM111; following MUL0/ADD1"
+        ]
+      ],
+      "notes": [
+        "The final Q4 outputs become exact when all fusion is disabled, but the ordinary failure remains unresolved.",
+        "FMA rounding, downstream amplification, alias/concurrency exclusion and measured n_cb are not established. No speed claim is derived from this trace."
+      ]
+    }
+  ]
+}
