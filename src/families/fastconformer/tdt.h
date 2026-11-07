@@ -27,10 +27,16 @@ public:
     Decoding decode(const std::vector<float> & projected, ggml_backend_t backend, const DecodingProgress & progress,
                     const Boost & boost) const override;
 
+    Decoding record_keyword_prefix(const std::vector<float> & projected, ggml_backend_t backend,
+                                  const DecodingProgress & progress, KeywordPrefix & prefix) const override;
+    Decoding decode_keyword_prefix(const std::vector<float> & projected, ggml_backend_t backend,
+                                  const DecodingProgress & progress, const Boost & boost, const KeywordPrefix & prefix) const override;
+
     int blank() const override { return blank_; }
 
 private:
-    Decoding run(const std::vector<float> & projected, ggml_backend_t backend, const DecodingProgress & progress, const Boost * boost) const;
+    Decoding run(const std::vector<float> & projected, ggml_backend_t backend, const DecodingProgress & progress, const Boost * boost,
+                 KeywordPrefix * record = nullptr, const KeywordPrefix * reuse = nullptr) const;
 
     const PredictionNetwork & prediction_;
     const Joint & joint_;

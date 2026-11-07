@@ -5,6 +5,7 @@
 
 #include "error.h"
 #include "decoder-step.h"
+#include "keyword-prefix.h"
 
 namespace fastconformer {
 
@@ -37,8 +38,28 @@ Decoding TdtDecoder::decode(const std::vector<float> & projected, ggml_backend_t
     return run(projected, backend, progress, &boost);
 }
 
+Decoding TdtDecoder::record_keyword_prefix(const std::vector<float> & projected, ggml_backend_t backend,
+                                          const DecodingProgress & progress, KeywordPrefix & prefix) const {
+    return run(projected, backend, progress, nullptr, &prefix);
+}
+
+Decoding TdtDecoder::decode_keyword_prefix(const std::vector<float> & projected, ggml_backend_t backend,
+                                          const DecodingProgress & progress, const Boost & boost, const KeywordPrefix & prefix) const {
+    if (boost.tree.vocab_size() != blank_) throw std::logic_error("the boosting tree's vocabulary is not the model's");
+    return run(projected, backend, progress, &boost, nullptr, &prefix);
+}
+
 Decoding TdtDecoder::run(const std::vector<float> & projected, ggml_backend_t backend, const DecodingProgress & progress,
-                         const Boost * boost) const {
+                         const Boost * boost, KeywordPrefix * record, const KeywordPrefix * reuse) const {
+    if (reuse && (reuse->decoder_ != this || reuse->backend_ != backend)) {
+        throw std::logic_error("the keyword prefix belongs to another decoder or backend");
+    }
+    if (record) {
+        record->entries_.clear();
+        record->decoder_ = this;
+        record->backend_ = backend;
+        record->entries_.reserve(KeywordPrefix::kCapacity);
+    }
     const int hidden = joint_.hidden();
     const int64_t frames = (int64_t) (projected.size() / (size_t) hidden);
     auto frame = [&](int64_t t) {
@@ -68,20 +89,47 @@ Decoding TdtDecoder::run(const std::vector<float> & projected, ggml_backend_t ba
     };
 
     Decoding d;
+    const auto joint_at = [&](int64_t t, const std::vector<float> & prediction) {
+        Graph j(64);
+        ggml_tensor * next = joint_.build(j.ctx(), j.input(frame(t), hidden), j.input(prediction, hidden));
+        j.output(next);
+        j.compute(backend, joint_allocator.get());
+        d.graphs++;
+        return Graph::read(next);
+    };
     PredictionState state = prediction_.initial_state();
     int32_t label = blank_;
     int64_t t = 0, last_token_frame = -1;
     uint32_t tokens_on_frame = 0;
+    size_t position = 0;
+    bool matching = reuse != nullptr;
     while (t < frames) {
         if (progress && !progress((double) t / (double) frames)) break;
-        // The prediction network takes the last label, and the joint is evaluated at the current frame with its
-        // output, in one graph.
-        step.compute(label, state, frame(t));
-        d.graphs++;
-        state = step.state();
-        const std::vector<float> prediction = step.prediction();
-        std::vector<float> out;
-        step.logits(out);
+        const KeywordPrefix::Entry * cached = nullptr;
+        if (matching) {
+            // The label a step is fed is the token the step before it emitted, so a step whose fed label equals the
+            // recorded one can only be reached through the whole token prefix of the recording; the first step, fed the
+            // blank, matches the same way. One label that differs ends the reuse for good, even where later labels
+            // coincide again.
+            if (position < reuse->entries_.size() && reuse->entries_[position].label == label) cached = &reuse->entries_[position];
+            else matching = false;
+        }
+        std::vector<float> prediction, out;
+        if (cached) {
+            state = cached->state;
+            prediction = cached->prediction;
+            out = joint_at(t, prediction);
+        } else {
+            step.compute(label, state, frame(t));
+            d.graphs++;
+            state = step.state();
+            prediction = step.prediction();
+            step.logits(out);
+            if (record && record->entries_.size() < KeywordPrefix::kCapacity) {
+                record->entries_.push_back({label, state, prediction});
+            }
+        }
+        ++position;
 
         int64_t label_frame;
         int32_t duration;
@@ -92,12 +140,7 @@ Decoding TdtDecoder::run(const std::vector<float> & projected, ggml_backend_t ba
             label_frame = t;
             t += duration;
             if (label != blank_ || t >= frames) break;
-            Graph j(64);
-            ggml_tensor * next = joint_.build(j.ctx(), j.input(frame(t), hidden), j.input(prediction, hidden));
-            j.output(next);
-            j.compute(backend, joint_allocator.get());
-            d.graphs++;
-            out = Graph::read(next);
+            out = joint_at(t, prediction);
         }
         if (label == blank_) break;
         d.ids.push_back(label);

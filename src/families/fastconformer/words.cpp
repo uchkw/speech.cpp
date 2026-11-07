@@ -1,8 +1,12 @@
 #include "words.h"
 
 #include <algorithm>
+#include <cstdlib>
+#include <cstring>
 
+#include "error.h"
 #include "guard.h"
+#include "keyword-prefix.h"
 #include "recognizer.h"
 #include "unicode.h"
 #include "utf8.h"
@@ -13,6 +17,24 @@ namespace {
 
 /** SentencePiece's word-start piece, U+2581. */
 const std::string kWordStart = "\xE2\x96\x81";
+
+/**
+ * Whether SPEECH_HAAS_KEYWORD_PREFIX lets a recognition share its plain decoding's predictor work with its boosted
+ * one: unset or "0" no, "1" yes, anything else an invalid argument. It is read once, as the model loads, and only for
+ * Haas-ja-v1.0 with a KDA prediction network and a TDT decoder, the one model whose two decodings differ in nothing
+ * but the boosting.
+ */
+bool keyword_prefix_enabled(const ModelFile & m) {
+    if (m.str("general.name") != "Haas-ja-v1.0" || m.str("fastconformer.decoder.prediction") != "kda" ||
+        m.str("fastconformer.decoder.kind") != "tdt") return false;
+    const char * value = std::getenv("SPEECH_HAAS_KEYWORD_PREFIX");
+    if (!value || std::strcmp(value, "0") == 0) return false;
+    if (std::strcmp(value, "1") != 0) {
+        throw Error(Fault::InvalidArgument, "SPEECH_HAAS_KEYWORD_PREFIX is neither 0 nor 1; leave it unset or set it to 0 or 1",
+                    "SPEECH_HAAS_KEYWORD_PREFIX");
+    }
+    return true;
+}
 
 /**
  * SentencePiece's model of the file's tokenizer. Its pieces are normal but for the unknown piece and the byte pieces:
@@ -69,7 +91,8 @@ WordsModel::WordsModel(const ModelFile & m)
       unk_score_(m.f32("fastconformer.vocabulary.unk_score")),
       alpha_(m.f32("fastconformer.vocabulary.alpha")),
       speech_rms_(m.f32("fastconformer.vocabulary.speech_rms")),
-      speech_frame_(m.size("fastconformer.vocabulary.speech_frame")) {
+      speech_frame_(m.size("fastconformer.vocabulary.speech_frame")),
+      keyword_prefix_(keyword_prefix_enabled(m)) {
     for (size_t i = 0; i < pieces_.size(); i++) id_of_.emplace(pieces_[i], (int32_t) i);
 }
 
@@ -123,15 +146,19 @@ WordsText WordsModel::recognize(Recognizer & recognizer, const Vocabulary & voca
                                 const std::vector<float> & projected, const std::string & name, DecodeOn on,
                                 const DecodingProgress & progress) const {
     const Detokenizer & detokenizer = recognizer.detokenizer();
+    // The prefix lives and ends with this recognition: the plain decoding fills it, the boosted one borrows it, and
+    // nothing of it survives the request.
+    KeywordPrefix prefix;
     WordsText out;
-    const Decoding plain = recognizer.decoding(projected, name, on, [&](double done) { return !progress || progress(done / 2); });
+    const Decoding plain = recognizer.decoding(projected, name, on, [&](double done) { return !progress || progress(done / 2); },
+                                              keyword_prefix_ ? &prefix : nullptr);
     out.plain = strip(detokenizer.text(plain.ids));
     out.speech = has_speech(samples, speech_rms_, (size_t) speech_frame_);
     std::string text = out.plain;
     if (out.speech) {
         const BoostingTree boosting = tree(vocabulary);
         const Decoding boosted = recognizer.decoding(projected, name, on, [&](double done) { return !progress || progress((1 + done) / 2); },
-                                                     Boost{boosting, vocabulary.alpha()});
+                                                     Boost{boosting, vocabulary.alpha()}, keyword_prefix_ ? &prefix : nullptr);
         out.boosted = strip(detokenizer.text(boosted.ids));
         if (out.boosted != out.plain) text = guard ? guarded(out.plain, out.boosted, vocabulary) : out.boosted;
     }

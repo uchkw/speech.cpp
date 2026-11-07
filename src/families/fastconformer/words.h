@@ -75,6 +75,7 @@ private:
     double context_score_, depth_scaling_;
     float unk_score_, alpha_, speech_rms_;
     int speech_frame_;
+    bool keyword_prefix_;
 };
 
 }  // namespace fastconformer

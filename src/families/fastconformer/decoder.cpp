@@ -57,6 +57,15 @@ Decoding Decoder::decode(const std::vector<float> &, ggml_backend_t, const Decod
     throw std::logic_error("this decoding boosts no words");
 }
 
+Decoding Decoder::record_keyword_prefix(const std::vector<float> &, ggml_backend_t, const DecodingProgress &, KeywordPrefix &) const {
+    throw std::logic_error("this decoding records no keyword prediction prefix");
+}
+
+Decoding Decoder::decode_keyword_prefix(const std::vector<float> &, ggml_backend_t, const DecodingProgress &,
+                                        const Boost &, const KeywordPrefix &) const {
+    throw std::logic_error("this decoding reuses no keyword prediction prefix");
+}
+
 int first_argmax(const float * v, int n) {
     int best = 0;
     for (int i = 1; i < n; i++) {

@@ -73,17 +73,27 @@ Recognizer::OnCpu & Recognizer::cpu() {
 }
 
 Decoding Recognizer::decoding(const std::vector<float> & projected, const std::string & name, DecodeOn on,
-                              const DecodingProgress & progress) {
-    if (on == DecodeOn::Device || on_cpu_) return device_.decoder(name).decode(projected, backend_, progress);
+                              const DecodingProgress & progress, KeywordPrefix * record) {
+    if (on == DecodeOn::Device || on_cpu_) {
+        const auto & decoder = device_.decoder(name);
+        return record ? decoder.record_keyword_prefix(projected, backend_, progress, *record) : decoder.decode(projected, backend_, progress);
+    }
     OnCpu & copy = cpu();
-    return copy.transducer.decoder(name).decode(projected, copy.backend.get(), progress);
+    const auto & decoder = copy.transducer.decoder(name);
+    return record ? decoder.record_keyword_prefix(projected, copy.backend.get(), progress, *record) :
+                    decoder.decode(projected, copy.backend.get(), progress);
 }
 
 Decoding Recognizer::decoding(const std::vector<float> & projected, const std::string & name, DecodeOn on,
-                              const DecodingProgress & progress, const Boost & boost) {
-    if (on == DecodeOn::Device || on_cpu_) return device_.decoder(name).decode(projected, backend_, progress, boost);
+                              const DecodingProgress & progress, const Boost & boost, const KeywordPrefix * reuse) {
+    if (on == DecodeOn::Device || on_cpu_) {
+        const auto & decoder = device_.decoder(name);
+        return reuse ? decoder.decode_keyword_prefix(projected, backend_, progress, boost, *reuse) : decoder.decode(projected, backend_, progress, boost);
+    }
     OnCpu & copy = cpu();
-    return copy.transducer.decoder(name).decode(projected, copy.backend.get(), progress, boost);
+    const auto & decoder = copy.transducer.decoder(name);
+    return reuse ? decoder.decode_keyword_prefix(projected, copy.backend.get(), progress, boost, *reuse) :
+                   decoder.decode(projected, copy.backend.get(), progress, boost);
 }
 
 std::vector<Segment> Recognizer::segments(const Decoding & decoding) const {

@@ -11,6 +11,8 @@
 
 namespace fastconformer {
 
+class KeywordPrefix;
+
 /** The tokens a decoding emitted, in order, with the encoder frames it emitted them on. */
 struct Decoding {
     std::vector<int32_t> ids;
@@ -52,6 +54,13 @@ public:
     /** The same with `boost`'s words boosted, by a decoding that boosts words (TDT's); any other throws. */
     virtual Decoding decode(const std::vector<float> & projected, ggml_backend_t backend, const DecodingProgress & progress,
                             const Boost & boost) const;
+
+    /** Records the bounded prediction prefix for a subsequent boosted decoding; only TDT supports this path. */
+    virtual Decoding record_keyword_prefix(const std::vector<float> & projected, ggml_backend_t backend,
+                                          const DecodingProgress & progress, KeywordPrefix & prefix) const;
+    /** Reuses a recorded prediction prefix until the first different token ID; joint decisions are computed again. */
+    virtual Decoding decode_keyword_prefix(const std::vector<float> & projected, ggml_backend_t backend,
+                                          const DecodingProgress & progress, const Boost & boost, const KeywordPrefix & prefix) const;
 
     virtual int blank() const = 0;
 };
