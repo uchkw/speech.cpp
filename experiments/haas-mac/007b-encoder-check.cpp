@@ -113,6 +113,56 @@ void save(const std::filesystem::path & directory, const Snapshot & snapshot, in
     }
 }
 
+// Preserves the two failing projected snapshots and prints one compact stderr evidence record.
+// Best effort only: any problem here is reported on stderr and never replaces the original error,
+// and the shared save helper is unsuitable because its whole-frame guard and success records
+// would relabel or hide this failure.
+void preserve_projected_failure(const std::filesystem::path & directory, const std::string & name, int64_t frames,
+                                const std::vector<float> & ordinary, const std::vector<float> & retained) {
+    try {
+        std::filesystem::create_directories(directory);
+        const auto write = [&](const char * file_name, const std::vector<float> & values) {
+            // Raw host F32 bytes with no shape assumption, so an irregular extent cannot block the dump.
+            std::ofstream file(directory / file_name, std::ios::binary);
+            file.write(reinterpret_cast<const char *>(values.data()), values.size()*sizeof(float));
+            file.close();
+            if (!file) std::fprintf(stderr, "{\"evidence_save_failed\":\"%s\"}\n", file_name);
+        };
+        write("normal-projected.f32", ordinary);
+        write("retained-projected.f32", retained);
+
+        // Only the shared span is compared, so neither vector is read past its end.
+        const size_t shared = std::min(ordinary.size(), retained.size());
+        size_t different = 0;
+        size_t first = shared;
+        double maximum = 0;
+        for (size_t i = 0; i < shared; ++i) {
+            // Byte equality also separates values with different raw representations, such as +0.0 and -0.0.
+            if (std::memcmp(&ordinary[i], &retained[i], sizeof(float)) == 0) continue;
+            ++different;
+            if (first == shared) first = i;
+            maximum = std::max(maximum, std::fabs((double) ordinary[i] - (double) retained[i]));
+        }
+        // A channel width only exists when the element count divides into whole output frames.
+        const auto width = [frames](size_t count) {
+            return frames > 0 && count % (size_t) frames == 0 ? std::to_string(count / (size_t) frames)
+                                                              : std::string("null");
+        };
+        std::fprintf(stderr,
+            "{\"evidence\":\"projected-mismatch\",\"input\":%s,\"frames\":%lld,"
+            "\"normal_elements\":%zu,\"retained_elements\":%zu,\"normal_width\":%s,\"retained_width\":%s,"
+            "\"extent_mismatch\":%s,\"normal_extra_elements\":%zu,\"retained_extra_elements\":%zu,"
+            "\"different_raw_elements\":%zu,\"first_differing_element\":%lld,\"max_abs_difference\":%.17g,"
+            "\"failure_directory\":%s}\n",
+            json_string(name).c_str(), (long long) frames, ordinary.size(), retained.size(), width(ordinary.size()).c_str(),
+            width(retained.size()).c_str(), ordinary.size() == retained.size() ? "false" : "true",
+            ordinary.size() - shared, retained.size() - shared, different,
+            first == shared ? -1LL : (long long) first, maximum, json_string(directory.u8string()).c_str());
+    } catch (const std::exception & error) {
+        std::fprintf(stderr, "{\"evidence_error\":%s}\n", json_string(error.what()).c_str());
+    }
+}
+
 }  // namespace
 
 int main(int argc, char ** argv) {
@@ -134,8 +184,11 @@ int main(int argc, char ** argv) {
             const auto retained = evaluate(encoder, joint, backend.get(), features, frames, true, expected);
             const auto & a = normal.at("projected");
             const auto & b = retained.at("projected");
-            require(a.size() == b.size() && std::memcmp(a.data(), b.data(), a.size()*sizeof(float)) == 0,
-                    "retaining layer outputs changes the ordinary projected encoder output");
+            if (a.size() != b.size() || std::memcmp(a.data(), b.data(), a.size()*sizeof(float)) != 0) {
+                preserve_projected_failure(destination / name / "failure", name,
+                                           encoder.subsampled_frames(frames), a, b);
+                throw std::runtime_error("retaining layer outputs changes the ordinary projected encoder output");
+            }
             const auto t = encoder.subsampled_frames(frames);
             save(destination / name / "normal", normal, t);
             save(destination / name / "retained", retained, t);
