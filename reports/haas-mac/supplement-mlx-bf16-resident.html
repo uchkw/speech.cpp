@@ -178,13 +178,13 @@
 <p class="date">2026-11-07</p>
 </header>
 <h2 id="decision">Decision</h2>
-<p>The engineering decision for this product and workload is to keep the native F16 worker for this workload. MLX had the slower median latency on 9 of nine files. Each file has a ratio of its three-round median MLX latency to its three-round median native latency. 1.32066 is the median of those nine ratios. 1.216 to 1.480 is the range across those nine ratios. This is a product-level comparison using independently converted weights. Feature and decoder arithmetic may differ between the builds.</p>
+<p>The engineering decision is to keep the native F16 worker. MLX had the slower median latency on 9 of nine files. Each file has a ratio of its three-round median MLX latency to its three-round median native latency. 1.32066 is the median of those nine ratios. 1.216 to 1.480 is the range across those nine ratios. This is a product-level comparison using independently converted weights. Feature and decoder arithmetic may differ between the builds.</p>
 <h2 id="workload-and-builds">Workload and builds</h2>
 <p>Inputs are nine distinct public FLEURS ja_jp test recordings. Durations span 6.36 to 28.20 s with three recordings in each of the 6–10, 10–20 and 20–30 s bands. All runs share one M2 Ultra host.</p>
 <p>The MLX side runs the pinned port with the published BF16 weights on native arm64 Python 3.12.11 with mlx 0.32.4 and mlx-metal 0.32.4. Code is pinned at <a href="https://github.com/matsuurajun/haas-mlx/tree/cde96d263f56aad75c1de70282f71a91562092dd">haas-mlx cde96d2</a> and weights at <a href="https://huggingface.co/mrjnzzz/Haas-ja-v1.0-mlx/tree/15ef4f11618c6a1ee50e0eafaae13beded8ecdf9">Haas-ja-v1.0-mlx 15ef4f1</a>.</p>
 <p>The native side runs speech.cpp with the Metal encoder and the TDT decoder on CPU with four threads using F16 GGUF weights. Code is pinned at <a href="https://github.com/uchkw/speech.cpp/tree/114c514430c8aa1455c077819f8e72e674a48b75">speech.cpp 114c514</a> and weights at <a href="https://huggingface.co/sakasegawa/Haas-ja-v1.0-GGUF/tree/6b965d5007ba780585de51549d57a8c1c0d67c7e">Haas-ja-v1.0-GGUF 6b965d5</a>.</p>
 <h2 id="method">Method</h2>
-<p>Timed latency begins immediately before the first base64/JSON encoding and the first pipe send of the 32768-byte PCM transport. It ends after terminal text receipt. File reading and hash validation occur before it. No inference trace is active during timing. Warm figures are p50, p90 and p99 in ms plus RTFx where larger is faster. Each of the three rounds used a fresh process per side. Each side ran nine warmups followed by nine measured requests per round. That gives 27 measured requests per side and 54 total rows for the nine distinct recordings. Rounds ran in AB/BA/AB order with A as MLX. Fresh figures are the spawn-to-ready median, the first request median and the gross peak memory footprint in bytes. Spawn-to-ready covers process startup plus model and tokenizer preparation. It is not an isolated model-load time. The gross peak covers startup, loading, warmups and all measured requests. It is the maximum of three process peaks per product. No baseline is subtracted. It is not a GPU-only measure. Every fresh process received the longest 28.20 s input first. That first request was a warmup. It sits outside the 27 measured requests. The MLX first request in round 1 was 552.54 ms. The filesystem cache was not reset. The experimental paired harness is pinned at <a href="https://github.com/uchkw/speech.cpp/tree/9fc6dcf3f294aa5e447409fe31a1b79194d32510/experiments/haas-mac/mlx">speech.cpp 9fc6dcf</a>.</p>
+<p>Timed latency begins immediately before the first base64/JSON encoding and the first pipe send of the 32768-byte PCM transport. It ends after terminal text receipt. File reading and hash validation occur before it. No inference trace is active during timing. Warm figures are p50, p90 and p99 in ms plus RTFx where larger is faster. Each of the three rounds used a fresh process per side. Each side ran nine warmups followed by nine measured requests per round. That gives 27 measured requests per side and 54 total rows for the nine distinct recordings. The warm population for the primary campaign summary is nine recording medians. For each product one median latency is taken across the three repetitions per recording, giving nine medians. Warm p50, p90 and p99 use linear interpolation on the nine medians at (9-1)*q. The primary RTFx divides the total duration of the nine distinct recordings by the sum of their nine median latencies. The immutable raw worker summary separately pooled the 27 measured requests; the published table uses the nine medians. Rounds ran in AB/BA/AB order with A as MLX. Fresh figures are the spawn-to-ready median, the first request median and the gross peak memory footprint in bytes. Spawn-to-ready covers process startup plus model and tokenizer preparation. It is not an isolated model-load time. The gross peak covers startup, loading, warmups and all measured requests. It is the maximum of three process peaks per product. No baseline is subtracted. It is not a GPU-only measure. Every fresh process received the longest 28.20 s input first. That first request was a warmup. It sits outside the 27 measured requests. The MLX first request in the first round was 552.54 ms. The filesystem cache was not reset. The experimental paired harness is pinned at <a href="https://github.com/uchkw/speech.cpp/tree/9fc6dcf3f294aa5e447409fe31a1b79194d32510/experiments/haas-mac/mlx">speech.cpp 9fc6dcf</a>.</p>
 <h2 id="results">Results</h2>
 <table>
 <thead>
@@ -196,24 +196,24 @@
 </thead>
 <tbody>
 <tr>
-<td>Warm p50 (ms)</td>
+<td>p50 of nine recording medians (ms)</td>
 <td>108.43</td>
 <td>73.28</td>
 </tr>
 <tr>
-<td>Warm p90 (ms)</td>
-<td>173.47</td>
-<td>127.45</td>
+<td>p90 of nine recording medians (ms)</td>
+<td>166.74</td>
+<td>122.08</td>
 </tr>
 <tr>
-<td>Warm p99 (ms)</td>
-<td>184.24</td>
-<td>144.55</td>
+<td>p99 of nine recording medians (ms)</td>
+<td>181.38</td>
+<td>140.67</td>
 </tr>
 <tr>
-<td>RTFx (larger is faster)</td>
-<td>136.99</td>
-<td>183.11</td>
+<td>RTFx from nine recording medians (larger is faster)</td>
+<td>137.21</td>
+<td>183.72</td>
 </tr>
 <tr>
 <td>Fresh spawn-to-ready median (ms)</td>

@@ -6,7 +6,7 @@ lang: en
 
 ## Decision
 
-The engineering decision for this product and workload is to keep the native F16 worker for this workload. MLX had the slower median latency on 9 of nine files. Each file has a ratio of its three-round median MLX latency to its three-round median native latency. 1.32066 is the median of those nine ratios. 1.216 to 1.480 is the range across those nine ratios. This is a product-level comparison using independently converted weights. Feature and decoder arithmetic may differ between the builds.
+The engineering decision is to keep the native F16 worker. MLX had the slower median latency on 9 of nine files. Each file has a ratio of its three-round median MLX latency to its three-round median native latency. 1.32066 is the median of those nine ratios. 1.216 to 1.480 is the range across those nine ratios. This is a product-level comparison using independently converted weights. Feature and decoder arithmetic may differ between the builds.
 
 ## Workload and builds
 
@@ -18,16 +18,16 @@ The native side runs speech.cpp with the Metal encoder and the TDT decoder on CP
 
 ## Method
 
-Timed latency begins immediately before the first base64/JSON encoding and the first pipe send of the 32768-byte PCM transport. It ends after terminal text receipt. File reading and hash validation occur before it. No inference trace is active during timing. Warm figures are p50, p90 and p99 in ms plus RTFx where larger is faster. Each of the three rounds used a fresh process per side. Each side ran nine warmups followed by nine measured requests per round. That gives 27 measured requests per side and 54 total rows for the nine distinct recordings. Rounds ran in AB/BA/AB order with A as MLX. Fresh figures are the spawn-to-ready median, the first request median and the gross peak memory footprint in bytes. Spawn-to-ready covers process startup plus model and tokenizer preparation. It is not an isolated model-load time. The gross peak covers startup, loading, warmups and all measured requests. It is the maximum of three process peaks per product. No baseline is subtracted. It is not a GPU-only measure. Every fresh process received the longest 28.20 s input first. That first request was a warmup. It sits outside the 27 measured requests. The MLX first request in round 1 was 552.54 ms. The filesystem cache was not reset. The experimental paired harness is pinned at [speech.cpp 9fc6dcf](https://github.com/uchkw/speech.cpp/tree/9fc6dcf3f294aa5e447409fe31a1b79194d32510/experiments/haas-mac/mlx).
+Timed latency begins immediately before the first base64/JSON encoding and the first pipe send of the 32768-byte PCM transport. It ends after terminal text receipt. File reading and hash validation occur before it. No inference trace is active during timing. Warm figures are p50, p90 and p99 in ms plus RTFx where larger is faster. Each of the three rounds used a fresh process per side. Each side ran nine warmups followed by nine measured requests per round. That gives 27 measured requests per side and 54 total rows for the nine distinct recordings. The warm population for the primary campaign summary is nine recording medians. For each product one median latency is taken across the three repetitions per recording, giving nine medians. Warm p50, p90 and p99 use linear interpolation on the nine medians at (9-1)*q. The primary RTFx divides the total duration of the nine distinct recordings by the sum of their nine median latencies. The immutable raw worker summary separately pooled the 27 measured requests; the published table uses the nine medians. Rounds ran in AB/BA/AB order with A as MLX. Fresh figures are the spawn-to-ready median, the first request median and the gross peak memory footprint in bytes. Spawn-to-ready covers process startup plus model and tokenizer preparation. It is not an isolated model-load time. The gross peak covers startup, loading, warmups and all measured requests. It is the maximum of three process peaks per product. No baseline is subtracted. It is not a GPU-only measure. Every fresh process received the longest 28.20 s input first. That first request was a warmup. It sits outside the 27 measured requests. The MLX first request in the first round was 552.54 ms. The filesystem cache was not reset. The experimental paired harness is pinned at [speech.cpp 9fc6dcf](https://github.com/uchkw/speech.cpp/tree/9fc6dcf3f294aa5e447409fe31a1b79194d32510/experiments/haas-mac/mlx).
 
 ## Results
 
 | Metric | MLX | Native |
 | --- | --- | --- |
-| Warm p50 (ms) | 108.43 | 73.28 |
-| Warm p90 (ms) | 173.47 | 127.45 |
-| Warm p99 (ms) | 184.24 | 144.55 |
-| RTFx (larger is faster) | 136.99 | 183.11 |
+| p50 of nine recording medians (ms) | 108.43 | 73.28 |
+| p90 of nine recording medians (ms) | 166.74 | 122.08 |
+| p99 of nine recording medians (ms) | 181.38 | 140.67 |
+| RTFx from nine recording medians (larger is faster) | 137.21 | 183.72 |
 | Fresh spawn-to-ready median (ms) | 258.44 | 259.54 |
 | Fresh first request median (ms) | 213.59 | 159.49 |
 | Gross peak memory footprint (bytes) | 1,992,787,936 | 1,348,552,408 |
