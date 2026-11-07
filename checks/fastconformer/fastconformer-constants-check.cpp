@@ -1,5 +1,6 @@
-// Compares backend-local KDA constants with the original EXP/NEG nodes, then prediction states, logits and TDT paths.
-// The synthetic fixture checks F32 and cancellation; real models additionally check metadata, load and backend ownership.
+// Compares CPU-cached KDA constants with the original EXP/NEG nodes, then prediction states, logits and TDT paths; on
+// any other backend the enabled network must keep those nodes and report no preparation. The synthetic fixture checks
+// F32 and cancellation; real models additionally check metadata, load and backend ownership.
 // Usage: fastconformer-constants-check model.gguf [device] [threads]
 //        fastconformer-constants-check --synthetic work-directory [device] [threads]
 #include <cstdlib>
@@ -87,8 +88,13 @@ void initial_graphs(const PredictionNetwork & plain, const PredictionNetwork & p
     b.output(y.output); b.output(y.state);
     checks.expect(unary_nodes(a, GGML_UNARY_OP_EXP) == layers && unary_nodes(a, GGML_UNARY_OP_NEG) == layers,
                   "the original step executes one EXP and NEG per layer");
-    checks.expect(unary_nodes(b, GGML_UNARY_OP_EXP) == 0 && unary_nodes(b, GGML_UNARY_OP_NEG) == 0,
-                  "the prepared step has no constant EXP or NEG nodes");
+    if (ggml_backend_is_cpu(backend)) {
+        checks.expect(unary_nodes(b, GGML_UNARY_OP_EXP) == 0 && unary_nodes(b, GGML_UNARY_OP_NEG) == 0,
+                      "the prepared CPU step has no constant EXP or NEG nodes");
+    } else {
+        checks.expect(unary_nodes(b, GGML_UNARY_OP_EXP) == layers && unary_nodes(b, GGML_UNARY_OP_NEG) == layers,
+                      "a prepared step off the CPU keeps one EXP and NEG per layer");
+    }
     std::unique_ptr<ggml_gallocr, decltype(&ggml_gallocr_free)> allocator(
         ggml_gallocr_new(ggml_backend_get_default_buffer_type(backend)), ggml_gallocr_free);
     if (!allocator) throw std::runtime_error("cannot create the prediction comparison allocator");
@@ -154,6 +160,7 @@ void aborted_preparation(const ModelFile & model, ggml_backend_t backend, Checks
 }
 
 void separate_model(const ModelFile & model, const PredictionConstants & first, ggml_backend_t backend, Checks & checks) {
+    if (!ggml_backend_is_cpu(backend)) return;
     std::vector<std::vector<float>> before;
     for (const auto * value : first.values) before.push_back(Graph::read(value));
     ModelFile copy(model, backend, decoding_tensor);
@@ -181,42 +188,69 @@ void recognizer_lifecycle(const std::string & path, ggml_backend_t backend, int 
     environment.set("1");
     Recognizer prepared(path, backend, threads);
     environment.set("0");
+    const bool loaded_on_cpu = prepared.on_cpu();
     for (DecodeOn on : {DecodeOn::Device, DecodeOn::Cpu}) {
         checks.expect(prepared.prediction_constants(on).preparations == 0 && prepared.prediction_constants(on).values.empty(),
                       "pure model load executes no constant preparation or lazy CPU preparation");
     }
     const auto input = frames(plain.joint().hidden(), 7, 31);
     PredictionConstants first, first_cpu;
+    std::vector<size_t> measured;
+    int device_requests = 0;
     for (DecodeOn on : {DecodeOn::Device, DecodeOn::Cpu, DecodeOn::Device, DecodeOn::Cpu}) {
         const auto a = plain.decoding(input, plain.decodings().front(), on);
         const auto b = prepared.decoding(input, prepared.decodings().front(), on);
         checks.expect(a.ids == b.ids && a.frames == b.frames && a.durations == b.durations && a.graphs == b.graphs,
                       "model-owned prepared decoding preserves tokens, frames, durations and graphs");
         checks.expect(plain.detokenizer().text(a.ids) == prepared.detokenizer().text(b.ids), "model-owned prepared text");
+        checks.expect(plain.prediction_constants(on).preparations == 0,
+                      "the switch-off recognizer prepares nothing on either owner");
         const auto got = prepared.prediction_constants(on);
-        checks.expect(got.preparations == 1 && plain.prediction_constants(on).preparations == 0,
-                      "the load-time switch snapshot survives environment changes and repeated requests");
-        if (first.values.empty()) {
-            first = got;
-            original_constants(prepared.model(), first, backend, checks);
-            if (!prepared.on_cpu()) checks.expect(prepared.prediction_constants(DecodeOn::Cpu).preparations == 0,
-                                                 "device prediction does not create the CPU constant copy");
-        }
-        if (on == DecodeOn::Device || prepared.on_cpu()) {
-            checks.expect(first.values == got.values && first.backend == got.backend, "the device cache retains its original allocation");
+        measured.push_back(got.preparations);
+        if (loaded_on_cpu) {
+            if (first.values.empty()) {
+                first = got;
+                original_constants(prepared.model(), first, backend, checks);
+            }
+            checks.expect(got.preparations == 1 && got.values == first.values && got.backend == first.backend &&
+                          got.allocation_bytes == first.allocation_bytes,
+                          "a CPU-loaded model routes both decoding choices to one constant allocation");
+        } else if (on == DecodeOn::Cpu) {
+            if (first_cpu.values.empty()) {
+                first_cpu = got;
+                checks.expect(got.preparations == 1 && ggml_backend_is_cpu(got.backend) && !got.values.empty(),
+                              "the first lazy CPU request prepares exactly one CPU-owned allocation");
+            } else {
+                checks.expect(got.preparations == 1 && got.values == first_cpu.values && got.backend == first_cpu.backend &&
+                              got.allocation_bytes == first_cpu.allocation_bytes,
+                              "later CPU requests, across a device request, retain their original constant allocation");
+            }
+        } else if (++device_requests == 1) {
+            checks.expect(got.preparations == 0 && got.allocation_bytes == 0 && !got.backend && got.values.empty(),
+                          "device prediction stays uncached before the CPU is used");
+            checks.expect(prepared.prediction_constants(DecodeOn::Cpu).preparations == 0,
+                          "no CPU constant preparation occurred before the first CPU request");
         } else {
-            checks.expect(got.backend != first.backend && got.values != first.values && ggml_backend_is_cpu(got.backend),
-                          "the lazy CPU decoder owns an independent cache on its own backend");
-            if (first_cpu.values.empty()) first_cpu = got;
-            checks.expect(first_cpu.values == got.values && first_cpu.backend == got.backend &&
-                          first_cpu.allocation_bytes == got.allocation_bytes,
-                          "later CPU requests retain their original constant allocation");
+            checks.expect(got.preparations == 0 && got.allocation_bytes == 0 && !got.backend && got.values.empty(),
+                          "device prediction stays uncached after the CPU is used");
+            const auto idle = prepared.prediction_constants(DecodeOn::Cpu);
+            checks.expect(idle.preparations == 1 && idle.values == first_cpu.values && idle.backend == first_cpu.backend,
+                          "a device request after CPU use leaves the CPU cache untouched");
         }
     }
+    checks.expect(measured == (loaded_on_cpu ? std::vector<size_t>{1, 1, 1, 1} : std::vector<size_t>{0, 1, 0, 1}),
+                  "the load-time switch snapshot survives later environment changes: 1/1/1/1 preparations on a CPU-loaded"
+                  " model, 0/1/0/1 on the selected owners of a device-loaded one");
     environment.set(nullptr);
     Recognizer default_off(path, backend, threads);
     default_off.decoding(input, default_off.decodings().front(), DecodeOn::Device);
-    checks.expect(default_off.prediction_constants(DecodeOn::Device).preparations == 0, "an unset switch preserves the original path");
+    default_off.decoding(input, default_off.decodings().front(), DecodeOn::Cpu);
+    for (DecodeOn on : {DecodeOn::Device, DecodeOn::Cpu}) {
+        const auto snapshot = default_off.prediction_constants(on);
+        checks.expect(snapshot.preparations == 0 && snapshot.allocation_bytes == 0 && !snapshot.backend && snapshot.values.empty(),
+                      "an unset switch preserves the original path on either decode choice: no preparation, "
+                      "allocation, backend or cached values");
+    }
 }
 
 }  // namespace
@@ -263,9 +297,22 @@ int main(int argc, char ** argv) {
         if (!synthetic && model.str("general.name") != "Haas-ja-v1.0") throw std::runtime_error("the model lifecycle check requires Haas-ja-v1.0");
         const PredictionNetwork plain(model), prepared(model, backend.get(), true);
         const Joint joint(model);
+        bool rejected = false;
+        try {
+            PredictionNetwork(model, nullptr, true);
+        } catch (const std::logic_error &) {
+            rejected = true;
+        }
+        checks.expect(rejected, "an enabled constant cache without its prediction backend is rejected");
         initial_graphs(plain, prepared, backend.get(), model.u32("fastconformer.decoder.prediction_layers"), checks);
+        const bool cpu = ggml_backend_is_cpu(backend.get());
         const auto first = prepared.constants();
-        original_constants(model, first, backend.get(), checks);
+        if (cpu) {
+            original_constants(model, first, backend.get(), checks);
+        } else {
+            checks.expect(first.preparations == 0 && first.allocation_bytes == 0 && !first.backend && first.values.empty(),
+                          "a non-CPU prediction reports no preparation, allocation or backend");
+        }
         {
             Steps a(plain, prepared, joint, backend.get()), b(plain, prepared, joint, backend.get());
             const int blank = (int) model.u32("fastconformer.decoder.blank_id");
@@ -278,9 +325,16 @@ int main(int argc, char ** argv) {
             checks.expect(a.output != b.output && a.logits != b.logits, "the same label and frame preserve dependence on history");
         }
         decoding_cases(model, plain, prepared, joint, backend.get(), synthetic, checks);
-        checks.expect(prepared.constants().preparations == 1 && prepared.constants().values == first.values &&
-                      prepared.constants().allocation_bytes == first.allocation_bytes && plain.constants().preparations == 0,
-                      "later graphs, resets, cancellation and boosting retain the same single preparation");
+        const auto retained = prepared.constants();
+        if (cpu) {
+            checks.expect(retained.preparations == 1 && retained.values == first.values &&
+                          retained.allocation_bytes == first.allocation_bytes && plain.constants().preparations == 0,
+                          "later graphs, resets, cancellation and boosting retain the same single preparation");
+        } else {
+            checks.expect(retained.preparations == 0 && retained.allocation_bytes == 0 && !retained.backend &&
+                          retained.values.empty() && plain.constants().preparations == 0,
+                          "later graphs, resets, cancellation and boosting still prepare nothing off the CPU");
+        }
         aborted_preparation(model, backend.get(), checks);
         if (synthetic) separate_model(model, first, backend.get(), checks);
         if (!synthetic) recognizer_lifecycle(path, backend.get(), threads, environment, checks);

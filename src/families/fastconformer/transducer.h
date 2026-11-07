@@ -44,7 +44,8 @@ public:
 
 /**
  * The layers of fastconformer.decoder.prediction in the file `m`. Constructors only read metadata; an enabled
- * constant cache is prepared on `backend` when the first step is built, after its CPU pool has been installed.
+ * constant cache applies only when `backend` is a CPU backend and is prepared when the first step is built, after
+ * its CPU pool has been installed. Any other backend keeps the original per-step expression and prepares nothing.
  */
 std::unique_ptr<PredictionLayers> make_prediction_layers(const ModelFile & m, ggml_backend_t backend = nullptr,
                                                        bool cache_constants = false);

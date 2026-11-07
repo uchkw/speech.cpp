@@ -3,6 +3,7 @@
 #include <cmath>
 
 #include "error.h"
+#include "ggml-cpu.h"
 
 namespace fastconformer {
 
@@ -64,8 +65,8 @@ KdaLayers::KdaLayers(const ModelFile & m, ggml_backend_t backend, bool cache_con
       gate_norm_eps_(m.f32("fastconformer.decoder.kda.gate_norm_eps")),
       qk_norm_eps_(m.f32("fastconformer.decoder.kda.qk_norm_eps")),
       final_norm_(m.boolean("fastconformer.decoder.kda.final_norm")),
-      backend_(backend), cache_constants_(cache_constants) {
-    if (cache_constants_ && !backend_) throw std::logic_error("KDA constant preparation needs its prediction backend");
+      backend_(backend), cache_constants_(cache_constants && ggml_backend_is_cpu(backend)) {
+    if (cache_constants && !backend_) throw std::logic_error("KDA constant preparation needs its prediction backend");
 }
 
 PredictionConstants KdaLayers::constants() const {
